@@ -31,7 +31,16 @@ This prints a recap using fake data. No internet connection or Yahoo account
 needed - it's just here to prove the output format before you touch any real
 credentials.
 
-### 2. Create a Yahoo app
+### 2. Create a Yahoo app, and apply for Fantasy Sports API access
+
+Heads up: Yahoo now gates Fantasy Sports API access behind a manual
+approval process, separate from the app you create below. Apply at
+<https://sports.yahoo.com/developer/access/>, describing what you're
+building, what data you need (read-only league scoreboard data), and that
+it's for personal/single-league use. Yahoo's team reviews applications
+manually - there's no published turnaround time, so plan for this to take
+a while. Do this early; everything else in this README can be finished
+while you wait.
 
 Go to <https://developer.yahoo.com/apps/> and create an app with:
 
@@ -100,7 +109,23 @@ wrong - it usually just means one small spot in `parse_matchups()` or
 looks like. Share the error (and the "Raw response for debugging" output, if
 printed) and it can be fixed.
 
+## Running this in AWS Lambda instead
+
+`lambda_function.py` is a ready-to-paste Lambda handler covering the same
+steps as above, driven by the console's Test button instead of a local
+terminal - handy if your environment can't run Python locally, or you'd
+rather this ran on a schedule eventually. Paste `lambda_function.py`,
+`awards.py`, `sample_data.py`, and `yahoo_client.py` into the Lambda code
+editor as separate files, set the same environment variables under
+Configuration, and use test events like `{"action": "auth_url"}`,
+`{"action": "exchange", "code": "..."}`, and `{"action": "recap"}`. See the
+docstring at the top of `lambda_function.py` for the full list of actions,
+including `{"action": "demo"}`, which runs the recap engine on made-up
+data - no Yahoo access needed - so you can confirm the whole pipeline
+works while a real Fantasy Sports API application is pending approval.
+
 ## What's next (not done yet)
 
 - Posting the recap to Discord automatically
-- Deploying this to run on a schedule (e.g. AWS Lambda) instead of by hand
+- Running the Lambda function on a schedule (e.g. EventBridge) instead of
+  triggering it by hand

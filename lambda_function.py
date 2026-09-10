@@ -24,6 +24,11 @@ Drive it with the "Test" button in the Lambda console, using a test event
   Copy the refresh_token from the response into the YAHOO_REFRESH_TOKEN
   environment variable, then you're set up for good.
 
+  Demo mode - runs the recap engine on made-up data, no Yahoo access
+  needed at all (useful while a real Fantasy Sports API application is
+  pending approval with Yahoo):
+    {"action": "demo"}
+
   See your leagues (only needed if you belong to more than one):
     {"action": "leagues"}
 
@@ -38,6 +43,7 @@ programmatically later (e.g. a Discord webhook).
 import os
 
 from awards import Matchup, generate_recap
+from sample_data import SAMPLE_MATCHUPS
 from yahoo_client import (
     build_authorize_url,
     exchange_code_for_tokens,
@@ -86,6 +92,15 @@ def _action_exchange(event):
     print("Success! Put this in the YAHOO_REFRESH_TOKEN environment variable:")
     print(refresh_token)
     return {"refresh_token": refresh_token}
+
+
+def _action_demo():
+    """Runs the recap engine on made-up data - no Yahoo access needed at
+    all. Proves the whole Lambda pipeline (import, generate_recap, print)
+    works while real Yahoo access is still pending approval."""
+    recap_text = generate_recap(week=1, matchups=SAMPLE_MATCHUPS)
+    print(recap_text)
+    return {"recap": recap_text}
 
 
 def _action_leagues():
@@ -142,6 +157,8 @@ def lambda_handler(event, context):
         return _action_auth_url()
     if action == "exchange":
         return _action_exchange(event)
+    if action == "demo":
+        return _action_demo()
     if action == "leagues":
         return _action_leagues()
     if action == "recap":
