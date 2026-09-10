@@ -1,9 +1,9 @@
 """
 The recap engine: pure logic, no network calls and no Yahoo-specific code.
 
-Give it a week number and a list of Matchup objects and it hands back a
-formatted text recap. Keeping this file free of API calls means we can test
-the output format (test_awards.py) without touching Yahoo at all.
+compute_awards() does the actual scoring/award logic once; generate_recap()
+(plain text) and webpage.py's render_html() (the shareable page) both build
+on top of it, so the two outputs can never disagree with each other.
 
 Award categories, and what they need:
 
@@ -61,9 +61,57 @@ class Matchup:
         return min(self.team_a_score, self.team_b_score)
 
 
+def compute_awards(matchups: List[Matchup]) -> dict:
+    """Returns a dict with one entry per award category. 'upset' and
+    'bad_beat' are None when there isn't enough data to compute them."""
+    all_scores = []
+    for m in matchups:
+        all_scores.append((m.team_a_name, m.team_a_score))
+        all_scores.append((m.team_b_name, m.team_b_score))
+
+    goon_team, goon_score = max(all_scores, key=lambda t: t[1])
+    cock_team, cock_score = min(all_scores, key=lambda t: t[1])
+    blowout = max(matchups, key=lambda m: m.margin)
+    heartbreak = min(matchups, key=lambda m: m.margin)
+
+    upsets = []
+    for m in matchups:
+        if m.team_a_projected is None or m.team_b_projected is None:
+            continue
+        projected_winner = (
+            m.team_a_name if m.team_a_projected >= m.team_b_projected else m.team_b_name
+        )
+        if projected_winner != m.winner:
+            upsets.append((m, abs(m.team_a_projected - m.team_b_projected)))
+    upset = None
+    if upsets:
+        upset_matchup, gap = max(upsets, key=lambda t: t[1])
+        upset = {"winner": upset_matchup.winner, "loser": upset_matchup.loser, "gap": gap}
+
+    bad_beat = None
+    if len(matchups) >= 2:
+        def outscored_count(name, score):
+            return sum(1 for n, s in all_scores if n != name and s < score)
+
+        losers = [(m.loser, m.loser_score) for m in matchups]
+        bb_team, bb_score = max(losers, key=lambda t: outscored_count(t[0], t[1]))
+        bad_beat = {"team": bb_team, "score": bb_score, "count": outscored_count(bb_team, bb_score)}
+
+    return {
+        "goon": {"team": goon_team, "score": goon_score},
+        "cock": {"team": cock_team, "score": cock_score},
+        "blowout": {"winner": blowout.winner, "loser": blowout.loser, "margin": blowout.margin},
+        "heartbreaker": {"winner": heartbreak.winner, "loser": heartbreak.loser, "margin": heartbreak.margin},
+        "upset": upset,
+        "bad_beat": bad_beat,
+    }
+
+
 def generate_recap(week, matchups: List[Matchup]) -> str:
     if not matchups:
         return f"No matchups found for week {week}."
+
+    awards = compute_awards(matchups)
 
     lines = []
     lines.append("=" * 60)
@@ -83,68 +131,27 @@ def generate_recap(week, matchups: List[Matchup]) -> str:
     lines.append("AWARDS")
     lines.append("-" * 60)
 
-    all_scores = []
-    for m in matchups:
-        all_scores.append((m.team_a_name, m.team_a_score))
-        all_scores.append((m.team_b_name, m.team_b_score))
+    g = awards["goon"]
+    lines.append(f"  Goon of the Week: {g['team']} put up {g['score']:.2f} points - takes home the $50")
 
-    # Goon of the Week - highest score, takes home the $50.
-    goon_team, goon_score = max(all_scores, key=lambda t: t[1])
-    lines.append(f"  Goon of the Week: {goon_team} put up {goon_score:.2f} points - takes home the $50")
+    c = awards["cock"]
+    lines.append(f"  Cock of the Week: {c['team']} limped to {c['score']:.2f} points - most embarrassing showing of the week")
 
-    # Cock of the Week - lowest score, most embarrassing showing.
-    cock_team, cock_score = min(all_scores, key=lambda t: t[1])
-    lines.append(f"  Cock of the Week: {cock_team} limped to {cock_score:.2f} points - most embarrassing showing of the week")
+    b = awards["blowout"]
+    lines.append(f"  Biggest Blowout: {b['winner']} demolished {b['loser']} by {b['margin']:.2f} points")
 
-    # Biggest Blowout - largest winning margin.
-    blowout = max(matchups, key=lambda m: m.margin)
-    lines.append(
-        f"  Biggest Blowout: {blowout.winner} demolished "
-        f"{blowout.loser} by {blowout.margin:.2f} points"
-    )
+    h = awards["heartbreaker"]
+    lines.append(f"  Heartbreaker: {h['loser']} fell to {h['winner']} by just {h['margin']:.2f} points")
 
-    # Heartbreaker - smallest losing margin (the closest game, told from
-    # the loser's side).
-    heartbreak = min(matchups, key=lambda m: m.margin)
-    lines.append(
-        f"  Heartbreaker: {heartbreak.loser} fell to {heartbreak.winner} "
-        f"by just {heartbreak.margin:.2f} points"
-    )
-
-    # Upset of the Week - only makes sense when we have projected scores.
-    upsets = []
-    for m in matchups:
-        if m.team_a_projected is None or m.team_b_projected is None:
-            continue
-        projected_winner = (
-            m.team_a_name if m.team_a_projected >= m.team_b_projected else m.team_b_name
-        )
-        if projected_winner != m.winner:
-            proj_gap = abs(m.team_a_projected - m.team_b_projected)
-            upsets.append((m, proj_gap))
-
-    if upsets:
-        upset_matchup, gap = max(upsets, key=lambda t: t[1])
-        lines.append(
-            f"  Upset of the Week: {upset_matchup.winner} was projected to lose "
-            f"to {upset_matchup.loser} by {gap:.2f} and won anyway"
-        )
+    if awards["upset"]:
+        u = awards["upset"]
+        lines.append(f"  Upset of the Week: {u['winner']} was projected to lose to {u['loser']} by {u['gap']:.2f} and won anyway")
     else:
         lines.append("  Upset of the Week: n/a (no projected scores available this run)")
 
-    # Bad Beat - among this week's losers, whoever's score would have beaten
-    # the most other teams in the league, but still lost their own matchup.
-    if len(matchups) >= 2:
-        def outscored_count(name, score):
-            return sum(1 for other_name, other_score in all_scores if other_name != name and other_score < score)
-
-        losers = [(m.loser, m.loser_score) for m in matchups]
-        bad_beat_team, bad_beat_score = max(losers, key=lambda t: outscored_count(t[0], t[1]))
-        count = outscored_count(bad_beat_team, bad_beat_score)
-        lines.append(
-            f"  Bad Beat: {bad_beat_team} scored {bad_beat_score:.2f} - enough to beat "
-            f"{count} other team(s) this week - and still lost"
-        )
+    if awards["bad_beat"]:
+        bb = awards["bad_beat"]
+        lines.append(f"  Bad Beat: {bb['team']} scored {bb['score']:.2f} - enough to beat {bb['count']} other team(s) this week - and still lost")
     else:
         lines.append("  Bad Beat: n/a (need at least two matchups to compare)")
 
