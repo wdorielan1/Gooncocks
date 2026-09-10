@@ -1,0 +1,174 @@
+"""
+Thin wrapper around the Yahoo Fantasy Sports API (v2) needed for a weekly
+recap: exchanging/refreshing OAuth tokens, listing a user's NFL leagues, and
+pulling a week's scoreboard.
+
+Yahoo's API JSON has two quirks worth knowing before reading this file:
+  1. Ordered collections come back as JSON objects keyed "0", "1", "2", ...
+     plus a "count" field, instead of a plain list.
+  2. A "record" (like a team) is often an array of many single-key objects,
+     e.g. [{"name": "..."}, {"team_key": "..."}, ...], instead of one dict.
+The helper functions below exist only to undo those two shapes. Yahoo's
+exact nesting can vary a bit by endpoint/league configuration - if this
+throws a KeyError against your real league, that's expected once, and the
+fix is usually a small tweak to where these helpers look.
+"""
+import base64
+
+import requests
+
+TOKEN_URL = "https://api.login.yahoo.com/oauth2/get_token"
+FANTASY_BASE = "https://fantasysports.yahooapis.com/fantasysports/v2"
+AUTH_URL = "https://api.login.yahoo.com/oauth2/request_auth"
+
+
+def build_authorize_url(client_id: str, redirect_uri: str = "oob") -> str:
+    return (
+        f"{AUTH_URL}?client_id={client_id}&redirect_uri={redirect_uri}"
+        f"&response_type=code&language=en-us"
+    )
+
+
+def _basic_auth_header(client_id: str, client_secret: str) -> str:
+    raw = f"{client_id}:{client_secret}".encode("utf-8")
+    return base64.b64encode(raw).decode("utf-8")
+
+
+def _token_request(client_id, client_secret, data):
+    resp = requests.post(
+        TOKEN_URL,
+        headers={
+            "Authorization": f"Basic {_basic_auth_header(client_id, client_secret)}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data=data,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def exchange_code_for_tokens(client_id, client_secret, code, redirect_uri="oob"):
+    return _token_request(
+        client_id,
+        client_secret,
+        {"grant_type": "authorization_code", "redirect_uri": redirect_uri, "code": code},
+    )
+
+
+def refresh_access_token(client_id, client_secret, refresh_token, redirect_uri="oob"):
+    return _token_request(
+        client_id,
+        client_secret,
+        {
+            "grant_type": "refresh_token",
+            "redirect_uri": redirect_uri,
+            "refresh_token": refresh_token,
+        },
+    )
+
+
+def _yahoo_collection(obj):
+    """Turn Yahoo's {"0": ..., "1": ..., "count": N} shape into a list."""
+    if isinstance(obj, list):
+        return obj
+    if not isinstance(obj, dict):
+        return []
+    items = []
+    i = 0
+    while str(i) in obj:
+        items.append(obj[str(i)])
+        i += 1
+    return items
+
+
+def _merge_record(arr):
+    """Merge Yahoo's [{"a": 1}, {"b": 2}, ...] shape into one dict."""
+    merged = {}
+    for el in arr:
+        if isinstance(el, dict):
+            merged.update(el)
+        elif isinstance(el, list):
+            merged.update(_merge_record(el))
+    return merged
+
+
+def get_user_leagues(access_token, game_key="nfl"):
+    """Return [{'league_key', 'name', 'season', 'num_teams'}] for the
+    logged-in user's leagues in the given game (nfl by default)."""
+    url = f"{FANTASY_BASE}/users;use_login=1/games;game_keys={game_key}/leagues?format=json"
+    resp = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+
+    leagues = []
+    users = _yahoo_collection(data["fantasy_content"]["users"])
+    for user_entry in users:
+        user = user_entry.get("user") if isinstance(user_entry, dict) else None
+        if not user or len(user) < 2:
+            continue
+        games = _yahoo_collection(user[1].get("games", {}))
+        for game_entry in games:
+            game = game_entry.get("game") if isinstance(game_entry, dict) else None
+            if not game or len(game) < 2:
+                continue
+            league_container = game[1].get("leagues")
+            if not league_container:
+                continue
+            for league_entry in _yahoo_collection(league_container):
+                league = league_entry.get("league") if isinstance(league_entry, dict) else None
+                if not league:
+                    continue
+                merged = _merge_record(league)
+                leagues.append(
+                    {
+                        "league_key": merged.get("league_key"),
+                        "name": merged.get("name"),
+                        "season": merged.get("season"),
+                        "num_teams": merged.get("num_teams"),
+                    }
+                )
+    return leagues
+
+
+def get_scoreboard(access_token, league_key, week=None):
+    """Return the raw parsed JSON for a league's scoreboard."""
+    week_part = f";week={week}" if week else ""
+    url = f"{FANTASY_BASE}/league/{league_key}/scoreboard{week_part}?format=json"
+    resp = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def parse_matchups(scoreboard_json):
+    """Turn a raw scoreboard JSON blob into [{'team_a': {...}, 'team_b': {...}}, ...]
+    where each team dict has 'name', 'score', and 'projected' (or None)."""
+    league = scoreboard_json["fantasy_content"]["league"]
+    scoreboard = league[1]["scoreboard"]
+    matchups_container = scoreboard["0"]["matchups"]
+
+    results = []
+    for matchup_entry in _yahoo_collection(matchups_container):
+        matchup = matchup_entry.get("matchup") if isinstance(matchup_entry, dict) else None
+        if not matchup:
+            continue
+        teams_container = matchup["0"]["teams"]
+        teams = []
+        for team_entry in _yahoo_collection(teams_container):
+            team = team_entry.get("team") if isinstance(team_entry, dict) else None
+            if not team:
+                continue
+            meta = _merge_record(team[0]) if len(team) > 0 else {}
+            stats = team[1] if len(team) > 1 and isinstance(team[1], dict) else {}
+            points = (stats.get("team_points") or {}).get("total")
+            projected = (stats.get("team_projected_points") or {}).get("total")
+            teams.append(
+                {
+                    "name": meta.get("name"),
+                    "score": float(points) if points is not None else None,
+                    "projected": float(projected) if projected is not None else None,
+                }
+            )
+        if len(teams) == 2:
+            results.append({"team_a": teams[0], "team_b": teams[1]})
+    return results
