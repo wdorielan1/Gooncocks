@@ -3,6 +3,10 @@ Thin wrapper around the Yahoo Fantasy Sports API (v2) needed for a weekly
 recap: exchanging/refreshing OAuth tokens, listing a user's NFL leagues, and
 pulling a week's scoreboard.
 
+Uses only the Python standard library (urllib) - no pip packages to
+install - so this can be pasted straight into an AWS Lambda function's
+console editor and run with zero extra setup.
+
 Yahoo's API JSON has two quirks worth knowing before reading this file:
   1. Ordered collections come back as JSON objects keyed "0", "1", "2", ...
      plus a "count" field, instead of a plain list.
@@ -14,8 +18,10 @@ throws a KeyError against your real league, that's expected once, and the
 fix is usually a small tweak to where these helpers look.
 """
 import base64
-
-import requests
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
 
 TOKEN_URL = "https://api.login.yahoo.com/oauth2/get_token"
 FANTASY_BASE = "https://fantasysports.yahooapis.com/fantasysports/v2"
@@ -34,18 +40,26 @@ def _basic_auth_header(client_id: str, client_secret: str) -> str:
     return base64.b64encode(raw).decode("utf-8")
 
 
+def _request(url, headers=None, data=None, method="GET"):
+    """Make an HTTP request and return the parsed JSON body. Raises
+    RuntimeError with Yahoo's error body on a non-2xx response, since that
+    body usually explains exactly what went wrong."""
+    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Yahoo returned HTTP {exc.code}: {body}") from exc
+
+
 def _token_request(client_id, client_secret, data):
-    resp = requests.post(
-        TOKEN_URL,
-        headers={
-            "Authorization": f"Basic {_basic_auth_header(client_id, client_secret)}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        data=data,
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json()
+    body = urllib.parse.urlencode(data).encode("utf-8")
+    headers = {
+        "Authorization": f"Basic {_basic_auth_header(client_id, client_secret)}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    return _request(TOKEN_URL, headers=headers, data=body, method="POST")
 
 
 def exchange_code_for_tokens(client_id, client_secret, code, redirect_uri="oob"):
@@ -97,9 +111,7 @@ def get_user_leagues(access_token, game_key="nfl"):
     """Return [{'league_key', 'name', 'season', 'num_teams'}] for the
     logged-in user's leagues in the given game (nfl by default)."""
     url = f"{FANTASY_BASE}/users;use_login=1/games;game_keys={game_key}/leagues?format=json"
-    resp = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
+    data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
 
     leagues = []
     users = _yahoo_collection(data["fantasy_content"]["users"])
@@ -135,9 +147,7 @@ def get_scoreboard(access_token, league_key, week=None):
     """Return the raw parsed JSON for a league's scoreboard."""
     week_part = f";week={week}" if week else ""
     url = f"{FANTASY_BASE}/league/{league_key}/scoreboard{week_part}?format=json"
-    resp = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+    return _request(url, headers={"Authorization": f"Bearer {access_token}"})
 
 
 def parse_matchups(scoreboard_json):

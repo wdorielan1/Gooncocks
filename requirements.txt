@@ -1,1 +1,4 @@
-requests>=2.31
+# No external dependencies - everything here uses the Python standard
+# library (urllib, json, base64, dataclasses) so it can run in Lambda's
+# console editor with zero packaging/layers, and locally with a plain
+# python3 install.
