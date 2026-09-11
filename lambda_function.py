@@ -208,7 +208,12 @@ def _action_publish(event):
 
 def lambda_handler(event, context):
     event = event or {}
-    action = event.get("action", "publish")
+    # TEMPORARY: defaults to publish_demo while waiting on Yahoo's API
+    # approval, since the EventBridge schedule can't be given a custom
+    # test event the way manual Test runs can - it just calls this with an
+    # empty event. Once Yahoo approves, change this default back to
+    # "publish" (or set LEAGUE_KEY/etc. and switch it then).
+    action = event.get("action", "publish_demo")
     if action == "auth_url":
         return _action_auth_url()
     if action == "exchange":
