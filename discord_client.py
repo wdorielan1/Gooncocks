@@ -18,7 +18,13 @@ def post_message(webhook_url, content):
     req = urllib.request.Request(
         webhook_url,
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            # Discord's Cloudflare front-end blocks requests carrying
+            # Python's default "Python-urllib/x.x" user agent with a 403 -
+            # a real-looking user agent fixes it.
+            "User-Agent": "Mozilla/5.0 (compatible; GooncocksRecapBot/1.0)",
+        },
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=15) as resp:
