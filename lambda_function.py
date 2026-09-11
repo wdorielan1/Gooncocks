@@ -1,7 +1,9 @@
 """
-AWS Lambda entry point. Paste this file, awards.py, and yahoo_client.py into
-a Lambda function's code editor (Python 3.x runtime) as separate files in
-the same folder - no pip packages needed, everything here is stdlib.
+AWS Lambda entry point. Paste this file, awards.py, sample_data.py,
+webpage.py, discord_client.py, and yahoo_client.py into a Lambda function's
+code editor (Python 3.x runtime) as separate files in the same folder - no
+pip packages needed, everything here is stdlib plus boto3 (already included
+in Lambda's Python runtime).
 
 Set these environment variables on the Lambda function's Configuration tab:
   YAHOO_CLIENT_ID
@@ -11,6 +13,12 @@ Set these environment variables on the Lambda function's Configuration tab:
   LEAGUE_KEY            (optional - only needed if you're in more than one
                          Yahoo NFL league)
   WEEK                  (optional - defaults to Yahoo's current week)
+  S3_BUCKET             (the bucket the recap webpage gets uploaded to)
+  S3_WEBSITE_URL        (that bucket's static website endpoint, from its
+                         Properties tab - optional, used to build the link
+                         printed/returned after publishing)
+  DISCORD_WEBHOOK_URL   (optional - if set, "publish" actions also post a
+                         short teaser + page link to Discord)
 
 Drive it with the "Test" button in the Lambda console, using a test event
 (JSON) shaped like one of these:
@@ -29,21 +37,30 @@ Drive it with the "Test" button in the Lambda console, using a test event
   pending approval with Yahoo):
     {"action": "demo"}
 
+  Publish demo - same made-up data, but also renders the webpage and
+  uploads it to S3 (and posts to Discord if DISCORD_WEBHOOK_URL is set) -
+  use this to prove the whole pipeline works before Yahoo approves you:
+    {"action": "publish_demo"}
+
   See your leagues (only needed if you belong to more than one):
     {"action": "leagues"}
 
-  The actual recap - this is also the default if you omit "action":
+  The actual recap, printed only:
     {"action": "recap"}
 
-The recap text is printed (check the "Function Logs" / execution results
-panel under the Test button - that's where the nicely-formatted, multi-line
-recap shows up) and also returned as JSON for anything that consumes this
-programmatically later (e.g. a Discord webhook).
+  The actual recap, published - fetches real Yahoo data, renders the
+  webpage, uploads to S3, posts to Discord if configured. This is also
+  the default if you omit "action":
+    {"action": "publish"}
 """
 import os
 
-from awards import Matchup, generate_recap
+import boto3
+
+from awards import Matchup, generate_recap, compute_awards
+from discord_client import build_teaser, post_message
 from sample_data import SAMPLE_MATCHUPS
+from webpage import render_html
 from yahoo_client import (
     build_authorize_url,
     exchange_code_for_tokens,
@@ -111,7 +128,10 @@ def _action_leagues():
     return {"leagues": leagues}
 
 
-def _action_recap(event):
+def _fetch_real_matchups(event):
+    """Shared by _action_recap and _action_publish: gets this week's real
+    matchups from Yahoo. Raises RuntimeError (with details already printed)
+    if LEAGUE_KEY is ambiguous or Yahoo's response can't be parsed."""
     access_token = _get_access_token()
     league_key = event.get("league_key") or os.environ.get("LEAGUE_KEY")
     week = event.get("week") or os.environ.get("WEEK")
@@ -144,23 +164,63 @@ def _action_recap(event):
         )
         for m in raw_matchups
     ]
+    return week or "current", matchups
 
-    recap_text = generate_recap(week=week or "current", matchups=matchups)
+
+def _action_recap(event):
+    week, matchups = _fetch_real_matchups(event)
+    recap_text = generate_recap(week=week, matchups=matchups)
     print(recap_text)
     return {"recap": recap_text}
 
 
+def _publish_page(week, matchups, is_sample):
+    """Renders the webpage, uploads it to S3, and posts a Discord teaser
+    if DISCORD_WEBHOOK_URL is set. Returns the page's public URL."""
+    bucket = _require_env("S3_BUCKET")
+    html = render_html(week, matchups, is_sample=is_sample)
+    s3 = boto3.client("s3")
+    s3.put_object(Bucket=bucket, Key="recap.html", Body=html.encode("utf-8"), ContentType="text/html")
+
+    website_url = os.environ.get("S3_WEBSITE_URL")
+    page_url = f"{website_url.rstrip('/')}/recap.html" if website_url else f"s3://{bucket}/recap.html"
+    print(f"Published to {page_url}")
+
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
+    if webhook_url:
+        teaser = build_teaser(week, compute_awards(matchups), page_url=page_url)
+        post_message(webhook_url, teaser)
+        print("Posted teaser to Discord.")
+
+    return page_url
+
+
+def _action_publish_demo():
+    page_url = _publish_page(1, SAMPLE_MATCHUPS, is_sample=True)
+    return {"page_url": page_url}
+
+
+def _action_publish(event):
+    week, matchups = _fetch_real_matchups(event)
+    page_url = _publish_page(week, matchups, is_sample=False)
+    return {"page_url": page_url}
+
+
 def lambda_handler(event, context):
     event = event or {}
-    action = event.get("action", "recap")
+    action = event.get("action", "publish")
     if action == "auth_url":
         return _action_auth_url()
     if action == "exchange":
         return _action_exchange(event)
     if action == "demo":
         return _action_demo()
+    if action == "publish_demo":
+        return _action_publish_demo()
     if action == "leagues":
         return _action_leagues()
     if action == "recap":
         return _action_recap(event)
+    if action == "publish":
+        return _action_publish(event)
     raise RuntimeError(f"Unknown action: {action!r}")
