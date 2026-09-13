@@ -150,6 +150,18 @@ def get_scoreboard(access_token, league_key, week=None):
     return _request(url, headers={"Authorization": f"Bearer {access_token}"})
 
 
+def _extract_manager(team_meta):
+    """Pull the manager's nickname out of a merged team record's "managers"
+    list (Yahoo nests it as [{"manager": {"nickname": ..., ...}}]). Returns
+    None if it's missing - team names entered by hand (publish_manual)
+    won't have this at all."""
+    managers = team_meta.get("managers") or []
+    if managers and isinstance(managers[0], dict):
+        manager = managers[0].get("manager") or {}
+        return manager.get("nickname")
+    return None
+
+
 def parse_matchups(scoreboard_json):
     """Turn a raw scoreboard JSON blob into [{'team_a': {...}, 'team_b': {...}}, ...]
     where each team dict has 'name', 'score', and 'projected' (or None)."""
@@ -175,6 +187,7 @@ def parse_matchups(scoreboard_json):
             teams.append(
                 {
                     "name": meta.get("name"),
+                    "manager": _extract_manager(meta),
                     "score": float(points) if points is not None else None,
                     "projected": float(projected) if projected is not None else None,
                 }

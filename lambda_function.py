@@ -161,6 +161,8 @@ def _fetch_real_matchups(event):
             team_b_score=m["team_b"]["score"] or 0.0,
             team_a_projected=m["team_a"]["projected"],
             team_b_projected=m["team_b"]["projected"],
+            team_a_manager=m["team_a"].get("manager"),
+            team_b_manager=m["team_b"].get("manager"),
         )
         for m in raw_matchups
     ]
@@ -214,11 +216,15 @@ def _action_publish_manual(event):
           "week": 1,
           "matchups": [
             {"team_a": "wilzer", "score_a": 145.2, "team_b": "DJ Killzer Willzer", "score_b": 132.1,
-             "proj_a": 158.72, "proj_b": 156.05},
+             "proj_a": 158.72, "proj_b": 156.05,
+             "manager_a": "Will", "manager_b": "Chet"},
             ...
           ]
         }
     proj_a/proj_b are optional - Upset of the Week is skipped without them.
+    manager_a/manager_b are optional too - when set, the webpage displays
+    and matches headshots by manager instead of by team name, so a
+    mid-season team rename doesn't lose someone's photo or history.
     """
     week = event.get("week", 1)
     raw_matchups = event.get("matchups")
@@ -233,6 +239,8 @@ def _action_publish_manual(event):
             team_b_score=float(m["score_b"]),
             team_a_projected=float(m["proj_a"]) if m.get("proj_a") is not None else None,
             team_b_projected=float(m["proj_b"]) if m.get("proj_b") is not None else None,
+            team_a_manager=m.get("manager_a"),
+            team_b_manager=m.get("manager_b"),
         )
         for m in raw_matchups
     ]

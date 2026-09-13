@@ -43,6 +43,13 @@ class Matchup:
     # and the "Upset of the Week" award just gets skipped without them.
     team_a_projected: Optional[float] = None
     team_b_projected: Optional[float] = None
+    # Manager (person) names are optional too, and separate from team_*_name
+    # on purpose: team names get renamed mid-season, but a manager is the
+    # same person every week. When set, webpage.py displays and looks up
+    # headshots by manager rather than by the current team name, so a
+    # rename doesn't orphan someone's photo or make old recaps confusing.
+    team_a_manager: Optional[str] = None
+    team_b_manager: Optional[str] = None
 
     @property
     def margin(self) -> float:
@@ -60,14 +67,22 @@ class Matchup:
     def loser_score(self) -> float:
         return min(self.team_a_score, self.team_b_score)
 
+    @property
+    def winner_manager(self) -> Optional[str]:
+        return self.team_a_manager if self.team_a_score >= self.team_b_score else self.team_b_manager
+
+    @property
+    def loser_manager(self) -> Optional[str]:
+        return self.team_b_manager if self.team_a_score >= self.team_b_score else self.team_a_manager
+
 
 def rank_teams(matchups: List[Matchup]) -> list:
     """Every team's score this week, sorted highest to lowest. Used for the
     webpage's ranking bar chart."""
     all_scores = []
     for m in matchups:
-        all_scores.append({"name": m.team_a_name, "score": m.team_a_score})
-        all_scores.append({"name": m.team_b_name, "score": m.team_b_score})
+        all_scores.append({"name": m.team_a_name, "score": m.team_a_score, "manager": m.team_a_manager})
+        all_scores.append({"name": m.team_b_name, "score": m.team_b_score, "manager": m.team_b_manager})
     return sorted(all_scores, key=lambda t: t["score"], reverse=True)
 
 
@@ -76,11 +91,11 @@ def compute_awards(matchups: List[Matchup]) -> dict:
     'bad_beat' are None when there isn't enough data to compute them."""
     all_scores = []
     for m in matchups:
-        all_scores.append((m.team_a_name, m.team_a_score))
-        all_scores.append((m.team_b_name, m.team_b_score))
+        all_scores.append((m.team_a_name, m.team_a_score, m.team_a_manager))
+        all_scores.append((m.team_b_name, m.team_b_score, m.team_b_manager))
 
-    goon_team, goon_score = max(all_scores, key=lambda t: t[1])
-    cock_team, cock_score = min(all_scores, key=lambda t: t[1])
+    goon_team, goon_score, goon_manager = max(all_scores, key=lambda t: t[1])
+    cock_team, cock_score, cock_manager = min(all_scores, key=lambda t: t[1])
     blowout = max(matchups, key=lambda m: m.margin)
     heartbreak = min(matchups, key=lambda m: m.margin)
 
@@ -96,7 +111,12 @@ def compute_awards(matchups: List[Matchup]) -> dict:
     upset = None
     if upsets:
         upset_matchup, gap = max(upsets, key=lambda t: t[1])
-        upset = {"winner": upset_matchup.winner, "loser": upset_matchup.loser, "gap": gap}
+        upset = {
+            "winner": upset_matchup.winner,
+            "winner_manager": upset_matchup.winner_manager,
+            "loser": upset_matchup.loser,
+            "gap": gap,
+        }
 
     # Bad Beat only counts if the losing team strictly outscored more than
     # half of the *other* teams in the league - otherwise no one had a real
@@ -104,23 +124,30 @@ def compute_awards(matchups: List[Matchup]) -> dict:
     bad_beat = None
     if len(matchups) >= 2:
         def outscored_count(name, score):
-            return sum(1 for n, s in all_scores if n != name and s < score)
+            return sum(1 for n, s, _mgr in all_scores if n != name and s < score)
 
         other_team_count = len(all_scores) - 1
         candidates = [
-            (m.loser, m.loser_score, outscored_count(m.loser, m.loser_score))
+            (m.loser, m.loser_score, m.loser_manager, outscored_count(m.loser, m.loser_score))
             for m in matchups
         ]
-        candidates = [c for c in candidates if c[2] > other_team_count / 2]
+        candidates = [c for c in candidates if c[3] > other_team_count / 2]
         if candidates:
-            bb_team, bb_score, bb_count = max(candidates, key=lambda t: (t[2], t[1]))
-            bad_beat = {"team": bb_team, "score": bb_score, "count": bb_count}
+            bb_team, bb_score, bb_manager, bb_count = max(candidates, key=lambda t: (t[3], t[1]))
+            bad_beat = {"team": bb_team, "manager": bb_manager, "score": bb_score, "count": bb_count}
 
     return {
-        "goon": {"team": goon_team, "score": goon_score},
-        "cock": {"team": cock_team, "score": cock_score},
-        "blowout": {"winner": blowout.winner, "loser": blowout.loser, "margin": blowout.margin},
-        "heartbreaker": {"winner": heartbreak.winner, "loser": heartbreak.loser, "margin": heartbreak.margin},
+        "goon": {"team": goon_team, "manager": goon_manager, "score": goon_score},
+        "cock": {"team": cock_team, "manager": cock_manager, "score": cock_score},
+        "blowout": {
+            "winner": blowout.winner, "winner_manager": blowout.winner_manager,
+            "loser": blowout.loser, "margin": blowout.margin,
+        },
+        "heartbreaker": {
+            "winner": heartbreak.winner,
+            "loser": heartbreak.loser, "loser_manager": heartbreak.loser_manager,
+            "margin": heartbreak.margin,
+        },
         "upset": upset,
         "bad_beat": bad_beat,
     }

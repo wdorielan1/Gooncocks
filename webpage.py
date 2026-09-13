@@ -20,12 +20,15 @@ from awards import compute_awards, rank_teams
 
 LOGO_URL = "https://stats.gooncocks.com/gooncocks-logo.png"
 
-# Per-manager headshots, if uploaded. Convention: a team named "Chett's
-# Angels" maps to photos/chetts-angels.jpg - lowercased, apostrophes
-# dropped, everything else non-alphanumeric collapsed to a dash. Whichever
-# award a team lands in that week, its headshot shows up automatically; a
-# team with no photo uploaded just renders without one (onerror removes
-# the broken-image element rather than showing a placeholder icon).
+# Per-manager headshots, if uploaded. Convention: a manager named "Chet"
+# maps to photos/chet.jpg - lowercased, apostrophes dropped, everything
+# else non-alphanumeric collapsed to a dash. Keyed by manager (a person),
+# not by team name, since team names get renamed mid-season and a manager
+# doesn't - so a rename never orphans someone's photo. Falls back to the
+# team name when no manager is known (e.g. sample data, or manual entries
+# that skip manager_a/manager_b). A team/manager with no photo uploaded
+# just renders without one (onerror removes the broken-image element
+# rather than showing a placeholder icon).
 PHOTO_BASE_URL = "https://stats.gooncocks.com/photos/"
 
 
@@ -34,11 +37,18 @@ def _slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
-def _headshot_img(name, css_class):
-    if not name:
+def _display_name(team, manager):
+    """'Chett's Angels — Chet' when the manager is known, else just the
+    team name."""
+    return f"{team} — {manager}" if manager else team
+
+
+def _headshot_img(team, manager, css_class):
+    key = manager or team
+    if not key:
         return ""
-    url = f"{PHOTO_BASE_URL}{_slugify(name)}.jpg"
-    return f'<img class="{css_class}" src="{url}" alt="{name}" onerror="this.remove()">'
+    url = f"{PHOTO_BASE_URL}{_slugify(key)}.jpg"
+    return f'<img class="{css_class}" src="{url}" alt="{key}" onerror="this.remove()">'
 
 STYLE_BLOCK = """
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -164,7 +174,7 @@ ROADMAP_ITEMS = [
 ]
 
 
-def _award_card(idx, title, team, context, value, unit, key):
+def _award_card(idx, title, team, manager, context, value, unit, key):
     icon, copy = _AWARD_COPY[key]
     if team is None:
         return f"""
@@ -175,12 +185,12 @@ def _award_card(idx, title, team, context, value, unit, key):
         <div class="award-context">No award for this week.</div>
         <p class="award-copy">Some weeks don't fit the category.</p>
       </article>"""
-    headshot = _headshot_img(team, "award-headshot")
+    headshot = _headshot_img(team, manager, "award-headshot")
     return f"""
       <article class="award">
         <div class="award-top"><span class="award-icon">{icon}</span><span class="award-index">0{idx}</span></div>
         <h3>{title}</h3>
-        <p class="award-team">{headshot}{team}</p>
+        <p class="award-team">{headshot}{_display_name(team, manager)}</p>
         <div class="award-context">{context}</div>
         <div class="award-stat"><strong>{value}</strong><span>{unit}</span></div>
         <p class="award-copy">{copy}</p>
@@ -190,10 +200,11 @@ def _award_card(idx, title, team, context, value, unit, key):
 def _rank_row_html(entry, idx, max_score):
     pct = max(0.0, entry["score"] / max_score * 100) if max_score else 0
     color = _CHART_COLORS[idx] if idx < len(_CHART_COLORS) else _CHART_COLORS[-1]
+    label = _display_name(entry["name"], entry.get("manager"))
     return f"""
       <div class="chart-row">
         <span class="rank">{idx + 1:02d}</span>
-        <span class="team-label">{entry['name']}</span>
+        <span class="team-label">{label}</span>
         <div class="bar-track"><div class="bar" style="background:{color};width:{pct:.1f}%"></div></div>
         <span class="chart-score">{entry['score']:.2f}</span>
       </div>"""
@@ -201,11 +212,13 @@ def _rank_row_html(entry, idx, max_score):
 
 def _game_card_html(idx, m, is_sample):
     status = "FINAL" if not is_sample else "FINAL · DEMO"
+    winner_label = _display_name(m.winner, m.winner_manager)
+    loser_label = _display_name(m.loser, m.loser_manager)
     return f"""
       <article class="game">
         <div class="game-header"><span>MATCHUP 0{idx + 1}</span><span>{status}</span></div>
-        <div class="game-row winner"><span>{m.winner}</span><strong>{max(m.team_a_score, m.team_b_score):.2f}</strong></div>
-        <div class="game-row"><span>{m.loser}</span><strong>{m.loser_score:.2f}</strong></div>
+        <div class="game-row winner"><span>{winner_label}</span><strong>{max(m.team_a_score, m.team_b_score):.2f}</strong></div>
+        <div class="game-row"><span>{loser_label}</span><strong>{m.loser_score:.2f}</strong></div>
         <div class="game-foot">{m.margin:.2f}-point margin of victory</div>
       </article>"""
 
@@ -218,23 +231,23 @@ def render_html(week, matchups, is_sample=True):
 
     if awards["upset"]:
         u = awards["upset"]
-        upset_card = _award_card(5, "UPSET OF THE WEEK", u["winner"], f"Beat {u['loser']}", f"{u['gap']:.2f}", "PROJECTED DEFICIT", "upset")
+        upset_card = _award_card(5, "UPSET OF THE WEEK", u["winner"], u.get("winner_manager"), f"Beat {u['loser']}", f"{u['gap']:.2f}", "PROJECTED DEFICIT", "upset")
     else:
-        upset_card = _award_card(5, "UPSET OF THE WEEK", None, None, None, None, "upset")
+        upset_card = _award_card(5, "UPSET OF THE WEEK", None, None, None, None, None, "upset")
 
     if awards["bad_beat"]:
         bb = awards["bad_beat"]
         bad_beat_card = _award_card(
-            6, "BAD BEAT", bb["team"], f"{bb['score']:.2f} points. Still took the L.",
+            6, "BAD BEAT", bb["team"], bb.get("manager"), f"{bb['score']:.2f} points. Still took the L.",
             f"{bb['count']}/{len(matchups) * 2 - 1}", "OTHERS OUTSCORED", "bad_beat",
         )
     else:
-        bad_beat_card = _award_card(6, "BAD BEAT", None, None, None, None, "bad_beat")
+        bad_beat_card = _award_card(6, "BAD BEAT", None, None, None, None, None, "bad_beat")
 
     blowout_matchup = next(m for m in matchups if m.winner == b["winner"] and m.loser == b["loser"])
     heartbreak_matchup = next(m for m in matchups if m.winner == h["winner"] and m.loser == h["loser"])
-    blowout_card = _award_card(3, "BIGGEST BLOWOUT", b["winner"], f"Over {b['loser']}", f"{blowout_matchup.margin:.2f}", "POINT MARGIN", "blowout")
-    heartbreak_card = _award_card(4, "HEARTBREAKER", h["loser"], f"Lost to {h['winner']}", f"{heartbreak_matchup.margin:.2f}", "POINTS SHORT", "heartbreaker")
+    blowout_card = _award_card(3, "BIGGEST BLOWOUT", b["winner"], b.get("winner_manager"), f"Over {b['loser']}", f"{blowout_matchup.margin:.2f}", "POINT MARGIN", "blowout")
+    heartbreak_card = _award_card(4, "HEARTBREAKER", h["loser"], h.get("loser_manager"), f"Lost to {h['winner']}", f"{heartbreak_matchup.margin:.2f}", "POINTS SHORT", "heartbreaker")
 
     rankings = rank_teams(matchups)
     max_score = rankings[0]["score"] if rankings else 1
@@ -267,7 +280,7 @@ def render_html(week, matchups, is_sample=True):
     <div class="hero-content">
       <div class="eyebrow"><span class="crown">&#9819;</span> THE CROWN HAS A NEW HOME</div>
       <h1 id="hero-title">GOON OF<br>THE <span>WEEK.</span></h1>
-      <div class="champion">{_headshot_img(g['team'], 'hero-headshot')}{g['team']}</div>
+      <div class="champion">{_headshot_img(g['team'], g.get('manager'), 'hero-headshot')}{_display_name(g['team'], g.get('manager'))}</div>
       <p class="hero-copy">Big points. Bigger bragging rights.<br>Everyone else, take notes.</p>
       <div class="hero-bottom">
         <div class="hero-score"><span>{g['score']:.2f}</span><small>POINTS</small></div>
@@ -279,8 +292,8 @@ def render_html(week, matchups, is_sample=True):
 
   <section class="shame" aria-labelledby="shame-title">
     <div class="shame-icon" aria-hidden="true">&#8595;</div>
-    {_headshot_img(c['team'], 'shame-headshot')}
-    <div><p class="eyebrow" id="shame-title">COCK OF THE WEEK</p><h2>{c['team']}</h2><p>The group chat would like a word.</p></div>
+    {_headshot_img(c['team'], c.get('manager'), 'shame-headshot')}
+    <div><p class="eyebrow" id="shame-title">COCK OF THE WEEK</p><h2>{_display_name(c['team'], c.get('manager'))}</h2><p>The group chat would like a word.</p></div>
     <div class="shame-score"><span>{c['score']:.2f}</span><small>POINTS &middot; LEAGUE LOW</small></div>
   </section>
 
