@@ -206,6 +206,40 @@ def _action_publish(event):
     return {"page_url": page_url}
 
 
+def _action_publish_manual(event):
+    """Publishes real matchups passed directly in the test event - no
+    Yahoo access needed, no code changes needed. Expected shape:
+        {
+          "action": "publish_manual",
+          "week": 1,
+          "matchups": [
+            {"team_a": "wilzer", "score_a": 145.2, "team_b": "DJ Killzer Willzer", "score_b": 132.1,
+             "proj_a": 158.72, "proj_b": 156.05},
+            ...
+          ]
+        }
+    proj_a/proj_b are optional - Upset of the Week is skipped without them.
+    """
+    week = event.get("week", 1)
+    raw_matchups = event.get("matchups")
+    if not raw_matchups:
+        raise RuntimeError('The "publish_manual" action needs a "matchups" list in the test event.')
+
+    matchups = [
+        Matchup(
+            team_a_name=m["team_a"],
+            team_a_score=float(m["score_a"]),
+            team_b_name=m["team_b"],
+            team_b_score=float(m["score_b"]),
+            team_a_projected=float(m["proj_a"]) if m.get("proj_a") is not None else None,
+            team_b_projected=float(m["proj_b"]) if m.get("proj_b") is not None else None,
+        )
+        for m in raw_matchups
+    ]
+    page_url = _publish_page(week, matchups, is_sample=False)
+    return {"page_url": page_url}
+
+
 def lambda_handler(event, context):
     event = event or {}
     # TEMPORARY: defaults to publish_demo while waiting on Yahoo's API
@@ -222,6 +256,8 @@ def lambda_handler(event, context):
         return _action_demo()
     if action == "publish_demo":
         return _action_publish_demo()
+    if action == "publish_manual":
+        return _action_publish_manual(event)
     if action == "leagues":
         return _action_leagues()
     if action == "recap":
