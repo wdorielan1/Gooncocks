@@ -14,9 +14,31 @@ render_html(week, matchups) returns a complete, self-contained HTML page
 logo image) ready to upload somewhere public - see lambda_function.py's
 _publish_page for the AWS side of that.
 """
+import re
+
 from awards import compute_awards, rank_teams
 
 LOGO_URL = "https://stats.gooncocks.com/gooncocks-logo.png"
+
+# Per-manager headshots, if uploaded. Convention: a team named "Chett's
+# Angels" maps to photos/chetts-angels.jpg - lowercased, apostrophes
+# dropped, everything else non-alphanumeric collapsed to a dash. Whichever
+# award a team lands in that week, its headshot shows up automatically; a
+# team with no photo uploaded just renders without one (onerror removes
+# the broken-image element rather than showing a placeholder icon).
+PHOTO_BASE_URL = "https://stats.gooncocks.com/photos/"
+
+
+def _slugify(name: str) -> str:
+    name = name.replace("'", "").replace("’", "")
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def _headshot_img(name, css_class):
+    if not name:
+        return ""
+    url = f"{PHOTO_BASE_URL}{_slugify(name)}.jpg"
+    return f'<img class="{css_class}" src="{url}" alt="{name}" onerror="this.remove()">'
 
 STYLE_BLOCK = """
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -52,7 +74,10 @@ STYLE_BLOCK = """
   h1,h2,h3{font-family:Teko,'Arial Narrow',Impact,sans-serif;font-weight:600}
   h1{font-size:72px;line-height:.85;letter-spacing:.5px;margin:16px 0 20px}
   h1 span{color:var(--gold)}
-  .champion{font-family:Teko,Impact,sans-serif;font-size:32px;text-transform:uppercase;letter-spacing:1px;line-height:1.1}
+  .champion{font-family:Teko,Impact,sans-serif;font-size:32px;text-transform:uppercase;letter-spacing:1px;line-height:1.1;display:flex;align-items:center;gap:14px}
+  .hero-headshot{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);flex:none}
+  .shame-headshot{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--red);flex:none}
+  .award-headshot{width:26px;height:26px;border-radius:50%;object-fit:cover;border:1px solid var(--line);flex:none}
   .hero-copy{font-size:14px;color:#a9b3c5;line-height:1.7;margin:9px 0 22px}
   .hero-bottom{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
   .hero-score{display:flex;align-items:baseline;gap:10px}
@@ -81,7 +106,7 @@ STYLE_BLOCK = """
   .award-icon{width:36px;height:36px;color:#7aa8ff;background:#1b2c49;display:grid;place-items:center;font-size:20px}
   .award-index{font-family:Teko,sans-serif;color:#45516a;font-size:22px}
   .award h3{font-size:22px;line-height:1;margin-bottom:10px;letter-spacing:.5px}
-  .award-team{font-weight:600;font-size:14px;margin-bottom:6px}
+  .award-team{font-weight:600;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:8px}
   .award-context{font-size:12px;color:var(--muted);line-height:1.6;min-height:36px}
   .award-stat{border-top:1px solid var(--line);padding-top:14px;margin-top:8px;display:flex;align-items:baseline;gap:8px}
   .award-stat strong{font-family:Teko,sans-serif;font-size:35px;font-weight:500;line-height:1}
@@ -150,11 +175,12 @@ def _award_card(idx, title, team, context, value, unit, key):
         <div class="award-context">No award for this week.</div>
         <p class="award-copy">Some weeks don't fit the category.</p>
       </article>"""
+    headshot = _headshot_img(team, "award-headshot")
     return f"""
       <article class="award">
         <div class="award-top"><span class="award-icon">{icon}</span><span class="award-index">0{idx}</span></div>
         <h3>{title}</h3>
-        <p class="award-team">{team}</p>
+        <p class="award-team">{headshot}{team}</p>
         <div class="award-context">{context}</div>
         <div class="award-stat"><strong>{value}</strong><span>{unit}</span></div>
         <p class="award-copy">{copy}</p>
@@ -241,7 +267,7 @@ def render_html(week, matchups, is_sample=True):
     <div class="hero-content">
       <div class="eyebrow"><span class="crown">&#9819;</span> THE CROWN HAS A NEW HOME</div>
       <h1 id="hero-title">GOON OF<br>THE <span>WEEK.</span></h1>
-      <div class="champion">{g['team']}</div>
+      <div class="champion">{_headshot_img(g['team'], 'hero-headshot')}{g['team']}</div>
       <p class="hero-copy">Big points. Bigger bragging rights.<br>Everyone else, take notes.</p>
       <div class="hero-bottom">
         <div class="hero-score"><span>{g['score']:.2f}</span><small>POINTS</small></div>
@@ -253,6 +279,7 @@ def render_html(week, matchups, is_sample=True):
 
   <section class="shame" aria-labelledby="shame-title">
     <div class="shame-icon" aria-hidden="true">&#8595;</div>
+    {_headshot_img(c['team'], 'shame-headshot')}
     <div><p class="eyebrow" id="shame-title">COCK OF THE WEEK</p><h2>{c['team']}</h2><p>The group chat would like a word.</p></div>
     <div class="shame-score"><span>{c['score']:.2f}</span><small>POINTS &middot; LEAGUE LOW</small></div>
   </section>
