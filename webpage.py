@@ -3,384 +3,289 @@ Renders the shareable recap webpage as an HTML string, using the exact same
 award data as awards.generate_recap() (via compute_awards()/rank_teams())
 so the text recap and the webpage never disagree.
 
+Visual design ported from the "Gooncocks Recap" static mockup Will had
+generated separately (peacock mascot art, masthead nav, hero with the
+masked logo image, shame banner, award cards, animated ranking chart,
+scoreboard grid, roadmap). The mascot image is expected to live in the
+same S3 bucket as this page - see LOGO_URL below.
+
 render_html(week, matchups) returns a complete, self-contained HTML page
-(styles inlined, no external dependencies except Google Fonts) ready to
-upload somewhere public - see lambda_function.py's _publish_page for the
-AWS side of that.
+(styles inlined, no external dependencies except Google Fonts and the
+logo image) ready to upload somewhere public - see lambda_function.py's
+_publish_page for the AWS side of that.
 """
 from awards import compute_awards, rank_teams
+
+LOGO_URL = "https://stats.gooncocks.com/gooncocks-logo.png"
 
 STYLE_BLOCK = """
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Teko:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --ink: #0B1220;
-    --surface: #121B2E;
-    --surface-2: #182742;
-    --line: #263957;
-    --chalk: #EEF1F8;
-    --muted: #8B96AE;
-    --gold: #E7A33B;
-    --peacock: #2FB6A3;
-    --flag: #D1503F;
-  }
-  @media (prefers-color-scheme: light) {
-    :root:not([data-theme="dark"]) {
-      --ink: #F3F5FA; --surface: #FFFFFF; --surface-2: #E7ECF5; --line: #D6DEEC;
-      --chalk: #101A2E; --muted: #55617A; --gold: #A9701C; --peacock: #157B6E; --flag: #A93A2C;
-    }
-  }
-  :root[data-theme="light"] {
-    --ink: #F3F5FA; --surface: #FFFFFF; --surface-2: #E7ECF5; --line: #D6DEEC;
-    --chalk: #101A2E; --muted: #55617A; --gold: #A9701C; --peacock: #157B6E; --flag: #A93A2C;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--ink); color: var(--chalk);
-    font-family: 'Work Sans', system-ui, -apple-system, sans-serif;
-    padding-inline: 20px; padding-block: 32px 64px; overflow-x: hidden;
-  }
-  .page { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: clamp(28px, 5vw, 44px); }
-  h1, h2, h3 { text-wrap: balance; margin: 0; }
-  .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); }
-  .eyebrow.shame { color: var(--flag); }
-
-  /* ---------- masthead ---------- */
-  .masthead-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 20px; }
-  .brand-row { display: flex; align-items: center; gap: 10px; }
-  .mark { flex: none; width: 30px; height: 30px; color: var(--peacock); }
-  .wordmark { font-family: 'Teko', system-ui, sans-serif; font-weight: 600; font-size: 26px; letter-spacing: 0.02em; color: var(--chalk); }
-  .week-tag { font-family: 'Teko', system-ui, sans-serif; font-size: 22px; font-weight: 500; color: var(--muted); }
-  .week-tag strong { color: var(--chalk); font-weight: 600; }
-  .sample-pill {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600;
-    letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold);
-    border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
-    background: color-mix(in srgb, var(--gold) 10%, transparent); border-radius: 999px; padding: 6px 12px 6px 10px; white-space: nowrap;
-  }
-  .sample-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); flex: none; }
-
-  /* ---------- hero: Goon of the Week ---------- */
-  .hero {
-    position: relative;
-    border: 1px solid color-mix(in srgb, var(--gold) 30%, var(--line));
-    border-radius: 14px;
-    padding: clamp(28px, 6vw, 52px) clamp(24px, 5vw, 44px);
-    overflow: hidden;
-    background: var(--surface);
-  }
-  /* faint yard-line field texture */
-  .hero::before {
-    content: "";
-    position: absolute; inset: 0;
-    background-image: repeating-linear-gradient(
-      90deg, transparent, transparent 68px,
-      color-mix(in srgb, var(--chalk) 6%, transparent) 68px,
-      color-mix(in srgb, var(--chalk) 6%, transparent) 70px
-    );
-    z-index: 0;
-  }
-  /* giant peacock watermark */
-  .hero .hero-mark {
-    position: absolute; right: -6%; top: 50%; translate: 0 -50%;
-    width: clamp(220px, 45vw, 380px); height: auto;
-    color: var(--peacock); opacity: 0.10; z-index: 0; pointer-events: none;
-  }
-  .hero::after {
-    content: "";
-    position: absolute; inset: 0;
-    background: radial-gradient(ellipse 70% 60% at 20% 30%, color-mix(in srgb, var(--gold) 14%, transparent), transparent 70%);
-    z-index: 0;
-  }
-  .hero-content { position: relative; z-index: 1; }
-  .prize-badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: var(--gold); color: var(--ink);
-    font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-    padding: 7px 14px; border-radius: 999px; margin-bottom: 14px;
-  }
-  .hero h1.headline {
-    font-family: 'Teko', system-ui, sans-serif; font-weight: 600;
-    font-size: clamp(48px, 9vw, 92px); line-height: 0.92; letter-spacing: 0.01em; color: var(--chalk);
-  }
-  .hero h1.headline::after { content: "."; color: var(--gold); }
-  .hero .hero-subtext { margin-top: 10px; font-size: 15px; color: var(--muted); max-width: 44ch; }
-  .hero .hero-foot { margin-top: 22px; display: flex; align-items: baseline; gap: 10px; }
-  .hero .hero-foot .num {
-    font-family: 'Teko', system-ui, sans-serif; font-size: 40px; font-weight: 600; color: var(--gold);
-    font-variant-numeric: tabular-nums; line-height: 1;
-  }
-  .hero .hero-foot .cap { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-
-  /* ---------- cock of the week (secondary banner) ---------- */
-  .cock-banner {
-    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-    background: var(--surface); border: 1px solid color-mix(in srgb, var(--flag) 32%, var(--line));
-    border-radius: 10px; padding: 18px 22px;
-  }
-  .cock-banner .headline { font-family: 'Teko', system-ui, sans-serif; font-size: 30px; font-weight: 600; color: var(--chalk); }
-  .cock-banner .subtext { font-size: 13px; color: var(--muted); margin-top: 2px; }
-  .cock-banner .num { font-family: 'Teko', system-ui, sans-serif; font-size: 34px; font-weight: 600; color: var(--flag); font-variant-numeric: tabular-nums; }
-  .cock-banner .cap { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: right; }
-
-  /* ---------- section heads ---------- */
-  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-  .section-head h2 { font-family: 'Teko', system-ui, sans-serif; font-size: 26px; font-weight: 600; letter-spacing: 0.02em; color: var(--chalk); }
-  .section-head .count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-
-  /* ---------- award grid ---------- */
-  .award-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .plaque { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; }
-  .plaque .headline { font-family: 'Teko', system-ui, sans-serif; font-size: 24px; font-weight: 600; color: var(--chalk); line-height: 1.05; }
-  .plaque .subtext { font-size: 13px; color: var(--muted); line-height: 1.4; }
-  .plaque .stat { margin-top: auto; padding-top: 8px; font-size: 12px; font-weight: 600; color: var(--gold); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
-
-  /* ---------- ranking bar chart ---------- */
-  .rank-list { display: flex; flex-direction: column; gap: 10px; }
-  .rank-row { display: grid; grid-template-columns: 130px 1fr 56px; align-items: center; gap: 12px; }
-  .rank-name { font-size: 13px; color: var(--chalk); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rank-track { height: 12px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
-  .rank-fill { height: 100%; border-radius: 999px; }
-  .rank-score { font-family: 'Teko', system-ui, sans-serif; font-size: 17px; font-weight: 600; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
-
-  /* ---------- scoreboard ---------- */
-  .ledger { border-top: 1px solid var(--line); }
-  .matchup { display: grid; grid-template-columns: 1fr auto 12px auto 1fr; align-items: center; gap: 10px; padding: 14px 4px; border-bottom: 1px solid var(--line); }
-  .matchup .team { font-size: 14px; font-weight: 500; color: var(--muted); display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .matchup .team span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .matchup .team.b { justify-content: flex-end; text-align: right; flex-direction: row-reverse; }
-  .matchup .team.win { color: var(--chalk); font-weight: 600; }
-  .matchup .tick { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); flex: none; }
-  .matchup .team:not(.win) .tick { visibility: hidden; }
-  .matchup .score { font-family: 'Teko', system-ui, sans-serif; font-size: 24px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.4em; text-align: center; }
-  .matchup .score.win { color: var(--gold); font-weight: 600; }
-  .matchup .vs { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); text-align: center; }
-
-  /* ---------- roadmap ---------- */
-  .roadmap-list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
-  .roadmap-row { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 10px 16px; padding: 12px 2px; border-bottom: 1px solid var(--line); }
-  .roadmap-row .name { font-size: 14px; font-weight: 600; color: var(--chalk); }
-  .roadmap-row .desc { grid-column: 1; font-size: 12.5px; color: var(--muted); margin-top: -4px; }
-  .status-tag { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; white-space: nowrap; border: 1px solid var(--line); color: var(--muted); }
-  .status-tag.data { color: var(--peacock); border-color: color-mix(in srgb, var(--peacock) 45%, var(--line)); }
-  .status-tag.manual { color: var(--flag); border-color: color-mix(in srgb, var(--flag) 40%, var(--line)); }
-
-  @media (max-width: 620px) {
-    .award-grid { grid-template-columns: 1fr; }
-    .matchup { grid-template-columns: 1fr auto 1fr; grid-template-areas: "a scorea vs" "b scoreb vs2"; }
-    .roadmap-row { grid-template-columns: 1fr; }
-    .cock-banner .cap { text-align: left; }
-    .hero .hero-mark { opacity: 0.07; }
-  }
-  @media (max-width: 460px) {
-    .matchup { grid-template-columns: 1fr 1fr; row-gap: 4px; }
-    .matchup .vs { display: none; }
-    .matchup .team.b { flex-direction: row; justify-content: flex-start; text-align: left; order: 3; }
-    .matchup .score.b { order: 4; }
-    .rank-row { grid-template-columns: 84px 1fr 46px; }
-  }
-
-  footer { border-top: 1px solid var(--line); padding-top: 20px; font-size: 12px; color: var(--muted); line-height: 1.6; }
-  footer strong { color: var(--muted); font-weight: 600; }
+  :root{color-scheme:dark;--bg:#0b1220;--surface:#101a2b;--line:#263044;--text:#eef1f8;--muted:#94a0b3;--gold:#e7a33b;--blue:#3074ec;--red:#d1503f}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;scroll-padding-top:30px}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Work Sans',sans-serif;font-size:16px}
+  a{color:inherit;text-decoration:none}
+  a:focus-visible{outline:2px solid var(--gold);outline-offset:6px}
+  .masthead{max-width:1440px;margin:auto;padding:24px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:12px;font-family:Teko,'Arial Narrow',sans-serif;font-size:32px;font-weight:600;line-height:1}
+  .brand img{width:52px;height:52px;border-radius:50%;object-fit:cover}
+  .brand small{display:block;font-family:'Work Sans',sans-serif;font-size:10px;letter-spacing:1.8px;color:var(--muted);margin-top:7px}
+  nav{display:flex;gap:30px;font-size:14px;color:var(--muted)}
+  nav a:hover,nav .active{color:var(--gold)}
+  .season{font-size:12px;letter-spacing:1px;color:var(--muted)}
+  .season span,.slash{margin:0 12px;color:#4a5770}
+  main{max-width:1328px;padding:0 20px;margin:auto}
+  .edition{display:flex;justify-content:space-between;padding:28px 0 20px;font-size:12px;letter-spacing:1.8px;font-weight:600;flex-wrap:wrap;gap:8px}
+  .demo{color:var(--muted);font-size:11px}
+  .hero{min-height:450px;position:relative;isolation:isolate;overflow:hidden;background:#060d19;border:1px solid #343647;border-top:3px solid var(--gold)}
+  .hero-art{position:absolute;right:-15px;top:-45px;width:520px;height:520px;object-fit:cover;z-index:-2;opacity:.8;mask-image:linear-gradient(90deg,transparent,black 25%);-webkit-mask-image:linear-gradient(90deg,transparent,black 25%)}
+  .hero:after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#09111d 2%,#09111de6 29%,transparent 72%),linear-gradient(0deg,#09111d,transparent 35%);z-index:-1}
+  .yardlines{position:absolute;inset:0;z-index:-1;background:repeating-linear-gradient(90deg,transparent 0,transparent 99px,#ffffff08 100px,#ffffff08 101px)}
+  .hero-content{padding:32px 28px 52px;position:relative}
+  .eyebrow{font-size:12px;letter-spacing:1.9px;font-weight:600;margin:0 0 12px;color:var(--muted)}
+  .hero .eyebrow{color:var(--gold);display:flex;align-items:center;gap:12px}
+  .crown{font-size:25px}
+  h1,h2,h3,p{margin-top:0}
+  h1,h2,h3{font-family:Teko,'Arial Narrow',Impact,sans-serif;font-weight:600}
+  h1{font-size:72px;line-height:.85;letter-spacing:.5px;margin:16px 0 20px}
+  h1 span{color:var(--gold)}
+  .champion{font-family:Teko,Impact,sans-serif;font-size:32px;text-transform:uppercase;letter-spacing:1px;line-height:1.1}
+  .hero-copy{font-size:14px;color:#a9b3c5;line-height:1.7;margin:9px 0 22px}
+  .hero-bottom{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+  .hero-score{display:flex;align-items:baseline;gap:10px}
+  .hero-score>span{font-family:Teko,Impact,sans-serif;font-size:56px;line-height:1;color:var(--gold)}
+  small{font-size:11px;letter-spacing:1px;color:var(--muted)}
+  .prize{border-left:1px solid #756139;padding-left:24px;display:flex;flex-direction:column}
+  .prize>span{font-family:Teko,Impact,sans-serif;font-size:38px;font-weight:600;line-height:1;color:var(--gold)}
+  .prize small{color:var(--gold);font-size:10px}
+  .hero-foot{position:absolute;bottom:0;left:0;right:0;border-top:1px solid #ffffff12;display:flex;justify-content:space-between;padding:12px 28px;font-size:10px;letter-spacing:2px;color:var(--muted)}
+  .hero-foot span span{margin:0 12px;color:var(--gold)}
+  .shame{background:linear-gradient(90deg,#271b23,#141823);border:1px solid #523031;border-left:3px solid var(--red);padding:22px 24px;display:flex;gap:20px;align-items:center;margin:20px 0 38px;flex-wrap:wrap}
+  .shame-icon{font-size:36px;color:var(--red);border:1px solid #72372f;width:54px;height:54px;display:grid;place-items:center;flex:none}
+  .shame .eyebrow{color:#eb7b6d;font-size:11px;margin-bottom:7px}
+  .shame h2{font-size:27px;text-transform:uppercase;line-height:1;margin:0 0 6px}
+  .shame p:last-child{color:var(--muted);font-size:13px;margin:0}
+  .shame-score{margin-left:auto;text-align:right;display:flex;flex-direction:column}
+  .shame-score>span{font-family:Teko,Impact,sans-serif;font-size:42px;line-height:1;color:#ed877b}
+  .shame-score small{font-size:10px;margin-top:5px}
+  .section-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 20px;flex-wrap:wrap}
+  .section-heading h2{font-size:28px;letter-spacing:.4px;line-height:1;margin:0}
+  .section-heading>span{font-size:10px;letter-spacing:1.5px;color:var(--muted)}
+  .section-heading .eyebrow{font-size:10px;margin-bottom:10px}
+  .award-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:40px}
+  .award{background:var(--surface);border:1px solid var(--line);padding:20px;display:flex;flex-direction:column;position:relative;overflow:hidden}
+  .award-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .award-icon{width:36px;height:36px;color:#7aa8ff;background:#1b2c49;display:grid;place-items:center;font-size:20px}
+  .award-index{font-family:Teko,sans-serif;color:#45516a;font-size:22px}
+  .award h3{font-size:22px;line-height:1;margin-bottom:10px;letter-spacing:.5px}
+  .award-team{font-weight:600;font-size:14px;margin-bottom:6px}
+  .award-context{font-size:12px;color:var(--muted);line-height:1.6;min-height:36px}
+  .award-stat{border-top:1px solid var(--line);padding-top:14px;margin-top:8px;display:flex;align-items:baseline;gap:8px}
+  .award-stat strong{font-family:Teko,sans-serif;font-size:35px;font-weight:500;line-height:1}
+  .award-stat span{font-size:10px;color:var(--muted);letter-spacing:.7px}
+  .award-copy{font-size:12px;line-height:1.6;color:var(--muted);margin:12px 0 0}
+  .panel{padding:26px;background:#0f1929;border:1px solid var(--line);margin-bottom:40px}
+  .rankings .section-heading{margin-bottom:22px}
+  .chart-row{display:grid;grid-template-columns:25px 160px 1fr 65px;align-items:center;gap:14px;min-height:38px;border-bottom:1px solid #ffffff04}
+  .rank{font-family:Teko,sans-serif;color:#63718a;font-size:21px}
+  .team-label{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar-track{height:12px;background:#ffffff03}
+  .bar{height:100%;background:var(--bar);width:var(--width)}
+  .chart-row:first-child .team-label,.chart-row:first-child .rank,.chart-row:first-child .chart-score{color:var(--gold)}
+  .chart-score{font-family:Teko,sans-serif;font-size:22px;text-align:right;font-variant-numeric:tabular-nums}
+  .chart-foot{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);padding-top:18px;flex-wrap:wrap;gap:8px}
+  .chart-foot i{display:inline-block;background:var(--gold);width:8px;height:8px;margin-right:8px}
+  .scoreboard{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:40px}
+  .game{background:var(--surface);border:1px solid var(--line);padding:18px}
+  .game-header{font-size:10px;letter-spacing:1.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:14px}
+  .game-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0;color:var(--muted);font-size:13px}
+  .game-row strong{font-family:Teko,sans-serif;font-size:26px;line-height:1;font-weight:500}
+  .game-row.winner{color:var(--text)}
+  .game-row.winner strong{color:var(--gold)}
+  .game-foot{font-size:10px;border-top:1px solid var(--line);padding-top:12px;margin-top:14px;color:var(--muted)}
+  .roadmap{display:grid;grid-template-columns:1fr 2fr;gap:36px;padding:28px 0 34px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .roadmap h2{font-size:32px;margin-bottom:7px;line-height:1}
+  .roadmap p:last-child{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:0}
+  .roadmap ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:10px;align-content:center}
+  .roadmap li{padding:11px 14px;border:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .roadmap li:before{content:'+';margin-right:9px;color:#59657a}
+  footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:28px 0 34px;flex-wrap:wrap}
+  .footer-brand{font-family:Teko,sans-serif;font-size:24px;font-weight:600;letter-spacing:1px}
+  .footer-brand span{color:var(--gold);margin-left:10px}
+  footer p{font-size:11px;color:var(--muted);line-height:1.8;margin:0}
+  footer>span{font-size:10px;letter-spacing:1.5px;color:#627088}
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  @media(max-width:1000px){.season{display:none}.award-grid{grid-template-columns:repeat(2,1fr)}.hero-art{right:-90px}.scoreboard{grid-template-columns:repeat(2,1fr)}.roadmap{grid-template-columns:1fr}}
+  @media(max-width:640px){.brand{font-size:26px}.brand img{width:40px;height:40px}nav{width:100%;gap:20px;font-size:12px}.hero{min-height:auto}.hero-art{width:340px;height:340px;right:-140px;top:10px;opacity:.5}h1{font-size:56px;margin:16px 0}.champion{font-size:26px;max-width:230px}.hero-score>span{font-size:44px}.prize{padding-left:16px}.award-grid{grid-template-columns:1fr;gap:10px}.chart-row{grid-template-columns:18px 110px 1fr 46px;gap:8px}.scoreboard{grid-template-columns:1fr}}
 </style>
 """
 
-MARK_SVG = """<svg class="mark" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <polygon points="50,4 58,26 40,26" fill="currentColor"/>
-  <polygon points="50,0 66,24 46,28" fill="currentColor" opacity="0.55"/>
-  <polygon points="50,0 34,24 54,28" fill="currentColor" opacity="0.55"/>
-  <polygon points="28,38 50,24 50,58 28,66" fill="currentColor"/>
-  <polygon points="30,40 22,30 32,44" fill="currentColor"/>
-  <circle cx="40" cy="42" r="3.4" fill="var(--ink)"/>
-</svg>"""
+# Icon, flavor-line copy, and bar-chart colors ported from the approved
+# mockup - kept as fixed strings per award category, independent of data.
+_AWARD_COPY = {
+    "blowout": ("↗", "That wasn't a matchup. That was a statement."),
+    "heartbreaker": ("♡", "One more catch. A whole different group chat."),
+    "upset": ("ϟ", "The projections have been asked to leave."),
+    "bad_beat": ("◎", "Right score. Wrong opponent. Brutal."),
+}
+_CHART_COLORS = ["#e7a33b", "#528ae7", "#4b7ac9", "#426bb0", "#3e5e95", "#3b527b", "#3a4867", "#374059", "#343b4c", "#323744"]
 
-# A bigger, fanned-tail version of the mark, used as a large faded
-# background watermark in the hero. Placeholder until the real Gooncocks
-# logo artwork is available to embed directly.
-HERO_MARK_SVG = """<svg class="hero-mark" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <polygon points="100,10 130,70 70,70" fill="currentColor"/>
-  <polygon points="100,0 20,60 55,95 100,45" fill="currentColor" opacity="0.5"/>
-  <polygon points="100,0 180,60 145,95 100,45" fill="currentColor" opacity="0.5"/>
-  <polygon points="60,75 100,45 140,75 130,150 70,150" fill="currentColor"/>
-  <circle cx="82" cy="88" r="6" fill="var(--ink)"/>
-  <polygon points="60,95 30,80 55,105" fill="currentColor"/>
-</svg>"""
-
-ROADMAP_ROWS = """
-  <div class="roadmap-row"><span class="name">Fraud Alert</span><span class="status-tag data">Needs standings</span><span class="desc">Strong record, weak total scoring.</span></div>
-  <div class="roadmap-row"><span class="name">Power Rankings</span><span class="status-tag manual">Needs standings + commissioner</span><span class="desc">Record, points, roster strength, recent results, and your call.</span></div>
-  <div class="roadmap-row"><span class="name">Benchwarmer Disaster</span><span class="status-tag data">Needs full rosters</span><span class="desc">Most valuable points left on the bench.</span></div>
-  <div class="roadmap-row"><span class="name">Start/Sit Disaster</span><span class="status-tag data">Needs full rosters</span><span class="desc">Worst call between a starter and an eligible bench player.</span></div>
-  <div class="roadmap-row"><span class="name">Waiver-Wire Steal</span><span class="status-tag data">Needs transaction history</span><span class="desc">Best-performing recent pickup off waivers.</span></div>
-  <div class="roadmap-row"><span class="name">Trade Winner</span><span class="status-tag manual">Commissioner call</span><span class="desc">Which manager benefited most from a trade.</span></div>
-  <div class="roadmap-row"><span class="name">Injury Excuse</span><span class="status-tag manual">Commissioner call</span><span class="desc">Team most negatively affected by injuries.</span></div>
-"""
+ROADMAP_ITEMS = [
+    "Fraud Alert", "Power Rankings", "Benchwarmer Disaster", "Start/Sit Disaster",
+    "Waiver-Wire Steal", "Trade Winner", "Injury Excuse",
+]
 
 
-def _matchup_row_html(m):
-    a_win = m.team_a_score >= m.team_b_score
+def _award_card(idx, title, team, context, value, unit, key):
+    icon, copy = _AWARD_COPY[key]
+    if team is None:
+        return f"""
+      <article class="award">
+        <div class="award-top"><span class="award-icon">{icon}</span><span class="award-index">0{idx}</span></div>
+        <h3>{title}</h3>
+        <p class="award-team">No qualifying team</p>
+        <div class="award-context">No award for this week.</div>
+        <p class="award-copy">Some weeks don't fit the category.</p>
+      </article>"""
     return f"""
-      <div class="matchup">
-        <div class="team {'win' if a_win else ''} a"><span class="tick"></span><span>{m.team_a_name}</span></div>
-        <div class="score {'win' if a_win else ''} a">{m.team_a_score:.2f}</div>
-        <div class="vs">VS</div>
-        <div class="score {'' if a_win else 'win'} b">{m.team_b_score:.2f}</div>
-        <div class="team {'' if a_win else 'win'} b"><span class="tick"></span><span>{m.team_b_name}</span></div>
+      <article class="award">
+        <div class="award-top"><span class="award-icon">{icon}</span><span class="award-index">0{idx}</span></div>
+        <h3>{title}</h3>
+        <p class="award-team">{team}</p>
+        <div class="award-context">{context}</div>
+        <div class="award-stat"><strong>{value}</strong><span>{unit}</span></div>
+        <p class="award-copy">{copy}</p>
+      </article>"""
+
+
+def _rank_row_html(entry, idx, max_score):
+    pct = max(0.0, entry["score"] / max_score * 100) if max_score else 0
+    color = _CHART_COLORS[idx] if idx < len(_CHART_COLORS) else _CHART_COLORS[-1]
+    return f"""
+      <div class="chart-row">
+        <span class="rank">{idx + 1:02d}</span>
+        <span class="team-label">{entry['name']}</span>
+        <div class="bar-track"><div class="bar" style="background:{color};width:{pct:.1f}%"></div></div>
+        <span class="chart-score">{entry['score']:.2f}</span>
       </div>"""
 
 
-def _rank_row_html(entry, idx, total, max_score):
-    pct = (entry["score"] / max_score * 100) if max_score else 0
-    # Fade from full gold (top team) toward muted grey (bottom team).
-    blend = 100 - (idx / max(total - 1, 1)) * 65
-    color = f"color-mix(in srgb, var(--gold) {blend:.0f}%, var(--muted))"
+def _game_card_html(idx, m, is_sample):
+    status = "FINAL" if not is_sample else "FINAL · DEMO"
     return f"""
-      <div class="rank-row">
-        <div class="rank-name">{entry['name']}</div>
-        <div class="rank-track"><div class="rank-fill" style="width:{pct:.1f}%;background:{color}"></div></div>
-        <div class="rank-score">{entry['score']:.1f}</div>
-      </div>"""
+      <article class="game">
+        <div class="game-header"><span>MATCHUP 0{idx + 1}</span><span>{status}</span></div>
+        <div class="game-row winner"><span>{m.winner}</span><strong>{max(m.team_a_score, m.team_b_score):.2f}</strong></div>
+        <div class="game-row"><span>{m.loser}</span><strong>{m.loser_score:.2f}</strong></div>
+        <div class="game-foot">{m.margin:.2f}-point margin of victory</div>
+      </article>"""
 
 
 def render_html(week, matchups, is_sample=True):
     awards = compute_awards(matchups)
     g, c, b, h = awards["goon"], awards["cock"], awards["blowout"], awards["heartbreaker"]
 
+    demo_tag = '<span class="demo">DEMO EDITION · SAMPLE SCORES</span>' if is_sample else ""
+
     if awards["upset"]:
         u = awards["upset"]
-        upset_html = f"""
-      <div class="plaque">
-        <span class="eyebrow">Upset of the Week</span>
-        <div class="headline">{u['winner']}</div>
-        <p class="subtext">Projected to lose to {u['loser']} by {u['gap']:.2f} - won anyway.</p>
-        <span class="stat">{u['gap']:.2f} PROJECTION BLOWN</span>
-      </div>"""
+        upset_card = _award_card(5, "UPSET OF THE WEEK", u["winner"], f"Beat {u['loser']}", f"{u['gap']:.2f}", "PROJECTED DEFICIT", "upset")
     else:
-        upset_html = """
-      <div class="plaque">
-        <span class="eyebrow">Upset of the Week</span>
-        <div class="headline">N/A</div>
-        <p class="subtext">No projected scores were available this week.</p>
-      </div>"""
+        upset_card = _award_card(5, "UPSET OF THE WEEK", None, None, None, None, "upset")
 
     if awards["bad_beat"]:
         bb = awards["bad_beat"]
-        bad_beat_html = f"""
-      <div class="plaque">
-        <span class="eyebrow">Bad Beat</span>
-        <div class="headline">{bb['team']}</div>
-        <p class="subtext">Scored enough to beat {bb['count']} other team(s) this week - and still lost.</p>
-        <span class="stat">{bb['score']:.2f} PTS</span>
-      </div>"""
+        bad_beat_card = _award_card(
+            6, "BAD BEAT", bb["team"], f"{bb['score']:.2f} points. Still took the L.",
+            f"{bb['count']}/{len(matchups) * 2 - 1}", "OTHERS OUTSCORED", "bad_beat",
+        )
     else:
-        bad_beat_html = """
-      <div class="plaque">
-        <span class="eyebrow">Bad Beat</span>
-        <div class="headline">N/A</div>
-        <p class="subtext">Need at least two matchups to compare.</p>
-      </div>"""
+        bad_beat_card = _award_card(6, "BAD BEAT", None, None, None, None, "bad_beat")
 
-    matchup_rows = "".join(_matchup_row_html(m) for m in matchups)
-    sample_pill = '<span class="sample-pill">Sample data · preview</span>' if is_sample else ""
+    blowout_matchup = next(m for m in matchups if m.winner == b["winner"] and m.loser == b["loser"])
+    heartbreak_matchup = next(m for m in matchups if m.winner == h["winner"] and m.loser == h["loser"])
+    blowout_card = _award_card(3, "BIGGEST BLOWOUT", b["winner"], f"Over {b['loser']}", f"{blowout_matchup.margin:.2f}", "POINT MARGIN", "blowout")
+    heartbreak_card = _award_card(4, "HEARTBREAKER", h["loser"], f"Lost to {h['winner']}", f"{heartbreak_matchup.margin:.2f}", "POINTS SHORT", "heartbreaker")
 
     rankings = rank_teams(matchups)
     max_score = rankings[0]["score"] if rankings else 1
-    rank_rows = "".join(
-        _rank_row_html(entry, idx, len(rankings), max_score) for idx, entry in enumerate(rankings)
-    )
+    rank_rows = "".join(_rank_row_html(entry, idx, max_score) for idx, entry in enumerate(rankings))
+    game_cards = "".join(_game_card_html(idx, m, is_sample) for idx, m in enumerate(matchups))
+    roadmap_items = "".join(f"<li>{item}</li>" for item in ROADMAP_ITEMS)
 
     return f"""<!doctype html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gooncocks Recap - Week {week}</title>
+<meta name="theme-color" content="#0B1220">
+<meta name="description" content="Gooncocks weekly fantasy football recap. The winners, the heartbreaks, and the receipts.">
+<title>Gooncocks | Week {week} Recap</title>
 {STYLE_BLOCK}
 </head>
 <body>
-<div class="page">
+<header class="masthead">
+  <a class="brand" href="#"><img src="{LOGO_URL}" alt="Gooncocks peacock logo"><span>GOONCOCKS<small>FANTASY FOOTBALL LEAGUE</small></span></a>
+  <nav aria-label="Recap sections"><a class="active" href="#awards">The recap</a><a href="#rankings">Weekly rankings</a><a href="#scoreboard">Scoreboard</a></nav>
+  <span class="season">2026 SEASON <span>/</span> WEEK {week:02d}</span>
+</header>
+<main>
+  <div class="edition"><span>THE WEEKLY RECAP <span class="slash">/</span> VOL. {week:02d}</span>{demo_tag}</div>
 
-  <div class="masthead-row">
-    <div class="brand-row">
-      {MARK_SVG}
-      <span class="wordmark">Gooncocks</span>
-    </div>
-    <div class="masthead-row" style="gap:10px 14px">
-      <p class="week-tag"><strong>Week {week}</strong> Recap</p>
-      {sample_pill}
-    </div>
-  </div>
-
-  <section class="hero">
-    {HERO_MARK_SVG}
+  <section class="hero" id="awards" aria-labelledby="hero-title">
+    <div class="yardlines" aria-hidden="true"></div>
+    <img class="hero-art" src="{LOGO_URL}" alt="Crowned blue peacock in a black hoodie holding a football">
     <div class="hero-content">
-      <span class="prize-badge">$50 Winner</span>
-      <span class="eyebrow" style="display:block;margin-bottom:6px">Goon of the Week</span>
-      <h1 class="headline">{g['team']}</h1>
-      <p class="hero-subtext">Highest score in the league this week - takes home the $50, no arguments.</p>
-      <div class="hero-foot">
-        <span class="num">{g['score']:.2f}</span>
-        <span class="cap">points</span>
+      <div class="eyebrow"><span class="crown">&#9819;</span> THE CROWN HAS A NEW HOME</div>
+      <h1 id="hero-title">GOON OF<br>THE <span>WEEK.</span></h1>
+      <div class="champion">{g['team']}</div>
+      <p class="hero-copy">Big points. Bigger bragging rights.<br>Everyone else, take notes.</p>
+      <div class="hero-bottom">
+        <div class="hero-score"><span>{g['score']:.2f}</span><small>POINTS</small></div>
+        <div class="prize"><span>$50</span><small>WEEKLY WINNER</small></div>
       </div>
     </div>
+    <div class="hero-foot"><span>01 <span>/</span> TOP OF THE PECKING ORDER</span><span>{len(rankings)} TEAMS. ONE CROWN.</span></div>
   </section>
 
-  <section class="cock-banner">
-    <div>
-      <span class="eyebrow shame">Cock of the Week</span>
-      <div class="headline">{c['team']}</div>
-      <p class="subtext">Most embarrassing showing of the week - no excuses.</p>
-    </div>
-    <div>
-      <div class="num">{c['score']:.2f}</div>
-      <div class="cap">points</div>
-    </div>
+  <section class="shame" aria-labelledby="shame-title">
+    <div class="shame-icon" aria-hidden="true">&#8595;</div>
+    <div><p class="eyebrow" id="shame-title">COCK OF THE WEEK</p><h2>{c['team']}</h2><p>The group chat would like a word.</p></div>
+    <div class="shame-score"><span>{c['score']:.2f}</span><small>POINTS &middot; LEAGUE LOW</small></div>
   </section>
 
-  <section class="trophy-case">
-    <div class="section-head"><h2>More Awards</h2><span class="count">4 categories</span></div>
-    <div class="award-grid">
-      <div class="plaque">
-        <span class="eyebrow">Biggest Blowout</span>
-        <div class="headline">{b['winner']}</div>
-        <p class="subtext">Demolished {b['loser']} - the widest margin of the week.</p>
-        <span class="stat">{b['margin']:.2f} PT MARGIN</span>
-      </div>
-      <div class="plaque">
-        <span class="eyebrow">Heartbreaker</span>
-        <div class="headline">{h['loser']}</div>
-        <p class="subtext">Fell to {h['winner']} by the slimmest margin of the week.</p>
-        <span class="stat">{h['margin']:.2f} PT MARGIN</span>
-      </div>
-      {upset_html}
-      {bad_beat_html}
-    </div>
+  <div class="section-heading"><h2>THIS WEEK'S HARDWARE</h2><span>THE NUMBERS DON'T LIE.</span></div>
+  <section class="award-grid" aria-label="Weekly awards">
+    {blowout_card}
+    {heartbreak_card}
+    {upset_card}
+    {bad_beat_card}
   </section>
 
-  <section class="rankings">
-    <div class="section-head"><h2>Score Rankings</h2><span class="count">{len(rankings)} teams</span></div>
-    <div class="rank-list">{rank_rows}
-    </div>
+  <section id="rankings" class="panel rankings">
+    <div class="section-heading"><div><p class="eyebrow">THE PECKING ORDER</p><h2>EVERY POINT. EVERY TEAM.</h2></div><span>WEEK {week:02d} <span class="slash">/</span> TOTAL POINTS</span></div>
+    <div role="img" aria-label="All teams ranked by their weekly scores">{rank_rows}</div>
+    <div class="chart-foot"><span><i></i> Goon of the Week</span><span>Weekly scores, not season standings</span></div>
   </section>
 
-  <section class="scoreboard">
-    <div class="section-head"><h2>This Week's Matchups</h2><span class="count">{len(matchups)} games</span></div>
-    <div class="ledger">{matchup_rows}
-    </div>
+  <section id="scoreboard">
+    <div class="section-heading"><div><p class="eyebrow">HEAD TO HEAD</p><h2>THE FINAL WORD</h2></div><span>{len(matchups)} MATCHUPS</span></div>
+    <div class="scoreboard">{game_cards}</div>
   </section>
 
   <section class="roadmap">
-    <div class="section-head"><h2>On The Board</h2><span class="count">not tracked yet</span></div>
-    <div class="roadmap-list">{ROADMAP_ROWS}</div>
+    <div><p class="eyebrow">COMING SOON</p><h2>ON THE BOARD.</h2><p>More receipts are on the way.<br>These categories aren't live yet.</p></div>
+    <ul>{roadmap_items}</ul>
   </section>
 
   <footer>
-    <strong>Gooncocks Recap</strong> is generated automatically from Yahoo Fantasy Sports data by an AWS Lambda function.
-    The peacock mark is a placeholder for the real Gooncocks logo, still being finalized.
+    <a class="footer-brand" href="#">GOONCOCKS<span>&#9819;</span></a>
+    <p>Recap computed automatically from Yahoo Fantasy Sports data by an AWS Lambda function.<br>Posted to Discord and hosted at stats.gooncocks.com.</p>
+    <span>BUILT FOR THE GROUP CHAT.</span>
   </footer>
-
-</div>
+</main>
 </body>
 </html>"""

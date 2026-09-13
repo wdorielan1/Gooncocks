@@ -98,14 +98,23 @@ def compute_awards(matchups: List[Matchup]) -> dict:
         upset_matchup, gap = max(upsets, key=lambda t: t[1])
         upset = {"winner": upset_matchup.winner, "loser": upset_matchup.loser, "gap": gap}
 
+    # Bad Beat only counts if the losing team strictly outscored more than
+    # half of the *other* teams in the league - otherwise no one had a real
+    # claim to bad luck, and the award is honestly skipped that week.
     bad_beat = None
     if len(matchups) >= 2:
         def outscored_count(name, score):
             return sum(1 for n, s in all_scores if n != name and s < score)
 
-        losers = [(m.loser, m.loser_score) for m in matchups]
-        bb_team, bb_score = max(losers, key=lambda t: outscored_count(t[0], t[1]))
-        bad_beat = {"team": bb_team, "score": bb_score, "count": outscored_count(bb_team, bb_score)}
+        other_team_count = len(all_scores) - 1
+        candidates = [
+            (m.loser, m.loser_score, outscored_count(m.loser, m.loser_score))
+            for m in matchups
+        ]
+        candidates = [c for c in candidates if c[2] > other_team_count / 2]
+        if candidates:
+            bb_team, bb_score, bb_count = max(candidates, key=lambda t: (t[2], t[1]))
+            bad_beat = {"team": bb_team, "score": bb_score, "count": bb_count}
 
     return {
         "goon": {"team": goon_team, "score": goon_score},
