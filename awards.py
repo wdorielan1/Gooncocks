@@ -61,6 +61,16 @@ class Matchup:
         return min(self.team_a_score, self.team_b_score)
 
 
+def rank_teams(matchups: List[Matchup]) -> list:
+    """Every team's score this week, sorted highest to lowest. Used for the
+    webpage's ranking bar chart."""
+    all_scores = []
+    for m in matchups:
+        all_scores.append({"name": m.team_a_name, "score": m.team_a_score})
+        all_scores.append({"name": m.team_b_name, "score": m.team_b_score})
+    return sorted(all_scores, key=lambda t: t["score"], reverse=True)
+
+
 def compute_awards(matchups: List[Matchup]) -> dict:
     """Returns a dict with one entry per award category. 'upset' and
     'bad_beat' are None when there isn't enough data to compute them."""
