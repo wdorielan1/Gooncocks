@@ -20,6 +20,13 @@ from awards import compute_awards, rank_teams
 
 LOGO_URL = "https://stats.gooncocks.com/gooncocks-logo.png"
 
+# Sad/losing peacock artwork that peeks in on the right side of the Cock
+# of the Week shame banner - same visual treatment as LOGO_URL's peacock
+# in the hero section, just a different (defeated-looking) image and
+# scaled down for the shame banner's compact size. Expected at the bucket
+# root alongside the logo.
+SHAME_ART_URL = "https://stats.gooncocks.com/cock-of-the-week.png"
+
 # Per-manager headshots, if uploaded. Convention: a manager named "Chet"
 # maps to photos/chet.jpg - lowercased, apostrophes dropped, everything
 # else non-alphanumeric collapsed to a dash. Keyed by manager (a person),
@@ -98,7 +105,8 @@ STYLE_BLOCK = """
   .prize small{color:var(--gold);font-size:10px}
   .hero-foot{position:absolute;bottom:0;left:0;right:0;border-top:1px solid #ffffff12;display:flex;justify-content:space-between;padding:12px 28px;font-size:10px;letter-spacing:2px;color:var(--muted)}
   .hero-foot span span{margin:0 12px;color:var(--gold)}
-  .shame{background:linear-gradient(90deg,#271b23,#141823);border:1px solid #523031;border-left:3px solid var(--red);padding:22px 24px;display:flex;gap:20px;align-items:center;margin:20px 0 38px;flex-wrap:wrap}
+  .shame{background:linear-gradient(90deg,#271b23,#141823);border:1px solid #523031;border-left:3px solid var(--red);padding:22px 24px;display:flex;gap:20px;align-items:center;margin:20px 0 38px;flex-wrap:wrap;position:relative;isolation:isolate;overflow:hidden}
+  .shame-art{position:absolute;right:-20px;top:-15px;width:130px;height:130px;object-fit:cover;z-index:-1;opacity:.3;mask-image:linear-gradient(90deg,transparent,black 45%);-webkit-mask-image:linear-gradient(90deg,transparent,black 45%)}
   .shame-icon{font-size:36px;color:var(--red);border:1px solid #72372f;width:54px;height:54px;display:grid;place-items:center;flex:none}
   .shame .eyebrow{color:#eb7b6d;font-size:11px;margin-bottom:7px}
   .shame h2{font-size:27px;text-transform:uppercase;line-height:1;margin:0 0 6px}
@@ -154,7 +162,7 @@ STYLE_BLOCK = """
   footer>span{font-size:10px;letter-spacing:1.5px;color:#627088}
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
   @media(max-width:1000px){.season{display:none}.award-grid{grid-template-columns:repeat(2,1fr)}.hero-art{right:-90px}.scoreboard{grid-template-columns:repeat(2,1fr)}.roadmap{grid-template-columns:1fr}}
-  @media(max-width:640px){.brand{font-size:26px}.brand img{width:40px;height:40px}nav{width:100%;gap:20px;font-size:12px}.hero{min-height:auto}.hero-art{width:340px;height:340px;right:-140px;top:10px;opacity:.5}h1{font-size:56px;margin:16px 0}.champion{font-size:26px;max-width:230px}.hero-score>span{font-size:44px}.prize{padding-left:16px}.award-grid{grid-template-columns:1fr;gap:10px}.chart-row{grid-template-columns:18px 110px 1fr 46px;gap:8px}.scoreboard{grid-template-columns:1fr}}
+  @media(max-width:640px){.brand{font-size:26px}.brand img{width:40px;height:40px}nav{width:100%;gap:20px;font-size:12px}.hero{min-height:auto}.hero-art{width:340px;height:340px;right:-140px;top:10px;opacity:.5}h1{font-size:56px;margin:16px 0}.champion{font-size:26px;max-width:230px}.hero-score>span{font-size:44px}.prize{padding-left:16px}.shame-art{width:90px;height:90px;right:-10px;top:-10px}.award-grid{grid-template-columns:1fr;gap:10px}.chart-row{grid-template-columns:18px 110px 1fr 46px;gap:8px}.scoreboard{grid-template-columns:1fr}}
 </style>
 """
 
@@ -291,6 +299,7 @@ def render_html(week, matchups, is_sample=True):
   </section>
 
   <section class="shame" aria-labelledby="shame-title">
+    <img class="shame-art" src="{SHAME_ART_URL}" alt="" aria-hidden="true">
     <div class="shame-icon" aria-hidden="true">&#8595;</div>
     {_headshot_img(c['team'], c.get('manager'), 'shame-headshot')}
     <div><p class="eyebrow" id="shame-title">COCK OF THE WEEK</p><h2>{_display_name(c['team'], c.get('manager'))}</h2><p>The group chat would like a word.</p></div>
