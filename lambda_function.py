@@ -178,7 +178,13 @@ def _action_recap(event):
 
 def _publish_page(week, matchups, is_sample, bonus_note=None):
     """Renders the webpage, uploads it to S3, and posts a Discord teaser
-    if DISCORD_WEBHOOK_URL is set. Returns the page's public URL."""
+    if DISCORD_WEBHOOK_URL is set. Returns the page's public URL.
+
+    recap.html always holds the latest week - that's what stats.gooncocks.com
+    shows by default, and it gets overwritten every publish. For a real
+    (non-demo) publish, this also saves a permanent snapshot at
+    weeks/week-<N>.html that never gets overwritten by a later week, so old
+    recaps stay linkable/shareable after a new one goes up."""
     bucket = _require_env("S3_BUCKET")
     html = render_html(week, matchups, is_sample=is_sample, bonus_note=bonus_note)
     s3 = boto3.client("s3")
@@ -188,24 +194,31 @@ def _publish_page(week, matchups, is_sample, bonus_note=None):
     page_url = f"{website_url.rstrip('/')}/recap.html" if website_url else f"s3://{bucket}/recap.html"
     print(f"Published to {page_url}")
 
+    archive_url = None
+    if not is_sample:
+        archive_key = f"weeks/week-{week}.html"
+        s3.put_object(Bucket=bucket, Key=archive_key, Body=html.encode("utf-8"), ContentType="text/html")
+        archive_url = f"{website_url.rstrip('/')}/{archive_key}" if website_url else f"s3://{bucket}/{archive_key}"
+        print(f"Archived permanent snapshot at {archive_url}")
+
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if webhook_url:
         teaser = build_teaser(week, compute_awards(matchups), page_url=page_url)
         post_message(webhook_url, teaser)
         print("Posted teaser to Discord.")
 
-    return page_url
+    return page_url, archive_url
 
 
 def _action_publish_demo():
-    page_url = _publish_page(1, SAMPLE_MATCHUPS, is_sample=True)
+    page_url, _archive_url = _publish_page(1, SAMPLE_MATCHUPS, is_sample=True)
     return {"page_url": page_url}
 
 
 def _action_publish(event):
     week, matchups = _fetch_real_matchups(event)
-    page_url = _publish_page(week, matchups, is_sample=False, bonus_note=event.get("bonus_note"))
-    return {"page_url": page_url}
+    page_url, archive_url = _publish_page(week, matchups, is_sample=False, bonus_note=event.get("bonus_note"))
+    return {"page_url": page_url, "archive_url": archive_url}
 
 
 def _action_publish_manual(event):
@@ -255,8 +268,8 @@ def _action_publish_manual(event):
         )
         for m in raw_matchups
     ]
-    page_url = _publish_page(week, matchups, is_sample=False, bonus_note=event.get("bonus_note"))
-    return {"page_url": page_url}
+    page_url, archive_url = _publish_page(week, matchups, is_sample=False, bonus_note=event.get("bonus_note"))
+    return {"page_url": page_url, "archive_url": archive_url}
 
 
 def lambda_handler(event, context):
