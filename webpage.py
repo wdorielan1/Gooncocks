@@ -95,6 +95,15 @@ STYLE_BLOCK = """
   .hero-headshot{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);flex:none}
   .shame-headshot{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--red);flex:none}
   .award-headshot{width:26px;height:26px;border-radius:50%;object-fit:cover;border:1px solid var(--line);flex:none}
+  .bonus-headshot{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--blue);flex:none}
+  .bonus{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--blue);padding:20px 24px;display:flex;gap:16px;align-items:center;margin:0 0 40px;flex-wrap:wrap}
+  .bonus-icon{width:44px;height:44px;border:1px solid #2b4a86;color:var(--blue);background:#122040;display:grid;place-items:center;font-size:20px;flex:none}
+  .bonus .eyebrow{color:#7aa8ff;font-size:11px;margin-bottom:6px}
+  .bonus h3{font-size:20px;margin:0 0 4px;line-height:1.1}
+  .bonus p{font-size:13px;color:var(--muted);margin:0}
+  .bonus-stat{margin-left:auto;text-align:right}
+  .bonus-stat>span{font-family:Teko,Impact,sans-serif;font-size:34px;line-height:1;color:var(--blue)}
+  .bonus-stat small{font-size:10px;color:var(--muted)}
   .hero-copy{font-size:14px;color:#a9b3c5;line-height:1.7;margin:9px 0 22px}
   .hero-bottom{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
   .hero-score{display:flex;align-items:baseline;gap:10px}
@@ -231,7 +240,33 @@ def _game_card_html(idx, m, is_sample):
       </article>"""
 
 
-def render_html(week, matchups, is_sample=True):
+def _bonus_note_html(note):
+    """Optional one-off commissioner callout - e.g. a bench-points fact
+    that isn't a computed award, just worth mentioning. `note` is a dict
+    with 'title', optional 'team'/'manager' (shows a headshot + name if
+    given), 'detail' (a sentence), and optional 'value'/'unit' (a stat
+    number). Returns '' when note is None, so this is always safe to call."""
+    if not note:
+        return ""
+    team = note.get("team")
+    manager = note.get("manager")
+    title = note.get("title", "COMMISSIONER'S NOTE")
+    detail = note.get("detail", "")
+    value = note.get("value")
+    unit = note.get("unit", "")
+    headshot = _headshot_img(team, manager, "bonus-headshot") if team else ""
+    label = _display_name(team, manager) if team else ""
+    stat_html = f'<div class="bonus-stat"><span>{value}</span><small>{unit}</small></div>' if value is not None else ""
+    return f"""
+  <section class="bonus" aria-label="Bonus note">
+    <span class="bonus-icon" aria-hidden="true">&#9733;</span>
+    {headshot}
+    <div><p class="eyebrow">{title}</p><h3>{label}</h3><p>{detail}</p></div>
+    {stat_html}
+  </section>"""
+
+
+def render_html(week, matchups, is_sample=True, bonus_note=None):
     awards = compute_awards(matchups)
     g, c, b, h = awards["goon"], awards["cock"], awards["blowout"], awards["heartbreaker"]
 
@@ -262,6 +297,7 @@ def render_html(week, matchups, is_sample=True):
     rank_rows = "".join(_rank_row_html(entry, idx, max_score) for idx, entry in enumerate(rankings))
     game_cards = "".join(_game_card_html(idx, m, is_sample) for idx, m in enumerate(matchups))
     roadmap_items = "".join(f"<li>{item}</li>" for item in ROADMAP_ITEMS)
+    bonus_html = _bonus_note_html(bonus_note)
 
     return f"""<!doctype html>
 <html lang="en">
@@ -313,7 +349,7 @@ def render_html(week, matchups, is_sample=True):
     {upset_card}
     {bad_beat_card}
   </section>
-
+{bonus_html}
   <section id="rankings" class="panel rankings">
     <div class="section-heading"><div><p class="eyebrow">THE PECKING ORDER</p><h2>EVERY POINT. EVERY TEAM.</h2></div><span>WEEK {week:02d} <span class="slash">/</span> TOTAL POINTS</span></div>
     <div role="img" aria-label="All teams ranked by their weekly scores">{rank_rows}</div>

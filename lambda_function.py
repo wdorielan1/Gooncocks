@@ -176,11 +176,11 @@ def _action_recap(event):
     return {"recap": recap_text}
 
 
-def _publish_page(week, matchups, is_sample):
+def _publish_page(week, matchups, is_sample, bonus_note=None):
     """Renders the webpage, uploads it to S3, and posts a Discord teaser
     if DISCORD_WEBHOOK_URL is set. Returns the page's public URL."""
     bucket = _require_env("S3_BUCKET")
-    html = render_html(week, matchups, is_sample=is_sample)
+    html = render_html(week, matchups, is_sample=is_sample, bonus_note=bonus_note)
     s3 = boto3.client("s3")
     s3.put_object(Bucket=bucket, Key="recap.html", Body=html.encode("utf-8"), ContentType="text/html")
 
@@ -204,7 +204,7 @@ def _action_publish_demo():
 
 def _action_publish(event):
     week, matchups = _fetch_real_matchups(event)
-    page_url = _publish_page(week, matchups, is_sample=False)
+    page_url = _publish_page(week, matchups, is_sample=False, bonus_note=event.get("bonus_note"))
     return {"page_url": page_url}
 
 
@@ -219,12 +219,23 @@ def _action_publish_manual(event):
              "proj_a": 158.72, "proj_b": 156.05,
              "manager_a": "Will", "manager_b": "Chet"},
             ...
-          ]
+          ],
+          "bonus_note": {
+            "title": "BENCHWARMER ALERT",
+            "team": "Hurts 2 Cook em", "manager": "Will",
+            "detail": "Jalen Coker went off on the bench.",
+            "value": "38.80", "unit": "BENCH POINTS"
+          }
         }
     proj_a/proj_b are optional - Upset of the Week is skipped without them.
     manager_a/manager_b are optional too - when set, the webpage displays
     and matches headshots by manager instead of by team name, so a
     mid-season team rename doesn't lose someone's photo or history.
+    bonus_note is optional too - a one-off commissioner callout that isn't
+    a computed award (e.g. a notable bench stat). Only "title" and "detail"
+    are required inside it; "team"/"manager" adds a headshot + name,
+    "value"/"unit" adds a highlighted stat number. Leave it out entirely
+    for a normal week with nothing extra to call out.
     """
     week = event.get("week", 1)
     raw_matchups = event.get("matchups")
@@ -244,7 +255,7 @@ def _action_publish_manual(event):
         )
         for m in raw_matchups
     ]
-    page_url = _publish_page(week, matchups, is_sample=False)
+    page_url = _publish_page(week, matchups, is_sample=False, bonus_note=event.get("bonus_note"))
     return {"page_url": page_url}
 
 
