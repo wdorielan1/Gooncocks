@@ -53,11 +53,12 @@ Drive it with the "Test" button in the Lambda console, using a test event
   the default if you omit "action":
     {"action": "publish"}
 """
+import json
 import os
 
 import boto3
 
-from awards import Matchup, generate_recap, compute_awards
+from awards import Matchup, generate_recap, compute_awards, power_rankings, week_records
 from discord_client import build_teaser, post_message
 from sample_data import SAMPLE_MATCHUPS
 from webpage import render_html
@@ -176,6 +177,25 @@ def _action_recap(event):
     return {"recap": recap_text}
 
 
+def _load_standings(s3, bucket):
+    """standings.json holds every week's win/loss + points records that
+    have ever been published for real (see week_records() in awards.py) -
+    {"weeks": {"1": [...], "2": [...], ...}}. Returns an empty skeleton if
+    the file doesn't exist yet (first real publish of the season)."""
+    try:
+        obj = s3.get_object(Bucket=bucket, Key="standings.json")
+        return json.loads(obj["Body"].read().decode("utf-8"))
+    except s3.exceptions.NoSuchKey:
+        return {"weeks": {}}
+
+
+def _save_standings(s3, bucket, standings):
+    s3.put_object(
+        Bucket=bucket, Key="standings.json",
+        Body=json.dumps(standings).encode("utf-8"), ContentType="application/json",
+    )
+
+
 def _publish_page(week, matchups, is_sample, bonus_note=None):
     """Renders the webpage, uploads it to S3, and posts a Discord teaser
     if DISCORD_WEBHOOK_URL is set. Returns the page's public URL.
@@ -184,10 +204,22 @@ def _publish_page(week, matchups, is_sample, bonus_note=None):
     shows by default, and it gets overwritten every publish. For a real
     (non-demo) publish, this also saves a permanent snapshot at
     weeks/week-<N>.html that never gets overwritten by a later week, so old
-    recaps stay linkable/shareable after a new one goes up."""
+    recaps stay linkable/shareable after a new one goes up. It also
+    updates standings.json with this week's win/loss + points (overwriting
+    just this week's entry, so re-publishing the same week to fix a
+    mistake never double-counts it) and feeds the resulting season-long
+    Power Rankings into the page."""
     bucket = _require_env("S3_BUCKET")
-    html = render_html(week, matchups, is_sample=is_sample, bonus_note=bonus_note)
     s3 = boto3.client("s3")
+
+    standings_ranked = None
+    if not is_sample:
+        standings = _load_standings(s3, bucket)
+        standings.setdefault("weeks", {})[str(week)] = week_records(matchups)
+        _save_standings(s3, bucket, standings)
+        standings_ranked = power_rankings(standings)
+
+    html = render_html(week, matchups, is_sample=is_sample, bonus_note=bonus_note, standings=standings_ranked)
     s3.put_object(Bucket=bucket, Key="recap.html", Body=html.encode("utf-8"), ContentType="text/html")
 
     website_url = os.environ.get("S3_WEBSITE_URL")

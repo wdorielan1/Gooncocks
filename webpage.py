@@ -16,7 +16,7 @@ _publish_page for the AWS side of that.
 """
 import re
 
-from awards import compute_awards, rank_teams
+from awards import compute_awards, identity, rank_teams
 
 LOGO_URL = "https://stats.gooncocks.com/gooncocks-logo.png"
 
@@ -51,7 +51,7 @@ def _display_name(team, manager):
 
 
 def _headshot_img(team, manager, css_class):
-    key = manager or team
+    key = identity(team, manager)
     if not key:
         return ""
     url = f"{PHOTO_BASE_URL}{_slugify(key)}.jpg"
@@ -150,6 +150,10 @@ STYLE_BLOCK = """
   .chart-score{font-family:Teko,sans-serif;font-size:22px;text-align:right;font-variant-numeric:tabular-nums}
   .chart-foot{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);padding-top:18px;flex-wrap:wrap;gap:8px}
   .chart-foot i{display:inline-block;background:var(--gold);width:8px;height:8px;margin-right:8px}
+  .standings-row{display:grid;grid-template-columns:25px 1fr 80px 100px;align-items:center;gap:14px;min-height:38px;border-bottom:1px solid #ffffff04}
+  .standings-row:first-child .standings-name,.standings-row:first-child .rank{color:var(--gold)}
+  .standings-record{font-family:Teko,sans-serif;font-size:20px;text-align:center}
+  .standings-points{font-family:Teko,sans-serif;font-size:20px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
   .scoreboard{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:40px}
   .game{background:var(--surface);border:1px solid var(--line);padding:18px}
   .game-header{font-size:10px;letter-spacing:1.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:14px}
@@ -186,7 +190,7 @@ _AWARD_COPY = {
 _CHART_COLORS = ["#e7a33b", "#528ae7", "#4b7ac9", "#426bb0", "#3e5e95", "#3b527b", "#3a4867", "#374059", "#343b4c", "#323744"]
 
 ROADMAP_ITEMS = [
-    "Fraud Alert", "Power Rankings", "Benchwarmer Disaster", "Start/Sit Disaster",
+    "Fraud Alert", "Benchwarmer Disaster", "Start/Sit Disaster",
     "Waiver-Wire Steal", "Trade Winner", "Injury Excuse",
 ]
 
@@ -266,7 +270,35 @@ def _bonus_note_html(note):
   </section>"""
 
 
-def render_html(week, matchups, is_sample=True, bonus_note=None):
+def _standings_row_html(entry, idx):
+    record = f"{entry['wins']}-{entry['losses']}"
+    return f"""
+      <div class="standings-row">
+        <span class="rank">{idx + 1:02d}</span>
+        <span class="team-label standings-name">{entry['id']}</span>
+        <span class="standings-record">{record}</span>
+        <span class="standings-points">{entry['points_for']:.2f} PF</span>
+      </div>"""
+
+
+def _standings_section_html(standings, week):
+    """Season-long Power Rankings, built from every week recorded so far
+    in S3's standings.json (see lambda_function.py's _publish_page).
+    `standings` is the already-computed power_rankings() list - pass None
+    (demo mode, or before any real week has ever been published) to omit
+    the section entirely rather than show an empty table."""
+    if not standings:
+        return ""
+    rows = "".join(_standings_row_html(entry, idx) for idx, entry in enumerate(standings))
+    return f"""
+  <section id="standings" class="panel">
+    <div class="section-heading"><div><p class="eyebrow">SEASON STANDINGS</p><h2>POWER RANKINGS</h2></div><span>THROUGH WEEK {week:02d}</span></div>
+    <div role="table" aria-label="Season standings ranked by wins, then total points">{rows}</div>
+    <div class="chart-foot"><span><i></i> Current leader</span><span>Wins, then total points scored, breaks ties</span></div>
+  </section>"""
+
+
+def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None):
     awards = compute_awards(matchups)
     g, c, b, h = awards["goon"], awards["cock"], awards["blowout"], awards["heartbreaker"]
 
@@ -298,6 +330,8 @@ def render_html(week, matchups, is_sample=True, bonus_note=None):
     game_cards = "".join(_game_card_html(idx, m, is_sample) for idx, m in enumerate(matchups))
     roadmap_items = "".join(f"<li>{item}</li>" for item in ROADMAP_ITEMS)
     bonus_html = _bonus_note_html(bonus_note)
+    standings_section = _standings_section_html(standings, week)
+    standings_nav = '<a href="#standings">Power rankings</a>' if standings else ""
 
     return f"""<!doctype html>
 <html lang="en">
@@ -312,7 +346,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None):
 <body>
 <header class="masthead">
   <a class="brand" href="#"><img src="{LOGO_URL}" alt="Gooncocks peacock logo"><span>GOONCOCKS<small>FANTASY FOOTBALL LEAGUE</small></span></a>
-  <nav aria-label="Recap sections"><a class="active" href="#awards">The recap</a><a href="#rankings">Weekly rankings</a><a href="#scoreboard">Scoreboard</a></nav>
+  <nav aria-label="Recap sections"><a class="active" href="#awards">The recap</a><a href="#rankings">Weekly rankings</a>{standings_nav}<a href="#scoreboard">Scoreboard</a></nav>
   <span class="season">2026 SEASON <span>/</span> WEEK {week:02d}</span>
 </header>
 <main>
@@ -355,7 +389,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None):
     <div role="img" aria-label="All teams ranked by their weekly scores">{rank_rows}</div>
     <div class="chart-foot"><span><i></i> Goon of the Week</span><span>Weekly scores, not season standings</span></div>
   </section>
-
+{standings_section}
   <section id="scoreboard">
     <div class="section-heading"><div><p class="eyebrow">HEAD TO HEAD</p><h2>THE FINAL WORD</h2></div><span>{len(matchups)} MATCHUPS</span></div>
     <div class="scoreboard">{game_cards}</div>

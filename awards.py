@@ -16,10 +16,16 @@ Award categories, and what they need:
     - Upset of the Week     - projected loser who won anyway
     - Bad Beat              - loser who outscored the most other teams
 
+  Season-long, computed from every week's matchups accumulated in S3's
+  standings.json (see week_records()/power_rankings() below, and
+  lambda_function.py's _publish_page for where that file gets read/written):
+    - Power Rankings        - ranked by wins, then total points scored
+
   Not implemented yet - need Yahoo endpoints this project doesn't call yet
-  (season standings, full rosters with bench points, transaction history):
-    - Fraud Alert           - needs season record + points-for (standings)
-    - Power Rankings        - needs standings + a blended scoring formula
+  (full rosters with bench points, transaction history):
+    - Fraud Alert           - needs season record + points-for (standings
+                              exist now via power_rankings(), just not
+                              wired into a "Fraud Alert" comparison yet)
     - Benchwarmer Disaster  - needs full roster + bench player points
     - Start/Sit Disaster    - needs full roster + bench player points
     - Waiver-Wire Steal     - needs transaction history + player stats
@@ -84,6 +90,52 @@ def rank_teams(matchups: List[Matchup]) -> list:
         all_scores.append({"name": m.team_a_name, "score": m.team_a_score, "manager": m.team_a_manager})
         all_scores.append({"name": m.team_b_name, "score": m.team_b_score, "manager": m.team_b_manager})
     return sorted(all_scores, key=lambda t: t["score"], reverse=True)
+
+
+def identity(team_name: str, manager: Optional[str] = None) -> str:
+    """Stable identity for a team across weeks/renames: the manager's name
+    if given, otherwise the team name. Used everywhere a person needs to
+    be tracked consistently through a mid-season team rename - photo
+    lookups (webpage.py) and season standings (below) both key off this,
+    so a rename never splits someone's history or orphans their photo."""
+    return manager or team_name
+
+
+def week_records(matchups: List[Matchup]) -> list:
+    """One record per team for a single week: identity, whether they won,
+    and points for/against. This is the per-week building block that gets
+    stored (one entry per week) in S3's standings.json - see
+    power_rankings() for turning several weeks of these into a ranked
+    table. An exact tie counts as a win for team_a, matching how
+    Matchup.winner/loser already resolve ties elsewhere in this file."""
+    records = []
+    for m in matchups:
+        a_id = identity(m.team_a_name, m.team_a_manager)
+        b_id = identity(m.team_b_name, m.team_b_manager)
+        a_won = m.team_a_score >= m.team_b_score
+        records.append({"id": a_id, "win": a_won, "points_for": m.team_a_score, "points_against": m.team_b_score})
+        records.append({"id": b_id, "win": not a_won, "points_for": m.team_b_score, "points_against": m.team_a_score})
+    return records
+
+
+def power_rankings(standings: dict) -> list:
+    """Turns {"weeks": {"1": [...week_records()...], "2": [...], ...}}
+    (S3's standings.json, loaded by lambda_function.py) into a season
+    standings table ranked by wins, then total points scored as the
+    tiebreaker. Each entry: {"id", "wins", "losses", "points_for",
+    "points_against"}. This is a straightforward win/loss ranking, not a
+    fancier blended power score (median score, all-play record, etc.) -
+    good enough for "who's actually winning," can be upgraded later."""
+    totals = {}
+    for records in standings.get("weeks", {}).values():
+        for rec in records:
+            t = totals.setdefault(rec["id"], {"wins": 0, "losses": 0, "points_for": 0.0, "points_against": 0.0})
+            t["wins"] += 1 if rec["win"] else 0
+            t["losses"] += 0 if rec["win"] else 1
+            t["points_for"] += rec["points_for"]
+            t["points_against"] += rec["points_against"]
+    ranked = sorted(totals.items(), key=lambda kv: (-kv[1]["wins"], -kv[1]["points_for"]))
+    return [{"id": k, **v} for k, v in ranked]
 
 
 def compute_awards(matchups: List[Matchup]) -> dict:
