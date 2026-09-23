@@ -150,8 +150,10 @@
     font-family:'Anton','Arial Narrow',sans-serif; font-size:15px; letter-spacing:1px; color:var(--fog);
     padding:0 22px; border-right:1px solid var(--hairline);
   }
-  .ticker-track > span.up{color:var(--gold)}
-  .ticker-track .rank, .ticker-track .rec{opacity:.6}
+  .ticker-track .name{color:var(--paper)}
+  .ticker-track .rank{color:var(--gold); margin-right:8px}
+  .ticker-track .rank sup{font-size:.6em; vertical-align:.45em; margin-left:1px}
+  .ticker-track .rec{margin-left:8px}
   @keyframes scroll{ from{transform:translateX(0)} to{transform:translateX(-50%)} }
 
   .sec-head{
@@ -450,6 +452,10 @@
     return e;
   }
   function pad(n){ return (n < 10 ? '0' : '') + n; }
+  function ordinal(n){
+    if (n % 100 >= 11 && n % 100 <= 13) return 'th';
+    return {1: 'st', 2: 'nd', 3: 'rd'}[n % 10] || 'th';
+  }
   function pts(n){ return Number(n).toFixed(2); }
 
   // Peacock crest everywhere it appears; falls back to the gold star if the image can't load.
@@ -517,9 +523,11 @@
     }
     for (var loop = 0; loop < 2; loop++){
       standings.forEach(function(t, i){
-        var s = el('span', t.wins > t.losses ? 'up' : '');
-        s.appendChild(el('span', 'rank', pad(i + 1) + ' '));
-        s.appendChild(document.createTextNode(t.name + ' '));
+        var s = el('span');
+        var rank = el('span', 'rank', String(i + 1));
+        rank.appendChild(el('sup', null, ordinal(i + 1)));
+        s.appendChild(rank);
+        s.appendChild(el('span', 'name', t.name));
         s.appendChild(el('span', 'rec', t.wins + '-' + t.losses));
         track.appendChild(s);
       });
