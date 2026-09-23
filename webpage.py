@@ -140,6 +140,13 @@ STYLE_BLOCK = """
   .award-stat strong{font-family:Teko,sans-serif;font-size:35px;font-weight:500;line-height:1}
   .award-stat span{font-size:10px;color:var(--muted);letter-spacing:.7px}
   .award-copy{font-size:12px;line-height:1.6;color:var(--muted);margin:12px 0 0}
+  .award-detail,.hero-detail,.shame-detail{list-style:none;padding:0;display:grid;gap:5px}
+  .award-detail{margin:2px 0 6px;font-size:12px;line-height:1.45;color:#c3cad8}
+  .award-detail li,.hero-detail li,.shame-detail li{position:relative;padding-left:13px}
+  .award-detail li:before,.hero-detail li:before,.shame-detail li:before{content:'';position:absolute;left:0;top:.62em;width:5px;height:5px;border-radius:50%;background:var(--gold)}
+  .hero-detail{margin:10px 0 22px;font-size:14px;line-height:1.5;color:#a9b3c5;max-width:46ch}
+  .shame-detail{margin:0;font-size:13px;line-height:1.45;color:var(--muted)}
+  .shame-detail li:before{background:#ed877b}
   .panel{padding:26px;background:#0f1929;border:1px solid var(--line);margin-bottom:40px}
   .rankings .section-heading{margin-bottom:22px}
   .chart-row{display:grid;grid-template-columns:25px 160px 1fr 65px;align-items:center;gap:14px;min-height:38px;border-bottom:1px solid #ffffff04}
@@ -191,7 +198,7 @@ _AWARD_COPY = {
 _CHART_COLORS = ["#e7a33b", "#528ae7", "#4b7ac9", "#426bb0", "#3e5e95", "#3b527b", "#3a4867", "#374059", "#343b4c", "#323744"]
 
 
-def _award_card(idx, title, team, manager, context, value, unit, key):
+def _award_card(idx, title, team, manager, context, value, unit, key, details=None):
     icon, copy = _AWARD_COPY[key]
     if team is None:
         return f"""
@@ -208,7 +215,7 @@ def _award_card(idx, title, team, manager, context, value, unit, key):
         <div class="award-top"><span class="award-icon">{icon}</span><span class="award-index">{idx:02d}</span></div>
         <h3>{title}</h3>
         <p class="award-team">{headshot}{_display_name(team, manager)}</p>
-        <div class="award-context">{context}</div>
+        <div class="award-context">{context}</div>{_detail_list(details)}
         <div class="award-stat"><strong>{value}</strong><span>{unit}</span></div>
         <p class="award-copy">{copy}</p>
       </article>"""
@@ -266,7 +273,17 @@ def _bonus_note_html(note):
   </section>"""
 
 
-def _extra_award_cards(extras):
+def _detail_list(lines, css_class="award-detail"):
+    """The short 'how it happened' lines under an award (see
+    awards.award_details). Names come from Yahoo team names, which league
+    members type themselves, so they're escaped."""
+    if not lines:
+        return ""
+    items = "".join(f"<li>{escape(line)}</li>" for line in lines)
+    return f'<ul class="{css_class}">{items}</ul>'
+
+
+def _extra_award_cards(extras, details=None):
     """Cards for the roster/standings-based awards (see
     awards.compute_extra_awards). Categories whose data wasn't available
     this run are left out entirely rather than shown as empty."""
@@ -277,7 +294,8 @@ def _extra_award_cards(extras):
         if award is None:
             cards.append(_award_card(idx, title, None, None, None, None, None, key))
         else:
-            cards.append(_award_card(idx, title, award["team"], award.get("manager"), context(award), value(award), unit, key))
+            cards.append(_award_card(idx, title, award["team"], award.get("manager"), context(award), value(award), unit, key,
+                                     (details or {}).get(key)))
 
     if "fraud" in extras:
         card("fraud", "FRAUD ALERT", extras["fraud"],
@@ -301,7 +319,7 @@ def _extra_award_cards(extras):
              lambda a: f"{a['margin']:.2f}", "POINT EDGE")
     if "injury" in extras:
         card("injury", "INJURY EXCUSE", extras["injury"],
-             lambda a: f"Lost with {', '.join(a['players'][:3])}{' and more' if len(a['players']) > 3 else ''} banged up",
+             lambda a: "Lost with a banged-up lineup",
              lambda a: f"{a['count']}", "INJURED STARTERS")
     return "".join(cards)
 
@@ -334,7 +352,8 @@ def _standings_section_html(standings, week):
   </section>"""
 
 
-def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None, extras=None):
+def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None, extras=None, details=None):
+    details = details or {}
     awards = compute_awards(matchups)
     g, c, b, h = awards["goon"], awards["cock"], awards["blowout"], awards["heartbreaker"]
 
@@ -342,7 +361,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
 
     if awards["upset"]:
         u = awards["upset"]
-        upset_card = _award_card(5, "UPSET OF THE WEEK", u["winner"], u.get("winner_manager"), f"Beat {u['loser']}", f"{u['gap']:.2f}", "PROJECTED DEFICIT", "upset")
+        upset_card = _award_card(5, "UPSET OF THE WEEK", u["winner"], u.get("winner_manager"), f"Beat {u['loser']}", f"{u['gap']:.2f}", "PROJECTED DEFICIT", "upset", details.get("upset"))
     else:
         upset_card = _award_card(5, "UPSET OF THE WEEK", None, None, None, None, None, "upset")
 
@@ -350,21 +369,21 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
         bb = awards["bad_beat"]
         bad_beat_card = _award_card(
             6, "BAD BEAT", bb["team"], bb.get("manager"), f"{bb['score']:.2f} points. Still took the L.",
-            f"{bb['count']}/{len(matchups) * 2 - 1}", "OTHERS OUTSCORED", "bad_beat",
+            f"{bb['count']}/{len(matchups) * 2 - 1}", "OTHERS OUTSCORED", "bad_beat", details.get("bad_beat"),
         )
     else:
         bad_beat_card = _award_card(6, "BAD BEAT", None, None, None, None, None, "bad_beat")
 
     blowout_matchup = next(m for m in matchups if m.winner == b["winner"] and m.loser == b["loser"])
     heartbreak_matchup = next(m for m in matchups if m.winner == h["winner"] and m.loser == h["loser"])
-    blowout_card = _award_card(3, "BIGGEST BLOWOUT", b["winner"], b.get("winner_manager"), f"Over {b['loser']}", f"{blowout_matchup.margin:.2f}", "POINT MARGIN", "blowout")
-    heartbreak_card = _award_card(4, "HEARTBREAKER", h["loser"], h.get("loser_manager"), f"Lost to {h['winner']}", f"{heartbreak_matchup.margin:.2f}", "POINTS SHORT", "heartbreaker")
+    blowout_card = _award_card(3, "BIGGEST BLOWOUT", b["winner"], b.get("winner_manager"), f"Over {b['loser']}", f"{blowout_matchup.margin:.2f}", "POINT MARGIN", "blowout", details.get("blowout"))
+    heartbreak_card = _award_card(4, "HEARTBREAKER", h["loser"], h.get("loser_manager"), f"Lost to {h['winner']}", f"{heartbreak_matchup.margin:.2f}", "POINTS SHORT", "heartbreaker", details.get("heartbreaker"))
 
     rankings = rank_teams(matchups)
     max_score = rankings[0]["score"] if rankings else 1
     rank_rows = "".join(_rank_row_html(entry, idx, max_score) for idx, entry in enumerate(rankings))
     game_cards = "".join(_game_card_html(idx, m, is_sample) for idx, m in enumerate(matchups))
-    extra_cards = _extra_award_cards(extras or {})
+    extra_cards = _extra_award_cards(extras or {}, details)
     # Caption shown under the peacock when the link is texted or posted.
     link_preview = escape(
         f"Goon of the Week: {_display_name(g['team'], g.get('manager'))} ({g['score']:.2f}). "
@@ -410,7 +429,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
       <div class="eyebrow"><span class="crown">&#9819;</span> THE CROWN HAS A NEW HOME</div>
       <h1 id="hero-title">GOON OF<br>THE <span>WEEK.</span></h1>
       <div class="champion">{_headshot_img(g['team'], g.get('manager'), 'hero-headshot')}{_display_name(g['team'], g.get('manager'))}</div>
-      <p class="hero-copy">Big points. Bigger bragging rights.<br>Everyone else, take notes.</p>
+      {_detail_list(details.get("goon"), "hero-detail") or '<p class="hero-copy">Big points. Bigger bragging rights.<br>Everyone else, take notes.</p>'}
       <div class="hero-bottom">
         <div class="hero-score"><span>{g['score']:.2f}</span><small>POINTS</small></div>
         <div class="prize"><span>$50</span><small>WEEKLY WINNER</small></div>
@@ -423,7 +442,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     <img class="shame-art" src="{SHAME_ART_URL}" alt="" aria-hidden="true">
     <div class="shame-icon" aria-hidden="true">&#8595;</div>
     {_headshot_img(c['team'], c.get('manager'), 'shame-headshot')}
-    <div><p class="eyebrow" id="shame-title">COCK OF THE WEEK</p><h2>{_display_name(c['team'], c.get('manager'))}</h2><p>The group chat would like a word.</p></div>
+    <div><p class="eyebrow" id="shame-title">COCK OF THE WEEK</p><h2>{_display_name(c['team'], c.get('manager'))}</h2>{_detail_list(details.get("cock"), "shame-detail") or "<p>The group chat would like a word.</p>"}</div>
     <div class="shame-score"><span>{c['score']:.2f}</span><small>POINTS &middot; LEAGUE LOW</small></div>
   </section>
 

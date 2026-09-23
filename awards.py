@@ -34,6 +34,7 @@ Award categories, and what they need:
     - Injury Excuse         - losing team with the most injured starters
 """
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 
@@ -146,10 +147,12 @@ def fraud_alert(standings: dict, matchups: List[Matchup]) -> Optional[dict]:
             continue
         for rec in records:
             beaten = sum(1 for other in records if other is not rec and other["points_for"] < rec["points_for"])
-            t = tally.setdefault(rec["id"], {"wins": 0, "games": 0, "expected": 0.0})
+            t = tally.setdefault(rec["id"], {"wins": 0, "games": 0, "expected": 0.0, "ap_w": 0, "ap_l": 0})
             t["wins"] += 1 if rec["win"] else 0
             t["games"] += 1
             t["expected"] += beaten / (len(records) - 1)
+            t["ap_w"] += beaten
+            t["ap_l"] += len(records) - 1 - beaten
     if not tally:
         return None
     fraud_id, t = max(tally.items(), key=lambda kv: kv[1]["wins"] - kv[1]["expected"])
@@ -164,6 +167,7 @@ def fraud_alert(standings: dict, matchups: List[Matchup]) -> Optional[dict]:
     return {
         "team": team, "manager": manager, "wins": t["wins"], "losses": t["games"] - t["wins"],
         "expected_wins": t["expected"], "luck": luck,
+        "all_play_wins": t["ap_w"], "all_play_losses": t["ap_l"],
     }
 
 
@@ -184,6 +188,26 @@ def _is_starter(player: dict) -> bool:
     return player.get("slot") not in (None, "BN", "IR")
 
 
+def _starters(roster: dict) -> list:
+    return [p for p in roster["players"] if _is_starter(p)]
+
+
+def _bench_points(roster: dict) -> float:
+    return sum(p["points"] for p in roster["players"] if p.get("slot") == "BN")
+
+
+def _best_swap(roster: dict):
+    """The (benched, starter, points gained) swap that would have added the
+    most points to this team's score, or None if no bench move helped."""
+    best = None
+    for b in (p for p in roster["players"] if p.get("slot") == "BN"):
+        for s in _starters(roster):
+            gain = b["points"] - s["points"]
+            if gain > 0 and _can_play(s["slot"], b.get("eligible") or []) and (best is None or gain > best[2]):
+                best = (b, s, gain)
+    return best
+
+
 def lineup_awards(rosters: list) -> dict:
     """Benchwarmer Disaster, Start/Sit Disaster and Injury Excuse from each
     team's roster. `rosters` is [{"team_key", "team", "manager", "won",
@@ -191,24 +215,23 @@ def lineup_awards(rosters: list) -> dict:
     "points"}]}] - slot is the lineup spot ("BN" for bench)."""
     bench_best = start_sit = injury = None
     for r in rosters:
-        bench = [p for p in r["players"] if p.get("slot") == "BN"]
-        starters = [p for p in r["players"] if _is_starter(p)]
-        for b in bench:
+        for b in (p for p in r["players"] if p.get("slot") == "BN"):
             if b["points"] > 0 and (bench_best is None or b["points"] > bench_best["points"]):
                 bench_best = {"team": r["team"], "manager": r["manager"], "player": b["name"], "points": b["points"]}
-            for s in starters:
-                cost = b["points"] - s["points"]
-                if cost > 0 and _can_play(s["slot"], b.get("eligible") or []) and (start_sit is None or cost > start_sit["cost"]):
-                    start_sit = {
-                        "team": r["team"], "manager": r["manager"], "benched": b["name"], "benched_points": b["points"],
-                        "started": s["name"], "started_points": s["points"], "cost": cost,
-                    }
+        swap = _best_swap(r)
+        if swap and (start_sit is None or swap[2] > start_sit["cost"]):
+            b, s, cost = swap
+            start_sit = {
+                "team": r["team"], "manager": r["manager"], "benched": b["name"], "benched_points": b["points"],
+                "started": s["name"], "started_points": s["points"], "cost": cost,
+            }
         if not r["won"]:
-            hurt = [s for s in starters if s.get("status") in _INJURY_STATUSES]
+            hurt = [s for s in _starters(r) if s.get("status") in _INJURY_STATUSES]
             if hurt:
                 candidate = {
                     "team": r["team"], "manager": r["manager"], "count": len(hurt),
                     "players": [p["name"] for p in hurt], "points": sum(p["points"] for p in hurt),
+                    "hurt": [{"name": p["name"], "status": p["status"], "points": p["points"]} for p in hurt],
                 }
                 if injury is None or (candidate["count"], -candidate["points"]) > (injury["count"], -injury["points"]):
                     injury = candidate
@@ -223,7 +246,7 @@ def waiver_steal(rosters: list, transactions: list) -> Optional[dict]:
     for tx in sorted(transactions, key=lambda t: t["timestamp"]):
         for p in tx["players"]:
             if p["type"] == "add" and p.get("destination_team_key"):
-                acquired[p["player_key"]] = (p["destination_team_key"], p.get("source_type"))
+                acquired[p["player_key"]] = (p["destination_team_key"], p.get("source_type"), tx["timestamp"], tx.get("faab_bid"))
     best = None
     for r in rosters:
         for p in r["players"]:
@@ -231,7 +254,10 @@ def waiver_steal(rosters: list, transactions: list) -> Optional[dict]:
             if _is_starter(p) and added and added[0] == r["team_key"] and p["points"] > 0:
                 if best is None or p["points"] > best["points"]:
                     source = "waivers" if added[1] == "waivers" else "free agency"
-                    best = {"team": r["team"], "manager": r["manager"], "player": p["name"], "points": p["points"], "source": source}
+                    best = {
+                        "team": r["team"], "manager": r["manager"], "player": p["name"], "points": p["points"],
+                        "source": source, "added_at": added[2], "faab": added[3],
+                    }
     return best
 
 
@@ -246,17 +272,20 @@ def trade_winner(rosters: list, transactions: list) -> Optional[dict]:
             continue
         received = {}
         for p in tx["players"]:
-            received.setdefault(p.get("destination_team_key"), []).append(points.get(p["player_key"], 0.0))
+            received.setdefault(p.get("destination_team_key"), []).append(
+                {"name": p.get("name"), "points": points.get(p["player_key"], 0.0)})
         sides = [k for k in received if k in teams]
         if len(sides) != 2:
             continue
         a, b = sides
-        a_pts, b_pts = sum(received[a]), sum(received[b])
+        a_pts, b_pts = sum(p["points"] for p in received[a]), sum(p["points"] for p in received[b])
         winner, loser, got, gave = (a, b, a_pts, b_pts) if a_pts >= b_pts else (b, a, b_pts, a_pts)
         if got - gave > 0 and (best is None or got - gave > best["margin"]):
             best = {
                 "team": teams[winner]["team"], "manager": teams[winner]["manager"],
                 "other_team": teams[loser]["team"], "received_points": got, "gave_points": gave, "margin": got - gave,
+                "received": sorted(received[winner], key=lambda p: -p["points"]),
+                "gave": sorted(received[loser], key=lambda p: -p["points"]),
             }
     return best
 
@@ -274,6 +303,182 @@ def compute_extra_awards(matchups: List[Matchup], standings: Optional[dict] = No
         extras["waiver"] = waiver_steal(rosters, transactions or [])
         extras["trade"] = trade_winner(rosters, transactions or [])
     return extras
+
+
+def _ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+_SLOT_LABELS = {"W/R/T": "FLEX", "W/R": "FLEX", "W/T": "FLEX", "R/T": "FLEX", "Q/W/R/T": "SUPERFLEX"}
+
+
+def _pts(player: dict) -> str:
+    return f"{player['name']} ({player['points']:.1f})"
+
+
+def _player_list(players: list, limit: int = 2) -> str:
+    shown = " and ".join(_pts(p) for p in players[:limit])
+    extra = len(players) - limit
+    return shown + (f" +{extra} more" if extra > 0 else "")
+
+
+def _day(timestamp: int) -> str:
+    # Yahoo timestamps are UTC; shift to US Eastern (standard time) so a
+    # late-night pickup doesn't show as the next day.
+    d = datetime.fromtimestamp(timestamp, tz=timezone(timedelta(hours=-5)))
+    return f"{d:%b} {d.day}"
+
+
+def award_details(matchups: List[Matchup], awards: dict, extras: Optional[dict] = None,
+                  rosters: Optional[list] = None, standings: Optional[dict] = None) -> dict:
+    """Up to two short lines per award explaining how it was won, keyed like
+    compute_awards()/compute_extra_awards(). Lines that need data this run
+    doesn't have (rosters, standings, projections) are simply left out."""
+    extras = extras or {}
+    by_team = {r["team"]: r for r in (rosters or [])}
+    scores = [(m.team_a_name, m.team_a_score) for m in matchups] + [(m.team_b_name, m.team_b_score) for m in matchups]
+    avg = sum(s for _, s in scores) / len(scores)
+    details = {}
+
+    def add(key, *lines):
+        lines = [line for line in lines if line]
+        if lines:
+            details[key] = lines[:2]
+
+    def game(team):
+        return next((m for m in matchups if team in (m.team_a_name, m.team_b_name)), None)
+
+    def opponent(team):
+        m = game(team)
+        return (m.team_b_name, m.team_b_score) if m.team_a_name == team else (m.team_a_name, m.team_a_score)
+
+    def margin(team):
+        m = game(team)
+        return m.margin if m else 0.0
+
+    def top(team, n):
+        r = by_team.get(team)
+        return sorted(_starters(r), key=lambda p: -p["points"])[:n] if r else []
+
+    def result_line(team, gain):
+        """What a gain of `gain` points would have meant for this team's result."""
+        mg = margin(team)
+        if by_team[team]["won"]:
+            return f"Won anyway, by {mg:.2f}"
+        if gain > mg:
+            return "That one move would've won the matchup"
+        return f"Would've cut a {mg:.2f}-point loss to {mg - gain:.2f}"
+
+    g = awards["goon"]
+    carried = top(g["team"], 2)
+    add("goon",
+        "Carried by " + " and ".join(_pts(p) for p in carried) if carried else None,
+        f"+{g['score'] - avg:.1f} over the league average ({avg:.1f})")
+
+    c = awards["cock"]
+    r = by_team.get(c["team"])
+    worst = sorted(_starters(r), key=lambda p: p["points"])[:2] if r else []
+    bench = _bench_points(r) if r else 0.0
+    add("cock",
+        "Dragged down by " + " and ".join(_pts(p) for p in worst) if worst else None,
+        f"Left {bench:.1f} points on the bench" if bench > 0 else f"{avg - c['score']:.1f} under the league average ({avg:.1f})")
+
+    b = awards["blowout"]
+    w_score = next(s for t, s in scores if t == b["winner"])
+    beaten = sum(1 for t, s in scores if t != b["winner"] and s < w_score)
+    others = len(scores) - 1
+    star, loser_roster = top(b["winner"], 1), by_team.get(b["loser"])
+    star_line = None
+    if star and loser_roster:
+        outscored = sum(1 for p in _starters(loser_roster) if p["points"] < star[0]["points"])
+        star_line = (f"{_pts(star[0])} alone outscored {outscored} of {b['loser']}'s starters"
+                     if outscored >= 3 else f"Led by {_pts(star[0])}")
+    add("blowout",
+        "Would've beaten every team in the league this week" if beaten == others
+        else f"Would've beaten {beaten} of {others} teams this week",
+        star_line)
+
+    h = awards["heartbreaker"]
+    swap = _best_swap(by_team[h["loser"]]) if h["loser"] in by_team else None
+    swap_line = None
+    if swap:
+        benched, started, gain = swap
+        swap_line = (f"Starting {_pts(benched)} over {_pts(started)} would've won it" if gain > h["margin"]
+                     else f"Best bench move ({benched['name']} for {started['name']}) only closed {gain:.1f} of it")
+    add("heartbreaker", swap_line,
+        "Lost by less than a field goal" if h["margin"] < 3
+        else "Lost by less than a touchdown" if h["margin"] < 6 else None)
+
+    u = awards.get("upset")
+    if u:
+        m = next(m for m in matchups if {m.team_a_name, m.team_b_name} == {u["winner"], u["loser"]})
+        side = {m.team_a_name: (m.team_a_projected, m.team_a_score), m.team_b_name: (m.team_b_projected, m.team_b_score)}
+        (wp, ws), (lp, ls) = side[u["winner"]], side[u["loser"]]
+        add("upset", f"Projected {wp:.1f}, scored {ws:.2f}", f"{u['loser']} was projected {lp:.1f} and scored {ls:.2f}")
+
+    bb = awards.get("bad_beat")
+    if bb:
+        opp, opp_score = opponent(bb["team"])
+        opp_star = top(opp, 1)
+        add("bad_beat",
+            f"Ran into {opp}'s {opp_score:.2f}" + (", the top score of the week" if opp == g["team"] else ""),
+            f"{_pts(opp_star[0])} did the damage" if opp_star else None)
+
+    f = extras.get("fraud")
+    if f and standings:
+        by_points = sorted(power_rankings(standings), key=lambda e: -e["points_for"])
+        me = identity(f["team"], f.get("manager"))
+        rank = next((i + 1 for i, e in enumerate(by_points) if e["id"] == me), None)
+        add("fraud",
+            f"{f['wins']}-{f['losses']}, but {_ordinal(rank)} in points scored" if rank else None,
+            f"Against the whole league: {f['all_play_wins']}-{f['all_play_losses']}" if "all_play_wins" in f else None)
+
+    bw = extras.get("benchwarmer")
+    r = by_team.get(bw["team"]) if bw else None
+    if bw and r:
+        player = next((p for p in r["players"] if p.get("slot") == "BN" and p["name"] == bw["player"]), None)
+        fits = [s for s in _starters(r) if player and _can_play(s["slot"], player.get("eligible") or [])]
+        if fits:
+            s = min(fits, key=lambda p: p["points"])
+            gain = player["points"] - s["points"]
+            if gain > 0:
+                starters = _starters(r)
+                outscored = sum(1 for p in starters if p["points"] < player["points"])
+                add("benchwarmer", f"Started {_pts(s)} at {_SLOT_LABELS.get(s['slot'], s['slot'])} instead",
+                    f"Outscored {outscored} of their {len(starters)} starters")
+            else:
+                add("benchwarmer", "The right call: every starter at his spot scored more")
+
+    ss = extras.get("start_sit")
+    if ss and ss["team"] in by_team:
+        add("start_sit", result_line(ss["team"], ss["cost"]),
+            f"{_bench_points(by_team[ss['team']]):.1f} total points left on the bench")
+
+    wv = extras.get("waiver")
+    if wv:
+        added = None
+        if wv.get("added_at"):
+            added = f"Added {_day(wv['added_at'])}" + (f" for ${wv['faab']} FAAB" if wv.get("faab") not in (None, "", "0", 0) else "")
+        rank_line = None
+        if wv["team"] in by_team:
+            ranked = sorted(_starters(by_team[wv["team"]]), key=lambda p: -p["points"])
+            rank = next((i + 1 for i, p in enumerate(ranked) if p["name"] == wv["player"]), None)
+            if rank:
+                rank_line = "Top scorer on the team this week" if rank == 1 else f"{_ordinal(rank)}-highest scorer on the team this week"
+        add("waiver", added, rank_line)
+
+    t = extras.get("trade")
+    if t and t.get("received"):
+        add("trade", "Got " + _player_list(t["received"]), "Gave up " + _player_list(t["gave"]) if t.get("gave") else None)
+
+    i = extras.get("injury")
+    if i and i.get("hurt"):
+        hurt = [f"{p['name']} ({p['status']}, {p['points']:.1f})" for p in i["hurt"]]
+        more = len(hurt) - 2
+        add("injury", " and ".join(hurt[:2]) + (f" +{more} more" if more > 0 else ""), f"Lost by {margin(i['team']):.2f}")
+
+    return details
 
 
 def compute_awards(matchups: List[Matchup]) -> dict:

@@ -70,7 +70,9 @@ import traceback
 
 import boto3
 
-from awards import Matchup, generate_recap, compute_awards, compute_extra_awards, identity, power_rankings, week_records
+from awards import (
+    Matchup, award_details, compute_awards, compute_extra_awards, generate_recap, identity, power_rankings, week_records,
+)
 from discord_client import build_teaser, post_message
 from sample_data import SAMPLE_MATCHUPS
 from webpage import render_html
@@ -458,8 +460,18 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
         latest = max(int(k) for k in standings["weeks"] if str(k).isdigit())
         is_latest = int(week) >= latest
 
+    try:
+        details = award_details(
+            matchups, compute_awards(matchups), extras, rosters=rosters, standings=None if is_sample else standings,
+        )
+    except Exception:
+        traceback.print_exc()
+        print("Skipped the award detail lines this run - see the error above.")
+        details = {}
+
     html = render_html(
         week, matchups, is_sample=is_sample, bonus_note=bonus_note, standings=standings_ranked, extras=extras,
+        details=details,
     )
     website_url = os.environ.get("S3_WEBSITE_URL")
     page_url = f"{website_url.rstrip('/')}/recap.html" if website_url else f"s3://{bucket}/recap.html"

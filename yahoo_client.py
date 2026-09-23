@@ -291,7 +291,10 @@ def get_transactions(access_token, league_key):
                     "destination_team_key": move.get("destination_team_key"),
                 }
             )
-        results.append({"type": meta.get("type"), "timestamp": int(meta.get("timestamp") or 0), "players": players})
+        results.append({
+            "type": meta.get("type"), "timestamp": int(meta.get("timestamp") or 0),
+            "faab_bid": meta.get("faab_bid"), "players": players,
+        })
     return results
 
 
