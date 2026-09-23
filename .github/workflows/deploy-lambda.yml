@@ -1,0 +1,50 @@
+name: Deploy Lambda
+
+on:
+  push:
+    branches: [claude/yahoo-fantasy-recap-setup-nimcop]
+    paths:
+      - "*.py"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-lambda
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-2
+  FUNCTION_NAME: gooncockfantasy
+  LAMBDA_FILES: lambda_function.py awards.py webpage.py yahoo_client.py discord_client.py sample_data.py
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Check the code before deploying
+        run: |
+          pip install --quiet boto3
+          python -m py_compile $LAMBDA_FILES
+          python -c "import lambda_function"
+          python test_awards.py
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload the code to Lambda
+        run: |
+          zip -j lambda.zip $LAMBDA_FILES
+          aws lambda update-function-code --function-name "$FUNCTION_NAME" --zip-file fileb://lambda.zip > /dev/null
+          aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+          echo "Deployed $(date -u) from commit $GITHUB_SHA"
