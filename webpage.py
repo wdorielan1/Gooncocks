@@ -6,7 +6,7 @@ so the text recap and the webpage never disagree.
 Visual design ported from the "Gooncocks Recap" static mockup Will had
 generated separately (peacock mascot art, masthead nav, hero with the
 masked logo image, shame banner, award cards, animated ranking chart,
-scoreboard grid, roadmap). The mascot image is expected to live in the
+scoreboard grid). The mascot image is expected to live in the
 same S3 bucket as this page - see LOGO_URL below.
 
 render_html(week, matchups) returns a complete, self-contained HTML page
@@ -162,20 +162,15 @@ STYLE_BLOCK = """
   .game-row.winner{color:var(--text)}
   .game-row.winner strong{color:var(--gold)}
   .game-foot{font-size:10px;border-top:1px solid var(--line);padding-top:12px;margin-top:14px;color:var(--muted)}
-  .roadmap{display:grid;grid-template-columns:1fr 2fr;gap:36px;padding:28px 0 34px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-  .roadmap h2{font-size:32px;margin-bottom:7px;line-height:1}
-  .roadmap p:last-child{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:0}
-  .roadmap ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:10px;align-content:center}
-  .roadmap li{padding:11px 14px;border:1px solid var(--line);font-size:12px;color:var(--muted)}
-  .roadmap li:before{content:'+';margin-right:9px;color:#59657a}
-  footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:28px 0 34px;flex-wrap:wrap}
+  .award-grid.six{grid-template-columns:repeat(3,1fr)}
+  footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:28px 0 34px;flex-wrap:wrap;border-top:1px solid var(--line)}
   .footer-brand{font-family:Teko,sans-serif;font-size:24px;font-weight:600;letter-spacing:1px}
   .footer-brand span{color:var(--gold);margin-left:10px}
   footer p{font-size:11px;color:var(--muted);line-height:1.8;margin:0}
   footer>span{font-size:10px;letter-spacing:1.5px;color:#627088}
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-  @media(max-width:1000px){.season{display:none}.award-grid{grid-template-columns:repeat(2,1fr)}.hero-art{right:-90px}.scoreboard{grid-template-columns:repeat(2,1fr)}.roadmap{grid-template-columns:1fr}}
-  @media(max-width:640px){.brand{font-size:26px}.brand img{width:40px;height:40px}nav{width:100%;gap:20px;font-size:12px}.hero{min-height:auto}.hero-art{width:340px;height:340px;right:-140px;top:10px;opacity:.5}h1{font-size:56px;margin:16px 0}.champion{font-size:26px;max-width:230px}.hero-score>span{font-size:44px}.prize{padding-left:16px}.shame-art{width:130px;height:130px;right:-15px;top:-15px}.award-grid{grid-template-columns:1fr;gap:10px}.chart-row{grid-template-columns:18px 110px 1fr 46px;gap:8px}.scoreboard{grid-template-columns:1fr}}
+  @media(max-width:1000px){.season{display:none}.award-grid,.award-grid.six{grid-template-columns:repeat(2,1fr)}.hero-art{right:-90px}.scoreboard{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:640px){.brand{font-size:26px}.brand img{width:40px;height:40px}nav{width:100%;gap:20px;font-size:12px}.hero{min-height:auto}.hero-art{width:340px;height:340px;right:-140px;top:10px;opacity:.5}h1{font-size:56px;margin:16px 0}.champion{font-size:26px;max-width:230px}.hero-score>span{font-size:44px}.prize{padding-left:16px}.shame-art{width:130px;height:130px;right:-15px;top:-15px}.award-grid,.award-grid.six{grid-template-columns:1fr;gap:10px}.chart-row{grid-template-columns:18px 110px 1fr 46px;gap:8px}.scoreboard{grid-template-columns:1fr}}
 </style>
 """
 
@@ -186,13 +181,14 @@ _AWARD_COPY = {
     "heartbreaker": ("♡", "One more catch. A whole different group chat."),
     "upset": ("ϟ", "The projections have been asked to leave."),
     "bad_beat": ("◎", "Right score. Wrong opponent. Brutal."),
+    "fraud": ("⚠", "The record says contender. The points say otherwise."),
+    "benchwarmer": ("⌛", "Best seat in the house. Wrong side of the sideline."),
+    "start_sit": ("⇄", "One lineup click away from a different week."),
+    "waiver": ("⤴", "One man's trash. Another man's starting lineup."),
+    "trade": ("⇌", "Somebody got fleeced. The receipts are right here."),
+    "injury": ("✚", "Down bad, and the trainer's room is full."),
 }
 _CHART_COLORS = ["#e7a33b", "#528ae7", "#4b7ac9", "#426bb0", "#3e5e95", "#3b527b", "#3a4867", "#374059", "#343b4c", "#323744"]
-
-ROADMAP_ITEMS = [
-    "Fraud Alert", "Benchwarmer Disaster", "Start/Sit Disaster",
-    "Waiver-Wire Steal", "Trade Winner", "Injury Excuse",
-]
 
 
 def _award_card(idx, title, team, manager, context, value, unit, key):
@@ -200,7 +196,7 @@ def _award_card(idx, title, team, manager, context, value, unit, key):
     if team is None:
         return f"""
       <article class="award">
-        <div class="award-top"><span class="award-icon">{icon}</span><span class="award-index">0{idx}</span></div>
+        <div class="award-top"><span class="award-icon">{icon}</span><span class="award-index">{idx:02d}</span></div>
         <h3>{title}</h3>
         <p class="award-team">No qualifying team</p>
         <div class="award-context">No award for this week.</div>
@@ -209,7 +205,7 @@ def _award_card(idx, title, team, manager, context, value, unit, key):
     headshot = _headshot_img(team, manager, "award-headshot")
     return f"""
       <article class="award">
-        <div class="award-top"><span class="award-icon">{icon}</span><span class="award-index">0{idx}</span></div>
+        <div class="award-top"><span class="award-icon">{icon}</span><span class="award-index">{idx:02d}</span></div>
         <h3>{title}</h3>
         <p class="award-team">{headshot}{_display_name(team, manager)}</p>
         <div class="award-context">{context}</div>
@@ -270,6 +266,46 @@ def _bonus_note_html(note):
   </section>"""
 
 
+def _extra_award_cards(extras):
+    """Cards for the roster/standings-based awards (see
+    awards.compute_extra_awards). Categories whose data wasn't available
+    this run are left out entirely rather than shown as empty."""
+    cards = []
+
+    def card(key, title, award, context, value, unit):
+        idx = 7 + len(cards)
+        if award is None:
+            cards.append(_award_card(idx, title, None, None, None, None, None, key))
+        else:
+            cards.append(_award_card(idx, title, award["team"], award.get("manager"), context(award), value(award), unit, key))
+
+    if "fraud" in extras:
+        card("fraud", "FRAUD ALERT", extras["fraud"],
+             lambda a: f"{a['wins']}-{a['losses']}, but scored like a {a['expected_wins']:.1f}-win team",
+             lambda a: f"+{a['luck']:.1f}", "WINS OVER EXPECTED")
+    if "benchwarmer" in extras:
+        card("benchwarmer", "BENCHWARMER DISASTER", extras["benchwarmer"],
+             lambda a: f"{a['player']} went off on the bench",
+             lambda a: f"{a['points']:.2f}", "BENCH POINTS")
+    if "start_sit" in extras:
+        card("start_sit", "START/SIT DISASTER", extras["start_sit"],
+             lambda a: f"Benched {a['benched']} ({a['benched_points']:.2f}) for {a['started']} ({a['started_points']:.2f})",
+             lambda a: f"{a['cost']:.2f}", "POINTS LOST")
+    if "waiver" in extras:
+        card("waiver", "WAIVER-WIRE STEAL", extras["waiver"],
+             lambda a: f"{a['player']}, picked up off {a['source']}",
+             lambda a: f"{a['points']:.2f}", "POINTS")
+    if "trade" in extras:
+        card("trade", "TRADE WINNER", extras["trade"],
+             lambda a: f"Won the trade with {a['other_team']}: {a['received_points']:.2f} to {a['gave_points']:.2f} this week",
+             lambda a: f"{a['margin']:.2f}", "POINT EDGE")
+    if "injury" in extras:
+        card("injury", "INJURY EXCUSE", extras["injury"],
+             lambda a: f"Lost with {', '.join(a['players'][:3])}{' and more' if len(a['players']) > 3 else ''} banged up",
+             lambda a: f"{a['count']}", "INJURED STARTERS")
+    return "".join(cards)
+
+
 def _standings_row_html(entry, idx):
     record = f"{entry['wins']}-{entry['losses']}"
     return f"""
@@ -298,7 +334,7 @@ def _standings_section_html(standings, week):
   </section>"""
 
 
-def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None):
+def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None, extras=None):
     awards = compute_awards(matchups)
     g, c, b, h = awards["goon"], awards["cock"], awards["blowout"], awards["heartbreaker"]
 
@@ -328,7 +364,11 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None)
     max_score = rankings[0]["score"] if rankings else 1
     rank_rows = "".join(_rank_row_html(entry, idx, max_score) for idx, entry in enumerate(rankings))
     game_cards = "".join(_game_card_html(idx, m, is_sample) for idx, m in enumerate(matchups))
-    roadmap_items = "".join(f"<li>{item}</li>" for item in ROADMAP_ITEMS)
+    extra_cards = _extra_award_cards(extras or {})
+    extra_section = f"""
+  <div class="section-heading"><h2>MORE RECEIPTS</h2><span>BENCHES, TRADES AND EXCUSES.</span></div>
+  <section class="award-grid six" aria-label="More weekly awards">{extra_cards}
+  </section>""" if extra_cards else ""
     bonus_html = _bonus_note_html(bonus_note)
     standings_section = _standings_section_html(standings, week)
     standings_nav = '<a href="#standings">Power rankings</a>' if standings else ""
@@ -383,6 +423,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None)
     {upset_card}
     {bad_beat_card}
   </section>
+{extra_section}
 {bonus_html}
   <section id="rankings" class="panel rankings">
     <div class="section-heading"><div><p class="eyebrow">THE PECKING ORDER</p><h2>EVERY POINT. EVERY TEAM.</h2></div><span>WEEK {week:02d} <span class="slash">/</span> TOTAL POINTS</span></div>
@@ -393,11 +434,6 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None)
   <section id="scoreboard">
     <div class="section-heading"><div><p class="eyebrow">HEAD TO HEAD</p><h2>THE FINAL WORD</h2></div><span>{len(matchups)} MATCHUPS</span></div>
     <div class="scoreboard">{game_cards}</div>
-  </section>
-
-  <section class="roadmap">
-    <div><p class="eyebrow">COMING SOON</p><h2>ON THE BOARD.</h2><p>More receipts are on the way.<br>These categories aren't live yet.</p></div>
-    <ul>{roadmap_items}</ul>
   </section>
 
   <footer>

@@ -150,6 +150,111 @@ def get_scoreboard(access_token, league_key, week=None):
     return _request(url, headers={"Authorization": f"Bearer {access_token}"})
 
 
+def scoreboard_week(scoreboard_json):
+    """The week number a scoreboard covers - needed when no week was asked
+    for, so "current" resolves to a real number for archives/standings."""
+    league = scoreboard_json["fantasy_content"]["league"]
+    week = league[1]["scoreboard"].get("week") or league[0].get("current_week")
+    return int(week) if week is not None else None
+
+
+def _player_record(player):
+    """Merge a Yahoo player ([[meta dicts...], {sub-resource}, ...]) into one dict."""
+    if not isinstance(player, list) or not player:
+        return {}
+    merged = _merge_record(player[0]) if isinstance(player[0], list) else {}
+    for el in player[1:]:
+        if isinstance(el, dict):
+            merged.update(el)
+    return merged
+
+
+def _sub_resource(collection_owner, key):
+    """Find e.g. "roster"/"players"/"transactions" among the dicts that
+    follow a team or league record's metadata."""
+    for el in collection_owner[1:]:
+        if isinstance(el, dict) and key in el:
+            return el[key]
+    return {}
+
+
+def get_team_roster(access_token, team_key, week):
+    """[{'player_key', 'name', 'slot', 'eligible', 'status'}] for a team's
+    lineup that week. slot is the lineup spot ("BN" = bench, "IR")."""
+    url = f"{FANTASY_BASE}/team/{team_key}/roster;week={week}?format=json"
+    data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+    roster = _sub_resource(data["fantasy_content"]["team"], "roster")
+    players = []
+    for entry in _yahoo_collection((roster.get("0") or {}).get("players")):
+        p = _player_record(entry.get("player") if isinstance(entry, dict) else None)
+        selected = p.get("selected_position") or []
+        selected = _merge_record(selected) if isinstance(selected, list) else selected
+        eligible = p.get("eligible_positions") or []
+        if isinstance(eligible, dict):
+            eligible = [eligible]
+        players.append(
+            {
+                "player_key": p.get("player_key"),
+                "name": (p.get("name") or {}).get("full"),
+                "slot": selected.get("position"),
+                "eligible": [e.get("position") for e in eligible if isinstance(e, dict)],
+                "status": p.get("status") or "",
+            }
+        )
+    return players
+
+
+def get_player_points(access_token, league_key, player_keys, week):
+    """{player_key: fantasy points that week}, fetched 25 at a time (Yahoo's
+    per-request cap on player collections)."""
+    points = {}
+    for i in range(0, len(player_keys), 25):
+        batch = ",".join(player_keys[i:i + 25])
+        url = f"{FANTASY_BASE}/league/{league_key}/players;player_keys={batch}/stats;type=week;week={week}?format=json"
+        data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+        for entry in _yahoo_collection(_sub_resource(data["fantasy_content"]["league"], "players")):
+            p = _player_record(entry.get("player") if isinstance(entry, dict) else None)
+            total = (p.get("player_points") or {}).get("total")
+            if p.get("player_key") and total is not None:
+                points[p["player_key"]] = float(total)
+    return points
+
+
+def get_transactions(access_token, league_key):
+    """This season's completed transactions: [{'type', 'timestamp',
+    'players': [{'player_key', 'name', 'type', 'source_type',
+    'destination_team_key'}]}]. type is e.g. "add", "drop", "add/drop",
+    "trade"; each player's own type says what happened to that player."""
+    url = f"{FANTASY_BASE}/league/{league_key}/transactions?format=json"
+    data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+    results = []
+    for entry in _yahoo_collection(_sub_resource(data["fantasy_content"]["league"], "transactions")):
+        tx = entry.get("transaction") if isinstance(entry, dict) else None
+        if not tx:
+            continue
+        meta = tx[0] if isinstance(tx[0], dict) else _merge_record(tx[0])
+        if meta.get("status", "successful") != "successful":
+            continue
+        players = []
+        players_container = tx[1].get("players") if len(tx) > 1 and isinstance(tx[1], dict) else None
+        for p_entry in _yahoo_collection(players_container):
+            p = _player_record(p_entry.get("player") if isinstance(p_entry, dict) else None)
+            move = p.get("transaction_data") or {}
+            if isinstance(move, list):
+                move = move[0] if move else {}
+            players.append(
+                {
+                    "player_key": p.get("player_key"),
+                    "name": (p.get("name") or {}).get("full"),
+                    "type": move.get("type"),
+                    "source_type": move.get("source_type"),
+                    "destination_team_key": move.get("destination_team_key"),
+                }
+            )
+        results.append({"type": meta.get("type"), "timestamp": int(meta.get("timestamp") or 0), "players": players})
+    return results
+
+
 def _extract_manager(team_meta):
     """Pull (nickname, guid) for the team's manager out of a merged team
     record's "managers" list (Yahoo nests it as [{"manager": {"nickname":
@@ -188,6 +293,7 @@ def parse_matchups(scoreboard_json):
             teams.append(
                 {
                     "name": meta.get("name"),
+                    "team_key": meta.get("team_key"),
                     "manager": nickname,
                     "manager_guid": guid,
                     "score": float(points) if points is not None else None,

@@ -59,32 +59,50 @@ Drive it with the "Test" button in the Lambda console, using a test event
 """
 import json
 import os
+import re
+import traceback
 
 import boto3
 
-from awards import Matchup, generate_recap, compute_awards, power_rankings, week_records
+from awards import Matchup, generate_recap, compute_awards, compute_extra_awards, power_rankings, week_records
 from discord_client import build_teaser, post_message
 from sample_data import SAMPLE_MATCHUPS
 from webpage import render_html
 from yahoo_client import (
     build_authorize_url,
     exchange_code_for_tokens,
+    get_player_points,
     get_scoreboard,
+    get_team_roster,
+    get_transactions,
     get_user_leagues,
     parse_matchups,
     refresh_access_token,
+    scoreboard_week,
 )
 
 
-# Yahoo manager guid -> the name used for headshots (photos/<name>.jpg) and
-# season standings, so both stay matched through team renames and Yahoo
-# nickname changes. Fill in from the "managers" action's output; anyone
-# not listed falls back to their Yahoo nickname.
-MANAGER_NAMES = {}
+# Yahoo manager guid or Yahoo nickname -> the name shown on the page, used
+# for headshots (photos/<name>.jpg) and season standings, so all three stay
+# matched through team renames. Nickname keys ignore case/spaces/punctuation.
+# Anyone not listed falls back to their Yahoo nickname - run the "managers"
+# action to see everyone's nickname and guid.
+MANAGER_NAMES = {
+    "the Great NOZ": "Chris",
+    "Mubpat": "Patrick",
+}
+
+
+def _name_key(value):
+    return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+
+
+_MANAGER_LOOKUP = {_name_key(k): v for k, v in MANAGER_NAMES.items()}
 
 
 def _manager_name(team):
-    return MANAGER_NAMES.get(team.get("manager_guid")) or team.get("manager")
+    guid, nickname = team.get("manager_guid"), team.get("manager")
+    return _MANAGER_LOOKUP.get(_name_key(guid)) or _MANAGER_LOOKUP.get(_name_key(nickname)) or nickname
 
 
 def _require_env(name):
@@ -163,6 +181,7 @@ def _fetch_real_matchups(event):
             raise RuntimeError("LEAGUE_KEY not set and multiple leagues found - see the logs above.")
 
     scoreboard_json = get_scoreboard(access_token, league_key, week=week)
+    week = int(week) if week else scoreboard_week(scoreboard_json)
     raw_matchups = parse_matchups(scoreboard_json)
     if not raw_matchups:
         print("Yahoo returned a scoreboard, but no matchups came out of it. Raw response:")
@@ -182,7 +201,40 @@ def _fetch_real_matchups(event):
         )
         for m in raw_matchups
     ]
-    return week or "current", matchups
+    rosters, transactions = _fetch_roster_data(access_token, league_key, week, raw_matchups)
+    return week, matchups, rosters, transactions
+
+
+def _fetch_roster_data(access_token, league_key, week, raw_matchups):
+    """Rosters (with each player's points that week) and the season's
+    transactions, for the bench/lineup/waiver/trade/injury awards. A Yahoo
+    response this code doesn't expect only skips those awards (logged
+    below) - it never blocks the weekly publish."""
+    rosters = transactions = None
+    try:
+        rosters = []
+        for m in raw_matchups:
+            a_won = (m["team_a"]["score"] or 0.0) >= (m["team_b"]["score"] or 0.0)
+            for team, won in ((m["team_a"], a_won), (m["team_b"], not a_won)):
+                rosters.append({
+                    "team_key": team["team_key"], "team": team["name"], "manager": _manager_name(team), "won": won,
+                    "players": get_team_roster(access_token, team["team_key"], week),
+                })
+        keys = [p["player_key"] for r in rosters for p in r["players"] if p["player_key"]]
+        points = get_player_points(access_token, league_key, keys, week)
+        for r in rosters:
+            for p in r["players"]:
+                p["points"] = points.get(p["player_key"], 0.0)
+    except Exception:
+        traceback.print_exc()
+        print("Skipped the bench/lineup/injury awards this run - see the error above.")
+        rosters = None
+    try:
+        transactions = get_transactions(access_token, league_key)
+    except Exception:
+        traceback.print_exc()
+        print("Skipped the waiver/trade awards this run - see the error above.")
+    return rosters, transactions
 
 
 def _action_managers(event):
@@ -205,8 +257,11 @@ def _action_managers(event):
 
 
 def _action_recap(event):
-    week, matchups = _fetch_real_matchups(event)
-    recap_text = generate_recap(week=week, matchups=matchups)
+    week, matchups, rosters, transactions = _fetch_real_matchups(event)
+    bucket = os.environ.get("S3_BUCKET")
+    standings = _standings_with_week(boto3.client("s3"), bucket, week, matchups) if bucket else None
+    extras = compute_extra_awards(matchups, standings=standings, rosters=rosters, transactions=transactions)
+    recap_text = generate_recap(week=week, matchups=matchups, extras=extras)
     print(recap_text)
     return {"recap": recap_text}
 
@@ -223,6 +278,15 @@ def _load_standings(s3, bucket):
         return {"weeks": {}}
 
 
+def _standings_with_week(s3, bucket, week, matchups):
+    standings = _load_standings(s3, bucket)
+    weeks = standings.setdefault("weeks", {})
+    # Left behind by runs from before the week number was resolved.
+    weeks.pop("current", None)
+    weeks[str(week)] = week_records(matchups)
+    return standings
+
+
 def _save_standings(s3, bucket, standings):
     s3.put_object(
         Bucket=bucket, Key="standings.json",
@@ -230,7 +294,7 @@ def _save_standings(s3, bucket, standings):
     )
 
 
-def _publish_page(week, matchups, is_sample, bonus_note=None):
+def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, transactions=None):
     """Renders the webpage, uploads it to S3, and posts a Discord teaser
     if DISCORD_WEBHOOK_URL is set. Returns the page's public URL.
 
@@ -246,14 +310,16 @@ def _publish_page(week, matchups, is_sample, bonus_note=None):
     bucket = _require_env("S3_BUCKET")
     s3 = boto3.client("s3")
 
-    standings_ranked = None
+    standings_ranked = extras = None
     if not is_sample:
-        standings = _load_standings(s3, bucket)
-        standings.setdefault("weeks", {})[str(week)] = week_records(matchups)
+        standings = _standings_with_week(s3, bucket, week, matchups)
         _save_standings(s3, bucket, standings)
         standings_ranked = power_rankings(standings)
+        extras = compute_extra_awards(matchups, standings=standings, rosters=rosters, transactions=transactions)
 
-    html = render_html(week, matchups, is_sample=is_sample, bonus_note=bonus_note, standings=standings_ranked)
+    html = render_html(
+        week, matchups, is_sample=is_sample, bonus_note=bonus_note, standings=standings_ranked, extras=extras,
+    )
     s3.put_object(Bucket=bucket, Key="recap.html", Body=html.encode("utf-8"), ContentType="text/html")
 
     website_url = os.environ.get("S3_WEBSITE_URL")
@@ -282,8 +348,11 @@ def _action_publish_demo():
 
 
 def _action_publish(event):
-    week, matchups = _fetch_real_matchups(event)
-    page_url, archive_url = _publish_page(week, matchups, is_sample=False, bonus_note=event.get("bonus_note"))
+    week, matchups, rosters, transactions = _fetch_real_matchups(event)
+    page_url, archive_url = _publish_page(
+        week, matchups, is_sample=False, bonus_note=event.get("bonus_note"),
+        rosters=rosters, transactions=transactions,
+    )
     return {"page_url": page_url, "archive_url": archive_url}
 
 
