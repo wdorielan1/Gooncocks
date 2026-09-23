@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 
 TOKEN_URL = "https://api.login.yahoo.com/oauth2/get_token"
-FANTASY_BASE = "https://fantasysports.yahooapis.com/fantasysports/v2"
+FANTASY_BASE = "https://fantasysports.yahooapis.com/fantasy/v2"
 AUTH_URL = "https://api.login.yahoo.com/oauth2/request_auth"
 
 
