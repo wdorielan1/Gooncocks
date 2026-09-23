@@ -189,8 +189,19 @@ def _fetch_real_matchups(event):
             raise RuntimeError("LEAGUE_KEY not set and multiple leagues found - see the logs above.")
 
     scoreboard_json = get_scoreboard(access_token, league_key, week=week)
-    week = int(week) if week else scoreboard_week(scoreboard_json)
     raw_matchups = parse_matchups(scoreboard_json)
+    if week:
+        week = int(week)
+    else:
+        week = scoreboard_week(scoreboard_json)
+        # Yahoo flips its "current week" to the next, unplayed one shortly
+        # after Monday night, so the weekly scheduled run (no week given)
+        # would otherwise publish a week of all-zero scores.
+        if week and week > 1 and any(m.get("status") in ("preevent", "midevent") for m in raw_matchups):
+            week -= 1
+            print(f"Week {week + 1} isn't finished yet - using week {week}.")
+            scoreboard_json = get_scoreboard(access_token, league_key, week=week)
+            raw_matchups = parse_matchups(scoreboard_json)
     if not raw_matchups:
         print("Yahoo returned a scoreboard, but no matchups came out of it. Raw response:")
         print(scoreboard_json)

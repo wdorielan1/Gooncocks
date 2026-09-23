@@ -301,5 +301,5 @@ def parse_matchups(scoreboard_json):
                 }
             )
         if len(teams) == 2:
-            results.append({"team_a": teams[0], "team_b": teams[1]})
+            results.append({"team_a": teams[0], "team_b": teams[1], "status": matchup.get("status")})
     return results
