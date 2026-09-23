@@ -127,7 +127,7 @@ STYLE_BLOCK = """
   .section-heading h2{font-size:28px;letter-spacing:.4px;line-height:1;margin:0}
   .section-heading>span{font-size:10px;letter-spacing:1.5px;color:var(--muted)}
   .section-heading .eyebrow{font-size:10px;margin-bottom:10px}
-  .award-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:40px}
+  .award-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:40px}
   .award{background:var(--surface);border:1px solid var(--line);padding:20px;display:flex;flex-direction:column;position:relative;overflow:hidden}
   .award-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
   .award-icon{width:36px;height:36px;color:#7aa8ff;background:#1b2c49;display:grid;place-items:center;font-size:20px}
@@ -162,15 +162,14 @@ STYLE_BLOCK = """
   .game-row.winner{color:var(--text)}
   .game-row.winner strong{color:var(--gold)}
   .game-foot{font-size:10px;border-top:1px solid var(--line);padding-top:12px;margin-top:14px;color:var(--muted)}
-  .award-grid.six{grid-template-columns:repeat(3,1fr)}
   footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:28px 0 34px;flex-wrap:wrap;border-top:1px solid var(--line)}
   .footer-brand{font-family:Teko,sans-serif;font-size:24px;font-weight:600;letter-spacing:1px}
   .footer-brand span{color:var(--gold);margin-left:10px}
   footer p{font-size:11px;color:var(--muted);line-height:1.8;margin:0}
   footer>span{font-size:10px;letter-spacing:1.5px;color:#627088}
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-  @media(max-width:1000px){.season{display:none}.award-grid,.award-grid.six{grid-template-columns:repeat(2,1fr)}.hero-art{right:-90px}.scoreboard{grid-template-columns:repeat(2,1fr)}}
-  @media(max-width:640px){.brand{font-size:26px}.brand img{width:40px;height:40px}nav{width:100%;gap:20px;font-size:12px}.hero{min-height:auto}.hero-art{width:340px;height:340px;right:-140px;top:10px;opacity:.5}h1{font-size:56px;margin:16px 0}.champion{font-size:26px;max-width:230px}.hero-score>span{font-size:44px}.prize{padding-left:16px}.shame-art{width:130px;height:130px;right:-15px;top:-15px}.award-grid,.award-grid.six{grid-template-columns:1fr;gap:10px}.chart-row{grid-template-columns:18px 110px 1fr 46px;gap:8px}.scoreboard{grid-template-columns:1fr}}
+  @media(max-width:1000px){.season{display:none}.award-grid{grid-template-columns:repeat(2,1fr)}.hero-art{right:-90px}.scoreboard{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:640px){.brand{font-size:26px}.brand img{width:40px;height:40px}nav{width:100%;gap:20px;font-size:12px}.hero{min-height:auto}.hero-art{width:340px;height:340px;right:-140px;top:10px;opacity:.5}h1{font-size:56px;margin:16px 0}.champion{font-size:26px;max-width:230px}.hero-score>span{font-size:44px}.prize{padding-left:16px}.shame-art{width:130px;height:130px;right:-15px;top:-15px}.award-grid{grid-template-columns:1fr;gap:10px}.chart-row{grid-template-columns:18px 110px 1fr 46px;gap:8px}.scoreboard{grid-template-columns:1fr}}
 </style>
 """
 
@@ -365,10 +364,6 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     rank_rows = "".join(_rank_row_html(entry, idx, max_score) for idx, entry in enumerate(rankings))
     game_cards = "".join(_game_card_html(idx, m, is_sample) for idx, m in enumerate(matchups))
     extra_cards = _extra_award_cards(extras or {})
-    extra_section = f"""
-  <div class="section-heading"><h2>MORE RECEIPTS</h2><span>BENCHES, TRADES AND EXCUSES.</span></div>
-  <section class="award-grid six" aria-label="More weekly awards">{extra_cards}
-  </section>""" if extra_cards else ""
     bonus_html = _bonus_note_html(bonus_note)
     standings_section = _standings_section_html(standings, week)
     standings_nav = '<a href="#standings">Power rankings</a>' if standings else ""
@@ -421,9 +416,8 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     {blowout_card}
     {heartbreak_card}
     {upset_card}
-    {bad_beat_card}
+    {bad_beat_card}{extra_cards}
   </section>
-{extra_section}
 {bonus_html}
   <section id="rankings" class="panel rankings">
     <div class="section-heading"><div><p class="eyebrow">THE PECKING ORDER</p><h2>EVERY POINT. EVERY TEAM.</h2></div><span>WEEK {week:02d} <span class="slash">/</span> TOTAL POINTS</span></div>

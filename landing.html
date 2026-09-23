@@ -258,10 +258,8 @@
   .champ-note{font-size:11.5px; color:var(--fog); font-style:italic; margin:30px auto 0; max-width:44ch; text-align:center}
 
   /* ---------- award categories ---------- */
-  .award-groups{display:grid; grid-template-columns:1fr 1fr; gap:24px 56px}
+  .award-groups{display:grid; grid-template-columns:1fr 1fr; gap:0 56px}
   @media (max-width:860px){ .award-groups{grid-template-columns:1fr} }
-  .award-groups h3{font-size:22px; letter-spacing:1px; margin-bottom:6px}
-  .award-groups .sub{font-size:12.5px; color:var(--fog); margin:0 0 8px}
   .playbook{position:relative; padding-left:56px}
   .playbook:before{content:''; position:absolute; left:19px; top:6px; bottom:6px; width:1px; background:var(--hairline)}
   .play{position:relative; padding:18px 0; border-bottom:1px solid var(--hairline)}
@@ -381,8 +379,6 @@
     </div>
     <div class="award-groups">
       <div>
-        <h3>The Scoreboard</h3>
-        <p class="sub">Settled by the final scores.</p>
         <div class="playbook">
           <div class="play" data-n="1"><h4>Goon of the Week</h4><p>Highest score of the week. <span class="money">$50</span>, cash, no questions.</p></div>
           <div class="play" data-n="2"><h4>Cock of the Week</h4><p>Lowest score of the week. The group chat is legally required to bring it up.</p></div>
@@ -393,8 +389,6 @@
         </div>
       </div>
       <div>
-        <h3>The Receipts</h3>
-        <p class="sub">Dug out of the rosters, the bench and the waiver wire.</p>
         <div class="playbook">
           <div class="play" data-n="7"><h4>Fraud Alert</h4><p>The record that doesn't match the points: the most wins beyond what the weekly scores deserved.</p></div>
           <div class="play" data-n="8"><h4>Benchwarmer Disaster</h4><p>The best performance of the week, watched from the bench.</p></div>
