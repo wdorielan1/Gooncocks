@@ -45,6 +45,10 @@ Drive it with the "Test" button in the Lambda console, using a test event
   See your leagues (only needed if you belong to more than one):
     {"action": "leagues"}
 
+  See each team's Yahoo manager nickname + guid, and which name it maps
+  to via MANAGER_NAMES below (used to fill that mapping in):
+    {"action": "managers"}
+
   The actual recap, printed only:
     {"action": "recap"}
 
@@ -70,6 +74,17 @@ from yahoo_client import (
     parse_matchups,
     refresh_access_token,
 )
+
+
+# Yahoo manager guid -> the name used for headshots (photos/<name>.jpg) and
+# season standings, so both stay matched through team renames and Yahoo
+# nickname changes. Fill in from the "managers" action's output; anyone
+# not listed falls back to their Yahoo nickname.
+MANAGER_NAMES = {}
+
+
+def _manager_name(team):
+    return MANAGER_NAMES.get(team.get("manager_guid")) or team.get("manager")
 
 
 def _require_env(name):
@@ -162,12 +177,31 @@ def _fetch_real_matchups(event):
             team_b_score=m["team_b"]["score"] or 0.0,
             team_a_projected=m["team_a"]["projected"],
             team_b_projected=m["team_b"]["projected"],
-            team_a_manager=m["team_a"].get("manager"),
-            team_b_manager=m["team_b"].get("manager"),
+            team_a_manager=_manager_name(m["team_a"]),
+            team_b_manager=_manager_name(m["team_b"]),
         )
         for m in raw_matchups
     ]
     return week or "current", matchups
+
+
+def _action_managers(event):
+    access_token = _get_access_token()
+    league_key = event.get("league_key") or _require_env("LEAGUE_KEY")
+    week = event.get("week") or os.environ.get("WEEK")
+    raw_matchups = parse_matchups(get_scoreboard(access_token, league_key, week=week))
+    rows = []
+    for m in raw_matchups:
+        for team in (m["team_a"], m["team_b"]):
+            row = {
+                "team": team["name"],
+                "nickname": team.get("manager"),
+                "guid": team.get("manager_guid"),
+                "maps_to": _manager_name(team),
+            }
+            rows.append(row)
+            print(f"  {row['team']:<24} nickname={row['nickname']!r:<18} guid={row['guid']}  ->  {row['maps_to']}")
+    return {"managers": rows}
 
 
 def _action_recap(event):
@@ -323,6 +357,8 @@ def lambda_handler(event, context):
         return _action_publish_manual(event)
     if action == "leagues":
         return _action_leagues()
+    if action == "managers":
+        return _action_managers(event)
     if action == "recap":
         return _action_recap(event)
     if action == "publish":

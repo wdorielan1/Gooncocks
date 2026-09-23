@@ -151,15 +151,15 @@ def get_scoreboard(access_token, league_key, week=None):
 
 
 def _extract_manager(team_meta):
-    """Pull the manager's nickname out of a merged team record's "managers"
-    list (Yahoo nests it as [{"manager": {"nickname": ..., ...}}]). Returns
-    None if it's missing - team names entered by hand (publish_manual)
-    won't have this at all."""
+    """Pull (nickname, guid) for the team's manager out of a merged team
+    record's "managers" list (Yahoo nests it as [{"manager": {"nickname":
+    ..., "guid": ...}}]). The guid is permanent per Yahoo account, unlike
+    team names or nicknames. Returns (None, None) if missing."""
     managers = team_meta.get("managers") or []
     if managers and isinstance(managers[0], dict):
         manager = managers[0].get("manager") or {}
-        return manager.get("nickname")
-    return None
+        return manager.get("nickname"), manager.get("guid")
+    return None, None
 
 
 def parse_matchups(scoreboard_json):
@@ -184,10 +184,12 @@ def parse_matchups(scoreboard_json):
             stats = team[1] if len(team) > 1 and isinstance(team[1], dict) else {}
             points = (stats.get("team_points") or {}).get("total")
             projected = (stats.get("team_projected_points") or {}).get("total")
+            nickname, guid = _extract_manager(meta)
             teams.append(
                 {
                     "name": meta.get("name"),
-                    "manager": _extract_manager(meta),
+                    "manager": nickname,
+                    "manager_guid": guid,
                     "score": float(points) if points is not None else None,
                     "projected": float(projected) if projected is not None else None,
                 }
