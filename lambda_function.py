@@ -88,8 +88,16 @@ from yahoo_client import (
 # Anyone not listed falls back to their Yahoo nickname - run the "managers"
 # action to see everyone's nickname and guid.
 MANAGER_NAMES = {
-    "the Great NOZ": "Chris",
-    "Mubpat": "Patrick",
+    "wilzer": "Will",
+    "MUBAPAT": "Patrick",
+    "The Great CNoz": "Chris",
+    "Matt": "Matt",
+    "Tamir": "Tamir",
+    "gabriel": "Gabe",
+    "brandon": "Brandon",
+    "Jose": "Jose",
+    "Samuel": "Sam",
+    "Chett": "Chet",
 }
 
 
