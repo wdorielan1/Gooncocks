@@ -302,6 +302,11 @@ def _standings_with_week(s3, bucket, week, matchups):
     weeks = standings.setdefault("weeks", {})
     # Left behind by runs from before the week number was resolved.
     weeks.pop("current", None)
+    # Weeks saved before MANAGER_NAMES existed are keyed by Yahoo nickname;
+    # rename them so nobody shows up twice in the power rankings.
+    for records in weeks.values():
+        for rec in records:
+            rec["id"] = _MANAGER_LOOKUP.get(_name_key(rec["id"]), rec["id"])
     weeks[str(week)] = week_records(matchups)
     return standings
 
