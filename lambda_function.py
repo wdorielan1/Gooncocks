@@ -464,7 +464,7 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
     website_url = os.environ.get("S3_WEBSITE_URL")
     page_url = f"{website_url.rstrip('/')}/recap.html" if website_url else f"s3://{bucket}/recap.html"
     if is_latest:
-        s3.put_object(Bucket=bucket, Key="recap.html", Body=html.encode("utf-8"), ContentType="text/html")
+        _put(s3, bucket, "recap.html", html, "text/html")
         print(f"Published to {page_url}")
     else:
         print(f"Week {week} is older than week {latest}, so the main recap page keeps showing week {latest}.")
@@ -472,7 +472,7 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
     archive_url = None
     if not is_sample:
         archive_key = f"weeks/week-{week}.html"
-        s3.put_object(Bucket=bucket, Key=archive_key, Body=html.encode("utf-8"), ContentType="text/html")
+        _put(s3, bucket, archive_key, html, "text/html")
         archive_url = f"{website_url.rstrip('/')}/{archive_key}" if website_url else f"s3://{bucket}/{archive_key}"
         print(f"Archived permanent snapshot at {archive_url}")
 
