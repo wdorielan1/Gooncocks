@@ -5,6 +5,7 @@ on:
     branches: [claude/yahoo-fantasy-recap-setup-nimcop]
     paths:
       - "*.py"
+      - "landing.html"
   workflow_dispatch:
 
 permissions:
@@ -44,7 +45,7 @@ jobs:
 
       - name: Upload the code to Lambda
         run: |
-          zip -j lambda.zip $LAMBDA_FILES
+          zip -j lambda.zip $LAMBDA_FILES landing.html
           aws lambda update-function-code --function-name "$FUNCTION_NAME" --zip-file fileb://lambda.zip > /dev/null
           aws lambda wait function-updated --function-name "$FUNCTION_NAME"
           echo "Deployed $(date -u) from commit $GITHUB_SHA"

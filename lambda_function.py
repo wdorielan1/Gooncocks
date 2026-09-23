@@ -49,6 +49,11 @@ Drive it with the "Test" button in the Lambda console, using a test event
   to via MANAGER_NAMES below (used to fill that mapping in):
     {"action": "managers"}
 
+  Find every past champion and runner-up by walking back through the
+  league's previous Yahoo seasons; saves history.json for the landing
+  page's Champion Wall:
+    {"action": "history"}
+
   The actual recap, printed only:
     {"action": "recap"}
 
@@ -57,6 +62,7 @@ Drive it with the "Test" button in the Lambda console, using a test event
   the default if you omit "action":
     {"action": "publish"}
 """
+import datetime
 import json
 import os
 import re
@@ -64,13 +70,14 @@ import traceback
 
 import boto3
 
-from awards import Matchup, generate_recap, compute_awards, compute_extra_awards, power_rankings, week_records
+from awards import Matchup, generate_recap, compute_awards, compute_extra_awards, identity, power_rankings, week_records
 from discord_client import build_teaser, post_message
 from sample_data import SAMPLE_MATCHUPS
 from webpage import render_html
 from yahoo_client import (
     build_authorize_url,
     exchange_code_for_tokens,
+    get_league_history,
     get_player_points,
     get_scoreboard,
     get_team_roster,
@@ -275,6 +282,39 @@ def _action_managers(event):
     return {"managers": rows}
 
 
+def _action_history(event):
+    access_token = _get_access_token()
+    league_key = event.get("league_key") or _require_env("LEAGUE_KEY")
+    champions = []
+    for season in get_league_history(access_token, league_key):
+        ranked = {t["rank"]: t for t in season["teams"] if t["rank"]}
+        if not season["is_finished"] or 1 not in ranked:
+            print(f"  {season['season']}: season not finished yet")
+            continue
+        champ, runner = ranked[1], ranked.get(2)
+        entry = {
+            "season": str(season["season"]),
+            "champion": _manager_name(champ), "champion_team": champ["team"],
+            "runner_up": _manager_name(runner) if runner else None,
+            "runner_up_team": runner["team"] if runner else None,
+        }
+        champions.append(entry)
+        print(f"  {entry['season']}: {entry['champion']} ({entry['champion_team']}), runner-up {entry['runner_up']}")
+    if not champions:
+        print("No finished seasons found - this looks like the league's first season on Yahoo.")
+
+    bucket = os.environ.get("S3_BUCKET")
+    if bucket:
+        s3 = boto3.client("s3")
+        _put(s3, bucket, "history.json", json.dumps(champions), "application/json")
+        landing = _load_json(s3, bucket, "landing.json", None)
+        if landing is not None:
+            landing["champions"] = champions
+            _put(s3, bucket, "landing.json", json.dumps(landing), "application/json")
+        print("Saved to history.json - the landing page's Champion Wall now uses it.")
+    return {"champions": champions}
+
+
 def _action_recap(event):
     week, matchups, rosters, transactions = _fetch_real_matchups(event)
     bucket = os.environ.get("S3_BUCKET")
@@ -285,16 +325,90 @@ def _action_recap(event):
     return {"recap": recap_text}
 
 
+def _load_json(s3, bucket, key, default):
+    try:
+        obj = s3.get_object(Bucket=bucket, Key=key)
+        return json.loads(obj["Body"].read().decode("utf-8"))
+    except s3.exceptions.NoSuchKey:
+        return default
+
+
+def _put(s3, bucket, key, body, content_type):
+    # Short cache so the landing page picks up each Tuesday's publish quickly.
+    s3.put_object(
+        Bucket=bucket, Key=key, Body=body.encode("utf-8") if isinstance(body, str) else body,
+        ContentType=content_type, CacheControl="max-age=300",
+    )
+
+
 def _load_standings(s3, bucket):
     """standings.json holds every week's win/loss + points records that
     have ever been published for real (see week_records() in awards.py) -
     {"weeks": {"1": [...], "2": [...], ...}}. Returns an empty skeleton if
     the file doesn't exist yet (first real publish of the season)."""
-    try:
-        obj = s3.get_object(Bucket=bucket, Key="standings.json")
-        return json.loads(obj["Body"].read().decode("utf-8"))
-    except s3.exceptions.NoSuchKey:
-        return {"weeks": {}}
+    return _load_json(s3, bucket, "standings.json", {"weeks": {}})
+
+
+def _landing_page_html():
+    """landing.html is written as a page fragment (so the same file also
+    previews as a Claude artifact); wrap it into a full document for S3."""
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "landing.html"), encoding="utf-8") as f:
+        page = f.read()
+    split = page.find("<header")
+    head, body = (page[:split], page[split:]) if split != -1 else ("", page)
+    return (
+        '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
+        '<meta name="theme-color" content="#0b1220">\n'
+        f"{head}</head>\n<body>\n{body}\n</body>\n</html>\n"
+    )
+
+
+def _landing_data(week, matchups, standings, champions, previous):
+    """What landing.html renders: the latest finished week's headline
+    matchup, season standings, every archived week's Goon, and past
+    champions. Re-publishing an older week keeps the newest week's
+    headline in place."""
+    weeks = []
+    for key, records in standings.get("weeks", {}).items():
+        if str(key).isdigit() and records:
+            top = max(records, key=lambda r: r["points_for"])
+            weeks.append({"week": int(key), "goon": top["id"], "score": round(top["points_for"], 2)})
+    weeks.sort(key=lambda w: w["week"])
+    latest = weeks[-1]["week"] if weeks else int(week)
+
+    if int(week) == latest:
+        b = compute_awards(matchups)["blowout"]
+        m = next(m for m in matchups if m.winner == b["winner"] and m.loser == b["loser"])
+        blowout = {
+            "winner": identity(m.winner, m.winner_manager), "winner_score": round(max(m.team_a_score, m.team_b_score), 2),
+            "loser": identity(m.loser, m.loser_manager), "loser_score": round(m.loser_score, 2), "margin": round(m.margin, 2),
+        }
+    else:
+        blowout = previous.get("blowout") if previous.get("week") == latest else None
+
+    today = datetime.date.today()
+    return {
+        "updated": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        "season": today.year if today.month >= 3 else today.year - 1,
+        "week": latest,
+        "blowout": blowout,
+        "standings": [
+            {"name": e["id"], "wins": e["wins"], "losses": e["losses"], "points_for": round(e["points_for"], 2)}
+            for e in power_rankings(standings)
+        ],
+        "weeks": weeks,
+        "champions": champions,
+    }
+
+
+def _publish_landing(s3, bucket, week, matchups, standings):
+    previous = _load_json(s3, bucket, "landing.json", {})
+    champions = _load_json(s3, bucket, "history.json", [])
+    data = _landing_data(week, matchups, standings, champions, previous)
+    _put(s3, bucket, "landing.json", json.dumps(data), "application/json")
+    _put(s3, bucket, "landing.html", _landing_page_html(), "text/html")
+    print("Updated the landing page (landing.html + landing.json).")
 
 
 def _standings_with_week(s3, bucket, week, matchups):
@@ -356,6 +470,13 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
         s3.put_object(Bucket=bucket, Key=archive_key, Body=html.encode("utf-8"), ContentType="text/html")
         archive_url = f"{website_url.rstrip('/')}/{archive_key}" if website_url else f"s3://{bucket}/{archive_key}"
         print(f"Archived permanent snapshot at {archive_url}")
+
+    if not is_sample:
+        try:
+            _publish_landing(s3, bucket, week, matchups, standings)
+        except Exception:
+            traceback.print_exc()
+            print("Skipped updating the landing page this run - see the error above.")
 
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if webhook_url:
@@ -452,6 +573,8 @@ def lambda_handler(event, context):
         return _action_leagues()
     if action == "managers":
         return _action_managers(event)
+    if action == "history":
+        return _action_history(event)
     if action == "recap":
         return _action_recap(event)
     if action == "publish":

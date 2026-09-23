@@ -220,6 +220,46 @@ def get_player_points(access_token, league_key, player_keys, week):
     return points
 
 
+def get_league_season(access_token, league_key):
+    """One season's final standings: {'season', 'name', 'is_finished',
+    'renew', 'teams': [{'team', 'manager', 'manager_guid', 'rank'}]}.
+    'renew' is the previous season's league ("423_123456"), if any."""
+    url = f"{FANTASY_BASE}/league/{league_key}/standings?format=json"
+    data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+    league = data["fantasy_content"]["league"]
+    meta = league[0] if isinstance(league[0], dict) else _merge_record(league[0])
+    standings = _sub_resource(league, "standings")
+    if isinstance(standings, list):
+        standings = standings[0] if standings else {}
+    teams = []
+    for entry in _yahoo_collection(standings.get("teams")):
+        t = _player_record(entry.get("team") if isinstance(entry, dict) else None)
+        nickname, guid = _extract_manager(t)
+        rank = (t.get("team_standings") or {}).get("rank")
+        teams.append({
+            "team": t.get("name"), "manager": nickname, "manager_guid": guid,
+            "rank": int(rank) if str(rank or "").isdigit() else None,
+        })
+    return {
+        "season": meta.get("season"), "name": meta.get("name"),
+        "is_finished": str(meta.get("is_finished") or "0") == "1",
+        "renew": meta.get("renew") or None, "teams": teams,
+    }
+
+
+def get_league_history(access_token, league_key, max_seasons=40):
+    """Every season of this league, newest first, following Yahoo's chain
+    of renewed leagues back to the first season."""
+    seasons = []
+    key = league_key
+    while key and len(seasons) < max_seasons:
+        season = get_league_season(access_token, key)
+        season["league_key"] = key
+        seasons.append(season)
+        key = season["renew"].replace("_", ".l.", 1) if season["renew"] else None
+    return seasons
+
+
 def get_transactions(access_token, league_key):
     """This season's completed transactions: [{'type', 'timestamp',
     'players': [{'player_key', 'name', 'type', 'source_type',

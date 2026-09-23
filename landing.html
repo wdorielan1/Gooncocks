@@ -1,0 +1,611 @@
+<title>Gooncocks League</title>
+<meta name="description" content="Home of the SPU Peacocks fantasy football league: standings, payouts, the weekly recap archive, past champions and every award category.">
+<style>
+  :root{
+    --ink:#0b1220; --slate:#101a2b; --hairline:#263044;
+    --paper:#eef1f8; --fog:#94a0b3;
+    --gold:#e7a33b; --gold-soft:#3a2f18;
+    --ember:#d1503f; --ember-soft:#3a1f1b;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *, *::before, *::after{animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important}
+  }
+  body{
+    margin:0; background:var(--ink); color:var(--paper);
+    font-family:'Work Sans',system-ui,sans-serif; font-size:16px; line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+  a:focus-visible, button:focus-visible{outline:2px solid var(--gold); outline-offset:4px}
+  ::selection{background:var(--gold); color:var(--ink)}
+  .num{font-variant-numeric:tabular-nums}
+
+  h1,h2,h3{
+    font-family:'Anton','Arial Narrow',Impact,sans-serif; font-weight:400; text-transform:uppercase;
+    line-height:.92; margin:0; text-wrap:balance; letter-spacing:.5px;
+  }
+  .eyebrow{
+    font-size:11px; font-weight:700; letter-spacing:2.6px; text-transform:uppercase;
+    color:var(--gold); margin:0 0 12px;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding-inline:20px}
+  section{padding-block:56px}
+
+  /* ---------- masthead ---------- */
+  header.mast{
+    position:sticky; top:env(safe-area-inset-top,0px); z-index:40;
+    background:rgba(11,18,32,.92); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--hairline);
+  }
+  .mast-row{
+    max-width:1180px; margin:0 auto; padding:12px 20px;
+    display:flex; align-items:center; justify-content:space-between; gap:20px;
+  }
+  .brand{display:flex; align-items:center; gap:11px; text-decoration:none}
+  .crest{position:relative; width:40px; height:40px; flex:none; border-radius:50%; overflow:hidden; background:var(--slate); border:1.5px solid var(--gold)}
+  .crest img, .crest svg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
+  .brand-text{font-family:'Anton','Arial Narrow',sans-serif; font-size:20px; letter-spacing:1px; line-height:1}
+  .brand-text small{display:block; font-family:'Work Sans',sans-serif; font-size:8.5px; letter-spacing:2px; color:var(--fog); font-weight:600; margin-top:5px}
+  nav.links{display:flex; align-items:center; gap:2px; font-size:13px; font-weight:600}
+  nav.links a{
+    text-decoration:none; color:var(--fog); white-space:nowrap; padding:9px 13px;
+    border-radius:100px; transition:color .15s, background .15s;
+  }
+  nav.links a:hover{color:var(--paper); background:var(--slate)}
+  nav.links a.stats-link{color:var(--ink); background:var(--gold); margin-left:8px}
+  nav.links a.stats-link:hover{background:#f0b458}
+  .nav-toggle{display:none}
+  @media (max-width:940px){
+    nav.links{
+      position:fixed; inset:64px 0 auto 0; background:var(--slate);
+      border-bottom:1px solid var(--hairline); flex-direction:column;
+      align-items:stretch; padding:14px; gap:4px;
+      transform:translateY(-12px); opacity:0; pointer-events:none;
+      transition:opacity .2s, transform .2s;
+    }
+    nav.links a{border-radius:6px}
+    nav.links a.stats-link{margin-left:0}
+    nav.links.open{transform:translateY(0); opacity:1; pointer-events:auto}
+    .nav-toggle{
+      display:block; background:none; border:1px solid var(--hairline); color:var(--paper);
+      width:38px; height:38px; border-radius:6px; font-size:17px; cursor:pointer;
+    }
+  }
+
+  /* ---------- hero ---------- */
+  .hero{position:relative; overflow:hidden; padding-block:0}
+  .hero-flag{
+    position:absolute; inset:0; z-index:-1;
+    background:
+      linear-gradient(115deg, transparent 62%, var(--ember-soft) 62.4%, var(--ember-soft) 63%, transparent 63.4%),
+      linear-gradient(115deg, transparent 70%, var(--gold-soft) 70.4%, var(--gold-soft) 71%, transparent 71.4%);
+  }
+  .hero-inner{
+    max-width:1180px; margin:0 auto; padding:72px 20px 48px;
+    display:grid; grid-template-columns:1fr auto; gap:48px; align-items:center;
+  }
+  .hero h1{font-size:clamp(50px,8.4vw,104px)}
+  .hero h1 .accent{color:var(--gold); display:block; font-size:.52em; letter-spacing:2px; margin-top:10px}
+  .hero p.lede{color:var(--fog); font-size:16.5px; max-width:50ch; margin:22px 0 22px}
+  .status{
+    display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;
+    font-size:12px; font-weight:600; letter-spacing:.6px; text-transform:uppercase;
+    border:1px solid var(--hairline); border-radius:100px; padding:7px 14px; margin-bottom:26px; color:var(--fog);
+  }
+  .status b{color:var(--paper)}
+  .status i{width:7px; height:7px; border-radius:50%; background:var(--gold); display:inline-block}
+  .cta-row{display:flex; flex-wrap:wrap; gap:12px}
+  .btn{
+    display:inline-flex; align-items:center; gap:8px; padding:14px 24px;
+    font-weight:700; font-size:13.5px; text-decoration:none; border-radius:100px;
+    transition:transform .15s, background .15s; text-transform:uppercase; letter-spacing:.5px;
+  }
+  .btn:hover{transform:translateY(-1px)}
+  .btn-gold{background:var(--gold); color:var(--ink)}
+  .btn-gold:hover{background:#f0b458}
+  .btn-ghost{border:1.5px solid var(--hairline); color:var(--paper)}
+  .btn-ghost:hover{border-color:var(--gold); color:var(--gold)}
+  .hero-meta{display:flex; gap:28px; flex-wrap:wrap; font-size:12.5px; color:var(--fog); margin-top:34px}
+  .hero-meta strong{display:block; font-family:'Anton','Arial Narrow',sans-serif; font-size:26px; color:var(--paper); letter-spacing:.4px; font-weight:400}
+
+  .hero-side{display:flex; flex-direction:column; align-items:center; gap:24px}
+  .peacock{
+    position:relative; width:230px; height:230px; max-width:100%; border-radius:50%; overflow:hidden;
+    background:var(--slate); border:3px solid var(--gold);
+    box-shadow:0 0 0 8px var(--ink), 0 0 60px -6px rgba(231,163,59,.45);
+  }
+  .peacock img, .peacock svg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
+  .matchup-card{
+    background:var(--slate); border:1px solid var(--hairline); border-radius:16px;
+    padding:20px 22px; width:280px; max-width:100%; box-shadow:0 20px 50px -20px rgba(0,0,0,.7);
+  }
+  .matchup-head{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:var(--fog);
+    margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--hairline);
+  }
+  .matchup-head .final{color:var(--gold); font-weight:700}
+  .m-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding-block:8px}
+  .m-row + .m-row{border-top:1px solid #ffffff08}
+  .m-who{font-size:14px; font-weight:600}
+  .m-row.win .m-who{color:var(--gold)}
+  .m-score{font-family:'Anton','Arial Narrow',sans-serif; font-size:22px; color:var(--fog)}
+  .m-row.win .m-score{color:var(--gold)}
+  .matchup-foot{font-size:11px; color:var(--fog); margin-top:12px; padding-top:12px; border-top:1px dashed var(--hairline)}
+  @media (max-width:800px){ .hero-inner{grid-template-columns:1fr; padding-top:48px} .peacock{width:180px; height:180px} }
+
+  /* ---------- standings ticker ---------- */
+  .ticker-band{
+    border-top:1px solid var(--hairline); border-bottom:1px solid var(--hairline);
+    background:var(--slate); overflow:hidden; white-space:nowrap;
+  }
+  .ticker-track{display:inline-flex; align-items:center; padding:13px 0; animation:scroll 40s linear infinite}
+  .ticker-band:hover .ticker-track{animation-play-state:paused}
+  @media (prefers-reduced-motion:reduce){ .ticker-track{animation:none} }
+  .ticker-track > span{
+    font-family:'Anton','Arial Narrow',sans-serif; font-size:15px; letter-spacing:1px; color:var(--fog);
+    padding:0 22px; border-right:1px solid var(--hairline);
+  }
+  .ticker-track > span.up{color:var(--gold)}
+  .ticker-track .rank, .ticker-track .rec{opacity:.6}
+  @keyframes scroll{ from{transform:translateX(0)} to{transform:translateX(-50%)} }
+
+  .sec-head{
+    display:flex; align-items:flex-end; justify-content:space-between; gap:16px;
+    flex-wrap:wrap; margin-bottom:32px;
+  }
+  .sec-head h2{font-size:clamp(30px,4vw,44px)}
+  .sec-head .tag{
+    font-size:11px; letter-spacing:1.5px; color:var(--fog); text-transform:uppercase;
+    border:1px solid var(--hairline); padding:6px 12px; border-radius:100px;
+  }
+
+  /* ---------- the money (payout ledger) ---------- */
+  .ledger{display:grid; grid-template-columns:repeat(4,1fr); border-top:2px solid var(--gold)}
+  .ledger > div{padding:26px 22px 24px; border-bottom:1px solid var(--hairline)}
+  .ledger > div + div{border-left:1px solid var(--hairline)}
+  .ledger .amt{font-family:'Anton','Arial Narrow',sans-serif; font-size:clamp(40px,5vw,58px); line-height:1; color:var(--paper)}
+  .ledger .amt.gold{color:var(--gold)}
+  .ledger .what{font-size:11px; font-weight:700; letter-spacing:1.6px; text-transform:uppercase; color:var(--gold); margin-top:12px}
+  .ledger .how{font-size:13px; color:var(--fog); margin-top:6px}
+  @media (max-width:860px){
+    .ledger{grid-template-columns:repeat(2,1fr)}
+    .ledger > div:nth-child(3){border-left:none}
+  }
+  @media (max-width:440px){
+    .ledger{grid-template-columns:1fr}
+    .ledger > div + div{border-left:none}
+  }
+
+  /* ---------- archive tickets ---------- */
+  .rail{display:flex; gap:20px; overflow-x:auto; padding:10px 4px 18px}
+  .ticket{
+    flex:none; width:200px; text-decoration:none; color:inherit;
+    position:relative; padding:20px 18px 24px; transition:transform .15s;
+    background:
+      radial-gradient(circle 9px at 0 50%, var(--ink) 98%, transparent) left / 100% 100% no-repeat,
+      radial-gradient(circle 9px at 100% 50%, var(--ink) 98%, transparent) right / 100% 100% no-repeat,
+      var(--slate);
+    border-top:1px solid var(--hairline); border-bottom:1px solid var(--hairline);
+    transform:rotate(-1.2deg);
+  }
+  .ticket:nth-child(even){transform:rotate(1deg)}
+  a.ticket:hover{transform:rotate(0deg) translateY(-3px)}
+  .ticket.tbd{opacity:.45}
+  .ticket .wk{display:flex; justify-content:space-between; gap:8px; font-family:'Anton','Arial Narrow',sans-serif; font-size:14px; color:var(--gold); letter-spacing:1px}
+  .ticket .wk em{font-style:normal; font-family:'Work Sans',sans-serif; font-size:9px; font-weight:700; letter-spacing:1.2px; background:var(--gold); color:var(--ink); border-radius:100px; padding:3px 7px; align-self:center}
+  .ticket .divider{border-top:1px dashed var(--hairline); margin:14px 0}
+  .ticket .lbl{font-size:9.5px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; color:var(--fog)}
+  .ticket .champ{font-size:18px; font-weight:700; margin:2px 0}
+  .ticket .champ-score{font-family:'Anton','Arial Narrow',sans-serif; font-size:26px; color:var(--gold)}
+  .ticket .go{font-size:10.5px; color:var(--fog); margin-top:12px; letter-spacing:.5px; text-transform:uppercase}
+  .empty-note{font-size:13.5px; color:var(--fog); font-style:italic}
+
+  /* ---------- champion wall ---------- */
+  .champ-wall{
+    background:
+      radial-gradient(circle 1.5px at 20px 20px, #ffffff10 1.5px, transparent 0) 0 0/40px 40px,
+      var(--slate);
+    border:1px solid var(--hairline); border-radius:16px; padding:52px 20px 40px;
+    display:flex; flex-direction:column; align-items:center; text-align:center;
+  }
+  .pin{width:10px; height:10px; border-radius:50%; background:var(--gold); box-shadow:0 2px 6px rgba(0,0,0,.5); margin-bottom:-2px; position:relative; z-index:2}
+  .champ-card{
+    background:var(--ink); border:1px solid var(--hairline); border-radius:12px;
+    padding:30px 36px; width:300px; max-width:100%;
+    box-shadow:0 14px 30px -12px rgba(0,0,0,.6);
+  }
+  .champ-slide{transition:opacity .35s ease; display:flex; flex-direction:column; align-items:center}
+  .champ-slide.out{opacity:0}
+  .face{
+    position:relative; width:96px; height:96px; border-radius:50%; overflow:hidden; flex:none;
+    background:var(--slate); border:2px solid var(--gold); margin-bottom:16px;
+    display:grid; place-items:center;
+    font-family:'Anton','Arial Narrow',sans-serif; font-size:36px; color:var(--gold);
+  }
+  .face img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
+  .champ-year{font-family:'Anton','Arial Narrow',sans-serif; font-size:15px; color:var(--gold); letter-spacing:2px}
+  .champ-name{font-family:'Anton','Arial Narrow',sans-serif; font-size:40px; margin-top:4px; line-height:1}
+  .champ-team{font-size:13px; color:var(--fog); margin-top:6px; min-height:1.5em}
+  .champ-runner{font-size:11.5px; color:var(--fog); margin-top:10px; letter-spacing:.4px}
+  .champ-runner b{color:var(--paper); font-weight:600}
+  .champ-dots{display:flex; gap:8px; margin-top:22px; justify-content:center; flex-wrap:wrap}
+  .champ-dots button{width:9px; height:9px; border-radius:50%; border:none; background:var(--hairline); cursor:pointer; padding:0; transition:background .2s}
+  .champ-dots button.active{background:var(--gold)}
+  .champ-note{font-size:11.5px; color:var(--fog); font-style:italic; margin-top:24px; max-width:44ch}
+
+  /* ---------- award categories ---------- */
+  .award-groups{display:grid; grid-template-columns:1fr 1fr; gap:24px 56px}
+  @media (max-width:860px){ .award-groups{grid-template-columns:1fr} }
+  .award-groups h3{font-size:22px; letter-spacing:1px; margin-bottom:6px}
+  .award-groups .sub{font-size:12.5px; color:var(--fog); margin:0 0 8px}
+  .playbook{position:relative; padding-left:56px}
+  .playbook:before{content:''; position:absolute; left:19px; top:6px; bottom:6px; width:1px; background:var(--hairline)}
+  .play{position:relative; padding:18px 0; border-bottom:1px solid var(--hairline)}
+  .play:last-child{border-bottom:none}
+  .play:before{
+    content:attr(data-n); position:absolute; left:-56px; top:18px; width:40px; height:40px;
+    background:var(--ink); border:1px solid var(--gold); color:var(--gold); border-radius:50%;
+    display:grid; place-items:center; font-family:'Anton','Arial Narrow',sans-serif; font-size:15px;
+  }
+  .play h4{font-weight:700; font-size:16px; letter-spacing:.2px; margin:0 0 4px}
+  .play p{font-size:13.5px; color:var(--fog); margin:0; max-width:58ch}
+  .play .money{color:var(--gold); font-weight:700}
+
+  /* ---------- closing band ---------- */
+  .cta-band{
+    background:linear-gradient(135deg, var(--gold), #b9812f);
+    border-radius:20px; padding:clamp(28px,5vw,52px);
+    display:flex; align-items:center; justify-content:space-between; gap:28px; flex-wrap:wrap;
+    color:var(--ink);
+  }
+  .cta-band h2{font-size:clamp(28px,3.6vw,40px); color:var(--ink); margin-bottom:6px}
+  .cta-band p{font-size:14px; color:#3a2c11; max-width:48ch; margin:0}
+  .cta-band .btn-gold{background:var(--ink); color:var(--gold)}
+  .cta-band .btn-gold:hover{background:#0f1930}
+
+  footer{border-top:1px solid var(--hairline); padding-block:36px 48px; background:var(--slate)}
+  .foot-row{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px}
+  .foot-brand{display:flex; align-items:center; gap:10px; font-family:'Anton','Arial Narrow',sans-serif; font-size:17px}
+  .foot-brand .crest{width:28px; height:28px}
+  footer p{font-size:11.5px; color:var(--fog); margin:0}
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<header class="mast">
+  <div class="mast-row">
+    <a class="brand" href="#top">
+      <span class="crest" data-logo></span>
+      <span class="brand-text">GOONCOCKS<small>SPU PEACOCKS FANTASY FOOTBALL</small></span>
+    </a>
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">☰</button>
+    <nav class="links" id="navLinks">
+      <a href="#money">The Money</a>
+      <a href="#archive">Archive</a>
+      <a href="#champions">Champions</a>
+      <a href="#awards">Award Categories</a>
+      <a class="stats-link" href="https://stats.gooncocks.com" target="_blank" rel="noopener">Stats →</a>
+    </nav>
+  </div>
+</header>
+
+<div id="top"></div>
+
+<section class="hero">
+  <div class="hero-flag" aria-hidden="true"></div>
+  <div class="hero-inner">
+    <div>
+      <p class="eyebrow">Saint Peter's University · <span id="seasonLabel">2026</span> Season</p>
+      <h1>SPU Peacocks<span class="accent">Fantasy Football League</span></h1>
+      <p class="lede">Ten managers. One group chat that never forgets. Every Tuesday one manager takes home $50, another gets publicly shamed, and the receipts get filed forever.</p>
+      <div class="status" id="status"><i></i><span>New recap every Tuesday, 6 AM</span></div>
+      <div class="cta-row">
+        <a class="btn btn-gold" id="recapBtn" href="https://stats.gooncocks.com" target="_blank" rel="noopener">See This Week's Recap</a>
+        <a class="btn btn-ghost" href="#archive">Past Weeks</a>
+      </div>
+      <div class="hero-meta">
+        <div><strong class="num">10</strong>Managers</div>
+        <div><strong class="num">$2,250</strong>In the pot</div>
+        <div><strong class="num">12</strong>Awards every week</div>
+      </div>
+    </div>
+    <div class="hero-side">
+      <div class="peacock" data-logo></div>
+      <div class="matchup-card" id="matchupCard" hidden>
+        <div class="matchup-head"><span id="mTitle">Biggest Blowout</span><span class="final">FINAL</span></div>
+        <div class="m-row win"><span class="m-who" id="mWinner"></span><span class="m-score num" id="mWinnerScore"></span></div>
+        <div class="m-row"><span class="m-who" id="mLoser"></span><span class="m-score num" id="mLoserScore"></span></div>
+        <div class="matchup-foot" id="mFoot"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="ticker-band" aria-label="Season standings">
+  <div class="ticker-track" id="tickerTrack"></div>
+</div>
+
+<main class="wrap">
+
+  <section id="money">
+    <div class="sec-head">
+      <div><p class="eyebrow" style="margin-bottom:8px">Where The $2,250 Goes</p><h2>The Money</h2></div>
+      <span class="tag">10 Managers × $225</span>
+    </div>
+    <div class="ledger">
+      <div><div class="amt num">$225</div><div class="what">Buy-in</div><div class="how">Per manager, due before Week 1.</div></div>
+      <div><div class="amt gold num">$1,200</div><div class="what">League Champion</div><div class="how">Win the playoffs, get your name on the wall.</div></div>
+      <div><div class="amt num">$400</div><div class="what">Runner-up</div><div class="how">Lose the final, still leave with something.</div></div>
+      <div><div class="amt gold num">$50</div><div class="what">Goon of the Week</div><div class="how">Top score every week, paid every week.</div></div>
+    </div>
+  </section>
+
+  <section id="archive">
+    <div class="sec-head">
+      <div><p class="eyebrow" style="margin-bottom:8px">Every Week, Kept</p><h2><span id="archiveSeason">2026</span> Season Archive</h2></div>
+      <span class="tag">Tap a week to open its recap</span>
+    </div>
+    <div class="rail" id="rail"><p class="empty-note">Past weeks show up here after each Tuesday recap.</p></div>
+  </section>
+
+  <section id="champions">
+    <div class="sec-head">
+      <div><p class="eyebrow" style="margin-bottom:8px">The Hall</p><h2>Champion Wall</h2></div>
+      <span class="tag">Past Champions</span>
+    </div>
+    <div class="champ-wall">
+      <div class="pin"></div>
+      <div class="champ-card">
+        <div id="champSlide" class="champ-slide">
+          <div class="face" id="champFace"></div>
+          <div class="champ-year" id="champYear"></div>
+          <div class="champ-name" id="champName"></div>
+          <div class="champ-team" id="champTeam"></div>
+          <div class="champ-runner" id="champRunner" hidden>Runner-up: <b id="champRunnerName"></b></div>
+        </div>
+        <div class="champ-dots" id="champDots"></div>
+      </div>
+      <p class="champ-note" id="champNote">Pulling the full league history from Yahoo.</p>
+    </div>
+  </section>
+
+  <section id="awards">
+    <div class="sec-head">
+      <div><p class="eyebrow" style="margin-bottom:8px">How The Hardware Is Earned</p><h2>Award Categories</h2></div>
+      <span class="tag">12 Awards · Every Week</span>
+    </div>
+    <div class="award-groups">
+      <div>
+        <h3>The Scoreboard</h3>
+        <p class="sub">Settled by the final scores.</p>
+        <div class="playbook">
+          <div class="play" data-n="1"><h4>Goon of the Week</h4><p>Highest score of the week. <span class="money">$50</span>, cash, no questions.</p></div>
+          <div class="play" data-n="2"><h4>Cock of the Week</h4><p>Lowest score of the week. The group chat is legally required to bring it up.</p></div>
+          <div class="play" data-n="3"><h4>Biggest Blowout</h4><p>The largest winning margin of the week.</p></div>
+          <div class="play" data-n="4"><h4>Heartbreaker</h4><p>The closest game that still ended in a loss.</p></div>
+          <div class="play" data-n="5"><h4>Upset of the Week</h4><p>The projected loser who won anyway, ranked by how far behind they were projected.</p></div>
+          <div class="play" data-n="6"><h4>Bad Beat</h4><p>A loss with a score that beat more than half the league. Right score, wrong opponent.</p></div>
+        </div>
+      </div>
+      <div>
+        <h3>The Receipts</h3>
+        <p class="sub">Dug out of the rosters, the bench and the waiver wire.</p>
+        <div class="playbook">
+          <div class="play" data-n="7"><h4>Fraud Alert</h4><p>The record that doesn't match the points: the most wins beyond what the weekly scores deserved.</p></div>
+          <div class="play" data-n="8"><h4>Benchwarmer Disaster</h4><p>The best performance of the week, watched from the bench.</p></div>
+          <div class="play" data-n="9"><h4>Start/Sit Disaster</h4><p>The costliest lineup call: a benched player who outscored the starter he could have replaced.</p></div>
+          <div class="play" data-n="10"><h4>Waiver-Wire Steal</h4><p>The top-scoring starter picked up off waivers or free agency.</p></div>
+          <div class="play" data-n="11"><h4>Trade Winner</h4><p>The trade that paid off most this week: incoming players outscoring what went out the door.</p></div>
+          <div class="play" data-n="12"><h4>Injury Excuse</h4><p>The losing team with the most banged-up starters. Valid excuse, still an L.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="cta-band">
+      <div>
+        <h2>Get In The Group Chat</h2>
+        <p id="ctaCopy">A fresh recap drops every Tuesday at 6 AM: every score, every award, and the season power rankings.</p>
+      </div>
+      <a class="btn btn-gold" href="https://stats.gooncocks.com" target="_blank" rel="noopener">Open The Latest Recap →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-row">
+    <div class="foot-brand"><span class="crest" data-logo></span>GOONCOCKS</div>
+    <p>SPU Peacocks Fantasy Football. Weekly recaps, rankings and receipts at <a href="https://stats.gooncocks.com" style="color:var(--gold); text-decoration:none">stats.gooncocks.com</a>.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var SITE = 'https://stats.gooncocks.com';
+  var LOGO = SITE + '/gooncocks-logo.png';
+  var STAR = '<svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" fill="#101a2b"/><path d="M20 9l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.2-5.4 3.2 1.3-6-4.6-4.1 6.1-.6z" fill="#e7a33b"/></svg>';
+  // Champions confirmed by the commissioner; Yahoo history (history.json via
+  // landing.json) replaces this once the "history" action has run.
+  var KNOWN_CHAMPIONS = [
+    {season:'2025', champion:'Sam'}, {season:'2024', champion:'Sam'}, {season:'2023', champion:'Gabe'}
+  ];
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function slug(name){
+    return String(name).replace(/['’]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+  function el(tag, cls, text){
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function pad(n){ return (n < 10 ? '0' : '') + n; }
+  function pts(n){ return Number(n).toFixed(2); }
+
+  // Peacock crest everywhere it appears; falls back to the gold star if the image can't load.
+  document.querySelectorAll('[data-logo]').forEach(function(box){
+    var img = new Image();
+    img.alt = box.classList.contains('peacock') ? 'The Gooncocks peacock' : '';
+    img.onerror = function(){ box.innerHTML = STAR; };
+    img.src = LOGO;
+    box.appendChild(img);
+  });
+
+  function setFace(box, name){
+    box.textContent = name ? name.charAt(0).toUpperCase() : '';
+    if (!name) return;
+    var img = new Image();
+    img.alt = name;
+    img.onerror = function(){ img.remove(); };
+    img.src = SITE + '/photos/' + slug(name) + '.jpg';
+    box.appendChild(img);
+  }
+
+  // mobile nav
+  var btn = document.getElementById('navToggle');
+  var nav = document.getElementById('navLinks');
+  btn.addEventListener('click', function(){
+    var open = nav.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  nav.querySelectorAll('a').forEach(function(a){
+    a.addEventListener('click', function(){ nav.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); });
+  });
+
+  function renderHero(d){
+    document.getElementById('seasonLabel').textContent = d.season;
+    document.getElementById('archiveSeason').textContent = d.season;
+    var status = document.getElementById('status');
+    status.innerHTML = '';
+    status.appendChild(el('i'));
+    var s = el('span');
+    s.appendChild(el('b', null, 'Week ' + d.week + ' in the books'));
+    s.appendChild(document.createTextNode(' · Next recap Tuesday, 6 AM'));
+    status.appendChild(s);
+    document.getElementById('recapBtn').textContent = 'See The Week ' + d.week + ' Recap';
+    document.getElementById('ctaCopy').textContent =
+      'Week ' + d.week + ' is final. Week ' + (d.week + 1) + ' drops Tuesday at 6 AM: every score, every award, and the season power rankings.';
+    var b = d.blowout;
+    if (b){
+      document.getElementById('mTitle').textContent = 'Week ' + d.week + ' · Biggest Blowout';
+      document.getElementById('mWinner').textContent = b.winner;
+      document.getElementById('mWinnerScore').textContent = pts(b.winner_score);
+      document.getElementById('mLoser').textContent = b.loser;
+      document.getElementById('mLoserScore').textContent = pts(b.loser_score);
+      document.getElementById('mFoot').textContent = pts(b.margin) + '-point margin. That wasn\'t a matchup, that was a statement.';
+      document.getElementById('matchupCard').hidden = false;
+    }
+  }
+
+  function renderTicker(standings){
+    var track = document.getElementById('tickerTrack');
+    track.innerHTML = '';
+    if (!standings || !standings.length){
+      track.appendChild(el('span', null, 'Standings update every Tuesday at 6 AM'));
+      track.style.animation = 'none';
+      return;
+    }
+    for (var loop = 0; loop < 2; loop++){
+      standings.forEach(function(t, i){
+        var s = el('span', t.wins > t.losses ? 'up' : '');
+        s.appendChild(el('span', 'rank', pad(i + 1) + ' '));
+        s.appendChild(document.createTextNode(t.name + ' '));
+        s.appendChild(el('span', 'rec', t.wins + '-' + t.losses));
+        track.appendChild(s);
+      });
+    }
+  }
+
+  function renderArchive(weeks, current){
+    var rail = document.getElementById('rail');
+    if (!weeks || !weeks.length) return;
+    rail.innerHTML = '';
+    weeks.slice().sort(function(a, b){ return b.week - a.week; }).forEach(function(w){
+      var a = el('a', 'ticket');
+      a.href = SITE + '/weeks/week-' + w.week + '.html';
+      a.target = '_blank'; a.rel = 'noopener';
+      var wk = el('div', 'wk', 'WEEK ' + pad(w.week));
+      if (w.week === current) wk.appendChild(el('em', null, 'LATEST'));
+      a.appendChild(wk);
+      a.appendChild(el('div', 'divider'));
+      a.appendChild(el('div', 'lbl', 'Goon of the Week'));
+      a.appendChild(el('div', 'champ', w.goon));
+      a.appendChild(el('div', 'champ-score num', pts(w.score)));
+      a.appendChild(el('div', 'go', 'Open recap →'));
+      rail.appendChild(a);
+    });
+    if (current < 17){
+      var next = el('div', 'ticket tbd');
+      next.appendChild(el('div', 'wk', 'WEEK ' + pad(current + 1)));
+      next.appendChild(el('div', 'divider'));
+      next.appendChild(el('div', 'champ', 'Up next'));
+      next.appendChild(el('div', 'go', 'Drops Tuesday, 6 AM'));
+      rail.insertBefore(next, rail.firstChild);
+    }
+  }
+
+  var champTimer = null;
+  function renderChampions(list, fromYahoo){
+    var champs = (list && list.length ? list : KNOWN_CHAMPIONS).slice()
+      .sort(function(a, b){ return String(b.season).localeCompare(String(a.season)); });
+    document.getElementById('champNote').textContent = fromYahoo
+      ? 'Every season since the league started, straight from Yahoo.'
+      : 'Pulling the full league history from Yahoo.';
+    var slide = document.getElementById('champSlide');
+    var dots = document.getElementById('champDots');
+    dots.innerHTML = '';
+    var idx = 0;
+    function paint(){
+      var c = champs[idx];
+      setFace(document.getElementById('champFace'), c.champion);
+      document.getElementById('champYear').textContent = c.season;
+      document.getElementById('champName').textContent = String(c.champion).toUpperCase();
+      document.getElementById('champTeam').textContent = c.champion_team || '';
+      var runner = document.getElementById('champRunner');
+      runner.hidden = !c.runner_up;
+      document.getElementById('champRunnerName').textContent = c.runner_up || '';
+      Array.prototype.forEach.call(dots.children, function(d, i){ d.classList.toggle('active', i === idx); });
+    }
+    function show(i){
+      idx = i;
+      if (reduce){ paint(); return; }
+      slide.classList.add('out');
+      setTimeout(function(){ paint(); slide.classList.remove('out'); }, 200);
+    }
+    function restart(){
+      if (champTimer) clearInterval(champTimer);
+      if (!reduce && champs.length > 1) champTimer = setInterval(function(){ show((idx + 1) % champs.length); }, 3600);
+    }
+    champs.forEach(function(c, i){
+      var b = el('button');
+      b.setAttribute('aria-label', 'Show the ' + c.season + ' champion');
+      b.addEventListener('click', function(){ show(i); restart(); });
+      dots.appendChild(b);
+    });
+    paint();
+    restart();
+  }
+
+  renderTicker(null);
+  renderChampions(null, false);
+  fetch('landing.json', {cache: 'no-cache'})
+    .then(function(r){ if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(d){
+      renderHero(d);
+      renderTicker(d.standings);
+      renderArchive(d.weeks, d.week);
+      if (d.champions && d.champions.length) renderChampions(d.champions, true);
+    })
+    .catch(function(){ /* keeps the resting state: no live data until the first Tuesday publish */ });
+})();
+</script>
