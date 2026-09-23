@@ -15,6 +15,7 @@ logo image) ready to upload somewhere public - see lambda_function.py's
 _publish_page for the AWS side of that.
 """
 import re
+from html import escape
 
 from awards import compute_awards, identity, rank_teams
 
@@ -364,6 +365,12 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     rank_rows = "".join(_rank_row_html(entry, idx, max_score) for idx, entry in enumerate(rankings))
     game_cards = "".join(_game_card_html(idx, m, is_sample) for idx, m in enumerate(matchups))
     extra_cards = _extra_award_cards(extras or {})
+    # Caption shown under the peacock when the link is texted or posted.
+    link_preview = escape(
+        f"Goon of the Week: {_display_name(g['team'], g.get('manager'))} ({g['score']:.2f}). "
+        f"Cock of the Week: {_display_name(c['team'], c.get('manager'))} ({c['score']:.2f}).",
+        quote=True,
+    )
     bonus_html = _bonus_note_html(bonus_note)
     standings_section = _standings_section_html(standings, week)
     standings_nav = '<a href="#standings">Power rankings</a>' if standings else ""
@@ -376,6 +383,15 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
 <meta name="theme-color" content="#0B1220">
 <meta name="description" content="Gooncocks weekly fantasy football recap. The winners, the heartbreaks, and the receipts.">
 <title>Gooncocks | Week {week} Recap</title>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Gooncocks">
+<meta property="og:title" content="Gooncocks | Week {week} Recap">
+<meta property="og:description" content="{link_preview}">
+<meta property="og:image" content="{LOGO_URL}">
+<meta property="og:image:alt" content="The Gooncocks peacock">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="{LOGO_URL}">
+<link rel="apple-touch-icon" href="{LOGO_URL}">
 {STYLE_BLOCK}
 </head>
 <body>
