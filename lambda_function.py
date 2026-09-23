@@ -449,20 +449,25 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
     s3 = boto3.client("s3")
 
     standings_ranked = extras = None
+    is_latest = True
     if not is_sample:
         standings = _standings_with_week(s3, bucket, week, matchups)
         _save_standings(s3, bucket, standings)
         standings_ranked = power_rankings(standings)
         extras = compute_extra_awards(matchups, standings=standings, rosters=rosters, transactions=transactions)
+        latest = max(int(k) for k in standings["weeks"] if str(k).isdigit())
+        is_latest = int(week) >= latest
 
     html = render_html(
         week, matchups, is_sample=is_sample, bonus_note=bonus_note, standings=standings_ranked, extras=extras,
     )
-    s3.put_object(Bucket=bucket, Key="recap.html", Body=html.encode("utf-8"), ContentType="text/html")
-
     website_url = os.environ.get("S3_WEBSITE_URL")
     page_url = f"{website_url.rstrip('/')}/recap.html" if website_url else f"s3://{bucket}/recap.html"
-    print(f"Published to {page_url}")
+    if is_latest:
+        s3.put_object(Bucket=bucket, Key="recap.html", Body=html.encode("utf-8"), ContentType="text/html")
+        print(f"Published to {page_url}")
+    else:
+        print(f"Week {week} is older than week {latest}, so the main recap page keeps showing week {latest}.")
 
     archive_url = None
     if not is_sample:
@@ -479,7 +484,7 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
             print("Skipped updating the landing page this run - see the error above.")
 
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
-    if webhook_url:
+    if webhook_url and is_latest:
         teaser = build_teaser(week, compute_awards(matchups), page_url=page_url)
         post_message(webhook_url, teaser)
         print("Posted teaser to Discord.")

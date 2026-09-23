@@ -207,38 +207,55 @@
   .ticket .go{font-size:10.5px; color:var(--fog); margin-top:12px; letter-spacing:.5px; text-transform:uppercase}
   .empty-note{font-size:13.5px; color:var(--fog); font-style:italic}
 
-  /* ---------- champion wall ---------- */
-  .champ-wall{
+  /* ---------- champion wall (hanging frames) ---------- */
+  .hall{
+    position:relative; border:1px solid var(--hairline); border-radius:16px; overflow:hidden;
+    padding:34px 20px 36px;
     background:
-      radial-gradient(circle 1.5px at 20px 20px, #ffffff10 1.5px, transparent 0) 0 0/40px 40px,
-      var(--slate);
-    border:1px solid var(--hairline); border-radius:16px; padding:52px 20px 40px;
-    display:flex; flex-direction:column; align-items:center; text-align:center;
+      repeating-linear-gradient(90deg, #ffffff05 0 1px, transparent 1px 64px),
+      linear-gradient(180deg, #121d31, var(--slate) 60%);
   }
-  .pin{width:10px; height:10px; border-radius:50%; background:var(--gold); box-shadow:0 2px 6px rgba(0,0,0,.5); margin-bottom:-2px; position:relative; z-index:2}
-  .champ-card{
-    background:var(--ink); border:1px solid var(--hairline); border-radius:12px;
-    padding:30px 36px; width:300px; max-width:100%;
-    box-shadow:0 14px 30px -12px rgba(0,0,0,.6);
+  .hall:before{
+    content:''; position:absolute; left:0; right:0; top:0; height:12px;
+    background:linear-gradient(180deg, #2b3752, #1a2439); border-bottom:1px solid #0006;
   }
-  .champ-slide{transition:opacity .35s ease; display:flex; flex-direction:column; align-items:center}
-  .champ-slide.out{opacity:0}
-  .face{
-    position:relative; width:96px; height:96px; border-radius:50%; overflow:hidden; flex:none;
-    background:var(--slate); border:2px solid var(--gold); margin-bottom:16px;
-    display:grid; place-items:center;
-    font-family:'Anton','Arial Narrow',sans-serif; font-size:36px; color:var(--gold);
+  .hall-frames{display:flex; flex-wrap:wrap; justify-content:center; gap:30px 40px}
+  .hang{
+    margin:0; width:176px; max-width:100%; display:flex; flex-direction:column; align-items:center;
+    transform-origin:50% 0; transform:rotate(var(--tilt,0deg));
+    transition:transform .5s cubic-bezier(.3,1.6,.5,1);
   }
-  .face img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
-  .champ-year{font-family:'Anton','Arial Narrow',sans-serif; font-size:15px; color:var(--gold); letter-spacing:2px}
-  .champ-name{font-family:'Anton','Arial Narrow',sans-serif; font-size:40px; margin-top:4px; line-height:1}
-  .champ-team{font-size:13px; color:var(--fog); margin-top:6px; min-height:1.5em}
-  .champ-runner{font-size:11.5px; color:var(--fog); margin-top:10px; letter-spacing:.4px}
-  .champ-runner b{color:var(--paper); font-weight:600}
-  .champ-dots{display:flex; gap:8px; margin-top:22px; justify-content:center; flex-wrap:wrap}
-  .champ-dots button{width:9px; height:9px; border-radius:50%; border:none; background:var(--hairline); cursor:pointer; padding:0; transition:background .2s}
-  .champ-dots button.active{background:var(--gold)}
-  .champ-note{font-size:11.5px; color:var(--fog); font-style:italic; margin-top:24px; max-width:44ch}
+  .hang:hover{transform:rotate(0deg)}
+  .hanger{width:120px; height:46px; display:block; margin-bottom:-4px; overflow:visible}
+  .hanger path{stroke:#9c8456; stroke-width:1.4; fill:none}
+  .hanger circle{fill:var(--gold)}
+  .frame{
+    width:100%; padding:9px; border-radius:3px;
+    background:linear-gradient(145deg, #f3c46b, #b9812f 45%, #e7a33b 70%, #8f6424);
+    box-shadow:0 20px 30px -14px rgba(0,0,0,.85), inset 0 0 0 1px rgba(0,0,0,.25);
+  }
+  .mat{background:var(--ink); padding:11px 11px 10px; box-shadow:inset 0 0 0 1px rgba(0,0,0,.5)}
+  .portrait{
+    position:relative; aspect-ratio:1; width:100%; max-width:100%; overflow:hidden;
+    background:var(--slate); display:grid; place-items:center;
+    font-family:'Anton','Arial Narrow',sans-serif; font-size:60px; color:var(--gold);
+  }
+  .portrait img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
+  .plaque{
+    margin-top:10px; padding:6px 8px 7px; border-radius:2px; text-align:center;
+    background:linear-gradient(180deg, #e2bd72, #a97a30); color:#1b1408;
+    display:flex; flex-direction:column; gap:2px;
+  }
+  .plaque .yr{font-family:'Anton','Arial Narrow',sans-serif; font-size:13px; letter-spacing:2px}
+  .plaque .nm{font-family:'Anton','Arial Narrow',sans-serif; font-size:22px; line-height:1; text-transform:uppercase; letter-spacing:.5px}
+  .plaque .tm{font-size:10.5px; font-weight:600; min-height:1.3em; overflow-wrap:anywhere}
+  .runner{font-size:11.5px; color:var(--fog); margin:12px 0 0; text-align:center}
+  .runner b{color:var(--paper); font-weight:600}
+  .hang.open .frame{background:none; border:2px dashed var(--hairline); box-shadow:none}
+  .hang.open .mat{background:transparent; box-shadow:none}
+  .hang.open .portrait{background:transparent; color:var(--hairline)}
+  .hang.open .plaque{background:transparent; color:var(--fog); border:1px dashed var(--hairline)}
+  .champ-note{font-size:11.5px; color:var(--fog); font-style:italic; margin:30px auto 0; max-width:44ch; text-align:center}
 
   /* ---------- award categories ---------- */
   .award-groups{display:grid; grid-template-columns:1fr 1fr; gap:24px 56px}
@@ -291,8 +308,8 @@
     <nav class="links" id="navLinks">
       <a href="#money">The Money</a>
       <a href="#archive">Archive</a>
-      <a href="#champions">Champions</a>
       <a href="#awards">Award Categories</a>
+      <a href="#champions">Champions</a>
       <a class="stats-link" href="https://stats.gooncocks.com" target="_blank" rel="noopener">Stats →</a>
     </nav>
   </div>
@@ -357,27 +374,6 @@
     <div class="rail" id="rail"><p class="empty-note">Past weeks show up here after each Tuesday recap.</p></div>
   </section>
 
-  <section id="champions">
-    <div class="sec-head">
-      <div><p class="eyebrow" style="margin-bottom:8px">The Hall</p><h2>Champion Wall</h2></div>
-      <span class="tag">Past Champions</span>
-    </div>
-    <div class="champ-wall">
-      <div class="pin"></div>
-      <div class="champ-card">
-        <div id="champSlide" class="champ-slide">
-          <div class="face" id="champFace"></div>
-          <div class="champ-year" id="champYear"></div>
-          <div class="champ-name" id="champName"></div>
-          <div class="champ-team" id="champTeam"></div>
-          <div class="champ-runner" id="champRunner" hidden>Runner-up: <b id="champRunnerName"></b></div>
-        </div>
-        <div class="champ-dots" id="champDots"></div>
-      </div>
-      <p class="champ-note" id="champNote">Pulling the full league history from Yahoo.</p>
-    </div>
-  </section>
-
   <section id="awards">
     <div class="sec-head">
       <div><p class="eyebrow" style="margin-bottom:8px">How The Hardware Is Earned</p><h2>Award Categories</h2></div>
@@ -411,13 +407,24 @@
     </div>
   </section>
 
+  <section id="champions">
+    <div class="sec-head">
+      <div><p class="eyebrow" style="margin-bottom:8px">The Hall</p><h2>Champion Wall</h2></div>
+      <span class="tag" id="champTag">Past Champions</span>
+    </div>
+    <div class="hall">
+      <div class="hall-frames" id="hallFrames"></div>
+      <p class="champ-note" id="champNote">Pulling the full league history from Yahoo.</p>
+    </div>
+  </section>
+
   <section>
     <div class="cta-band">
       <div>
         <h2>Get In The Group Chat</h2>
         <p id="ctaCopy">A fresh recap drops every Tuesday at 6 AM: every score, every award, and the season power rankings.</p>
       </div>
-      <a class="btn btn-gold" href="https://stats.gooncocks.com" target="_blank" rel="noopener">Open The Latest Recap →</a>
+      <a class="btn btn-gold" id="ctaBtn" href="https://stats.gooncocks.com" target="_blank" rel="noopener">Open The Latest Recap →</a>
     </div>
   </section>
 
@@ -498,7 +505,10 @@
     s.appendChild(el('b', null, 'Week ' + d.week + ' in the books'));
     s.appendChild(document.createTextNode(' · Next recap Tuesday, 6 AM'));
     status.appendChild(s);
-    document.getElementById('recapBtn').textContent = 'See The Week ' + d.week + ' Recap';
+    var recapBtn = document.getElementById('recapBtn');
+    recapBtn.textContent = 'See The Week ' + d.week + ' Recap';
+    recapBtn.href = SITE + '/weeks/week-' + d.week + '.html';
+    document.getElementById('ctaBtn').href = recapBtn.href;
     document.getElementById('ctaCopy').textContent =
       'Week ' + d.week + ' is final. Week ' + (d.week + 1) + ' drops Tuesday at 6 AM: every score, every award, and the season power rankings.';
     var b = d.blowout;
@@ -562,57 +572,60 @@
     }
   }
 
-  var champTimer = null;
-  function renderChampions(list, fromYahoo){
+  var TILTS = [-2, 1.5, -1, 2, -1.5, 1];
+  function frame(opts, i){
+    var fig = el('figure', 'hang' + (opts.open ? ' open' : ''));
+    fig.style.setProperty('--tilt', TILTS[i % TILTS.length] + 'deg');
+    fig.insertAdjacentHTML('beforeend',
+      '<svg class="hanger" viewBox="0 0 120 46" aria-hidden="true"><path d="M60 5 L12 46 M60 5 L108 46"/><circle cx="60" cy="5" r="4"/></svg>');
+    var fr = el('div', 'frame');
+    var mat = el('div', 'mat');
+    var portrait = el('div', 'portrait');
+    if (opts.open) portrait.textContent = '?';
+    else setFace(portrait, opts.name);
+    mat.appendChild(portrait);
+    var plaque = el('figcaption', 'plaque');
+    plaque.appendChild(el('span', 'yr', opts.season));
+    plaque.appendChild(el('span', 'nm', opts.open ? 'To be decided' : opts.name));
+    plaque.appendChild(el('span', 'tm', opts.team || ''));
+    mat.appendChild(plaque);
+    fr.appendChild(mat);
+    fig.appendChild(fr);
+    if (opts.runner){
+      var r = el('p', 'runner', 'Runner-up ');
+      r.appendChild(el('b', null, opts.runner));
+      fig.appendChild(r);
+    }
+    return fig;
+  }
+
+  function renderChampions(list, fromYahoo, season){
     var champs = (list && list.length ? list : KNOWN_CHAMPIONS).slice()
       .sort(function(a, b){ return String(b.season).localeCompare(String(a.season)); });
+    var wall = document.getElementById('hallFrames');
+    wall.innerHTML = '';
+    var i = 0;
+    if (season && !champs.some(function(c){ return String(c.season) === String(season); })){
+      wall.appendChild(frame({open: true, season: String(season), team: 'Season in progress'}, i++));
+    }
+    champs.forEach(function(c){
+      wall.appendChild(frame({season: c.season, name: c.champion, team: c.champion_team, runner: c.runner_up}, i++));
+    });
+    document.getElementById('champTag').textContent = champs.length + (champs.length === 1 ? ' Champion' : ' Champions');
     document.getElementById('champNote').textContent = fromYahoo
       ? 'Every season since the league started, straight from Yahoo.'
       : 'Pulling the full league history from Yahoo.';
-    var slide = document.getElementById('champSlide');
-    var dots = document.getElementById('champDots');
-    dots.innerHTML = '';
-    var idx = 0;
-    function paint(){
-      var c = champs[idx];
-      setFace(document.getElementById('champFace'), c.champion);
-      document.getElementById('champYear').textContent = c.season;
-      document.getElementById('champName').textContent = String(c.champion).toUpperCase();
-      document.getElementById('champTeam').textContent = c.champion_team || '';
-      var runner = document.getElementById('champRunner');
-      runner.hidden = !c.runner_up;
-      document.getElementById('champRunnerName').textContent = c.runner_up || '';
-      Array.prototype.forEach.call(dots.children, function(d, i){ d.classList.toggle('active', i === idx); });
-    }
-    function show(i){
-      idx = i;
-      if (reduce){ paint(); return; }
-      slide.classList.add('out');
-      setTimeout(function(){ paint(); slide.classList.remove('out'); }, 200);
-    }
-    function restart(){
-      if (champTimer) clearInterval(champTimer);
-      if (!reduce && champs.length > 1) champTimer = setInterval(function(){ show((idx + 1) % champs.length); }, 3600);
-    }
-    champs.forEach(function(c, i){
-      var b = el('button');
-      b.setAttribute('aria-label', 'Show the ' + c.season + ' champion');
-      b.addEventListener('click', function(){ show(i); restart(); });
-      dots.appendChild(b);
-    });
-    paint();
-    restart();
   }
 
   renderTicker(null);
-  renderChampions(null, false);
+  renderChampions(null, false, document.getElementById('seasonLabel').textContent);
   fetch('landing.json', {cache: 'no-cache'})
     .then(function(r){ if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function(d){
       renderHero(d);
       renderTicker(d.standings);
       renderArchive(d.weeks, d.week);
-      if (d.champions && d.champions.length) renderChampions(d.champions, true);
+      renderChampions(d.champions, !!(d.champions && d.champions.length), d.season);
     })
     .catch(function(){ /* keeps the resting state: no live data until the first Tuesday publish */ });
 })();
