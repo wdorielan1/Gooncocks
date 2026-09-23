@@ -20,6 +20,7 @@ from html import escape
 from awards import compute_awards, identity, rank_teams
 
 LOGO_URL = "https://stats.gooncocks.com/gooncocks-logo.png"
+HOME_URL = "https://gooncocks.com"
 
 # Sad/losing peacock artwork that peeks in on the right side of the Cock
 # of the Week shame banner - same visual treatment as LOGO_URL's peacock
@@ -75,6 +76,9 @@ STYLE_BLOCK = """
   .brand small{display:block;font-family:'Work Sans',sans-serif;font-size:10px;letter-spacing:1.8px;color:var(--muted);margin-top:7px}
   nav{display:flex;gap:30px;font-size:14px;color:var(--muted)}
   nav a:hover,nav .active{color:var(--gold)}
+  nav{align-items:center}
+  nav a.home-link{color:var(--bg);background:var(--gold);padding:7px 14px;border-radius:100px;font-weight:600;white-space:nowrap}
+  nav a.home-link:hover{background:#f0b458;color:var(--bg)}
   .season{font-size:12px;letter-spacing:1px;color:var(--muted)}
   .season span,.slash{margin:0 12px;color:#4a5770}
   main{max-width:1328px;padding:0 20px;margin:auto}
@@ -415,8 +419,8 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
 </head>
 <body>
 <header class="masthead">
-  <a class="brand" href="#"><img src="{LOGO_URL}" alt="Gooncocks peacock logo"><span>GOONCOCKS<small>FANTASY FOOTBALL LEAGUE</small></span></a>
-  <nav aria-label="Recap sections"><a class="active" href="#awards">The recap</a><a href="#rankings">Weekly rankings</a>{standings_nav}<a href="#scoreboard">Scoreboard</a></nav>
+  <a class="brand" href="{HOME_URL}"><img src="{LOGO_URL}" alt="Gooncocks peacock logo"><span>GOONCOCKS<small>FANTASY FOOTBALL LEAGUE</small></span></a>
+  <nav aria-label="Recap sections"><a class="active" href="#awards">The recap</a><a href="#rankings">Weekly rankings</a>{standings_nav}<a href="#scoreboard">Scoreboard</a><a class="home-link" href="{HOME_URL}">&larr; Home</a></nav>
   <span class="season">2026 SEASON <span>/</span> WEEK {week:02d}</span>
 </header>
 <main>
@@ -466,7 +470,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
   </section>
 
   <footer>
-    <a class="footer-brand" href="#">GOONCOCKS<span>&#9819;</span></a>
+    <a class="footer-brand" href="{HOME_URL}">GOONCOCKS<span>&#9819;</span></a>
     <p>Recap computed automatically from Yahoo Fantasy Sports data by an AWS Lambda function.<br>Posted to Discord and hosted at stats.gooncocks.com.</p>
     <span>BUILT FOR THE GROUP CHAT.</span>
   </footer>
