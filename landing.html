@@ -122,8 +122,9 @@
   }
   @media (max-width:860px){
     .hero{grid-template-columns:minmax(0,1fr)}
-    .hero-art{order:-1; min-height:0; aspect-ratio:975/620; max-height:440px; max-width:100%}
+    .hero-art{order:-1; min-height:0}
     .hero-art img{
+      position:static; display:block; width:100%; height:auto; max-height:440px;
       object-position:50% 25%;
       -webkit-mask-image:linear-gradient(180deg, #000 72%, transparent); mask-image:linear-gradient(180deg, #000 72%, transparent);
     }
