@@ -410,6 +410,8 @@ def _publish_landing(s3, bucket, week, matchups, standings):
     data = _landing_data(week, matchups, standings, champions, previous)
     _put(s3, bucket, "landing.json", json.dumps(data), "application/json")
     _put(s3, bucket, "landing.html", _landing_page_html(), "text/html")
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "landing-hero.webp"), "rb") as f:
+        _put(s3, bucket, "landing-hero.webp", f.read(), "image/webp")
     print("Updated the landing page (landing.html + landing.json).")
 
 

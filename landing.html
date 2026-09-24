@@ -86,67 +86,63 @@
     }
   }
 
-  /* ---------- hero ---------- */
-  .hero{position:relative; overflow:hidden; padding-block:0}
-  .hero-flag{
-    position:absolute; inset:0; z-index:-1;
-    background:
-      linear-gradient(115deg, transparent 62%, var(--ember-soft) 62.4%, var(--ember-soft) 63%, transparent 63.4%),
-      linear-gradient(115deg, transparent 70%, var(--gold-soft) 70.4%, var(--gold-soft) 71%, transparent 71.4%);
+  /* ---------- hero (banner) ---------- */
+  .hero{
+    --cream:#f3ecdf; --navy:#0f1b33; --gold-ink:#d4960f;
+    display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); align-items:stretch;
+    padding-block:0; overflow:hidden; color:var(--navy);
+    background:radial-gradient(ellipse 70% 90% at 20% 40%, #fbf7ee, transparent 70%), var(--cream);
   }
-  .hero-inner{
-    max-width:1180px; margin:0 auto; padding:72px 20px 48px;
-    display:grid; grid-template-columns:1fr auto; gap:48px; align-items:center;
-  }
-  .hero h1{font-size:clamp(50px,8.4vw,104px)}
-  .hero h1 .accent{color:var(--gold); display:block; font-size:.52em; letter-spacing:2px; margin-top:10px}
-  .hero p.lede{color:var(--fog); font-size:16.5px; max-width:50ch; margin:22px 0 22px}
-  .status{
-    display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;
-    font-size:12px; font-weight:600; letter-spacing:.6px; text-transform:uppercase;
-    border:1px solid var(--hairline); border-radius:100px; padding:7px 14px; margin-bottom:26px; color:var(--fog);
-  }
-  .status b{color:var(--paper)}
-  .status i{width:7px; height:7px; border-radius:50%; background:var(--gold); display:inline-block}
+  .hero-copy{padding:64px 28px 64px max(20px, calc((100vw - 1180px) / 2 + 20px)); align-self:center}
+  .hero .eyebrow{color:#a86f0c}
+  .hero h1{font-size:clamp(52px,7.2vw,112px); color:var(--navy); line-height:.88}
+  .hero h1 .accent{display:block; color:var(--gold-ink); font-size:.56em; letter-spacing:1px; margin-top:8px}
+  .hero p.lede{color:#26324a; font-size:17px; max-width:44ch; margin:22px 0 28px}
   .cta-row{display:flex; flex-wrap:wrap; gap:12px}
   .btn{
     display:inline-flex; align-items:center; gap:8px; padding:14px 24px;
     font-weight:700; font-size:13.5px; text-decoration:none; border-radius:100px;
-    transition:transform .15s, background .15s; text-transform:uppercase; letter-spacing:.5px;
+    transition:transform .15s, background .15s, color .15s; text-transform:uppercase; letter-spacing:.5px;
   }
   .btn:hover{transform:translateY(-1px)}
   .btn-gold{background:var(--gold); color:var(--ink)}
   .btn-gold:hover{background:#f0b458}
   .btn-ghost{border:1.5px solid var(--hairline); color:var(--paper)}
   .btn-ghost:hover{border-color:var(--gold); color:var(--gold)}
-  .hero-meta{display:flex; gap:28px; flex-wrap:wrap; font-size:12.5px; color:var(--fog); margin-top:34px}
-  .hero-meta strong{display:block; font-family:'Anton','Arial Narrow',sans-serif; font-size:26px; color:var(--paper); letter-spacing:.4px; font-weight:400}
+  .hero .btn{border-radius:10px; padding:15px 26px; font-size:14px}
+  .hero .btn-gold{background:#e3a21a; color:var(--navy)}
+  .hero .btn-gold:hover{background:#efb33a}
+  .hero .btn-ghost{border:2px solid var(--navy); color:var(--navy)}
+  .hero .btn-ghost:hover{background:var(--navy); color:var(--cream)}
+  .hero .btn:focus-visible{outline-color:var(--navy)}
+  .hero-art{position:relative; min-height:480px}
+  .hero-art img{
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:30% 30%;
+    -webkit-mask-image:linear-gradient(90deg, transparent, #000 22%); mask-image:linear-gradient(90deg, transparent, #000 22%);
+  }
+  @media (max-width:860px){
+    .hero{grid-template-columns:minmax(0,1fr)}
+    .hero-art{order:-1; min-height:0; aspect-ratio:975/620; max-height:440px; max-width:100%}
+    .hero-art img{
+      object-position:50% 25%;
+      -webkit-mask-image:linear-gradient(180deg, #000 72%, transparent); mask-image:linear-gradient(180deg, #000 72%, transparent);
+    }
+    .hero-copy{padding:4px 20px 44px}
+  }
 
-  .hero-side{display:flex; flex-direction:column; align-items:center; gap:24px}
-  .peacock{
-    position:relative; width:230px; height:230px; max-width:100%; border-radius:50%; overflow:hidden;
-    background:var(--slate); border:3px solid var(--gold);
-    box-shadow:0 0 0 8px var(--ink), 0 0 60px -6px rgba(231,163,59,.45);
+  /* ---------- this-week strip under the banner ---------- */
+  .scoreline{background:var(--ink); border-top:1px solid var(--hairline)}
+  .scoreline-row{
+    max-width:1180px; margin:0 auto; padding:16px 20px;
+    display:flex; align-items:center; justify-content:space-between; gap:14px 28px; flex-wrap:wrap;
   }
-  .peacock img, .peacock svg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
-  .matchup-card{
-    background:var(--slate); border:1px solid var(--hairline); border-radius:16px;
-    padding:20px 22px; width:280px; max-width:100%; box-shadow:0 20px 50px -20px rgba(0,0,0,.7);
-  }
-  .matchup-head{
-    display:flex; justify-content:space-between; align-items:center; gap:10px;
-    font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:var(--fog);
-    margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--hairline);
-  }
-  .matchup-head .final{color:var(--gold); font-weight:700}
-  .m-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding-block:8px}
-  .m-row + .m-row{border-top:1px solid #ffffff08}
-  .m-who{font-size:14px; font-weight:600}
-  .m-row.win .m-who{color:var(--gold)}
-  .m-score{font-family:'Anton','Arial Narrow',sans-serif; font-size:22px; color:var(--fog)}
-  .m-row.win .m-score{color:var(--gold)}
-  .matchup-foot{font-size:11px; color:var(--fog); margin-top:12px; padding-top:12px; border-top:1px dashed var(--hairline)}
-  @media (max-width:800px){ .hero-inner{grid-template-columns:1fr; padding-top:48px} .peacock{width:180px; height:180px} }
+  .status{display:inline-flex; align-items:center; gap:10px; font-size:12px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--fog)}
+  .status b{color:var(--paper)}
+  .status i{width:7px; height:7px; border-radius:50%; background:var(--gold); display:inline-block}
+  .blowout{margin:0; font-size:13.5px; color:var(--fog)}
+  .blowout .lbl{font-size:11px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; color:var(--gold); margin-right:6px}
+  .blowout b{color:var(--paper); font-weight:600}
+  .blowout .num{font-family:'Anton','Arial Narrow',sans-serif; color:var(--gold); font-size:17px; margin:0 4px}
 
   /* ---------- standings ticker ---------- */
   .ticker-band{
@@ -325,35 +321,28 @@
 
 <div id="top"></div>
 
-<section class="hero">
-  <div class="hero-flag" aria-hidden="true"></div>
-  <div class="hero-inner">
-    <div>
-      <p class="eyebrow">Saint Peter's University · <span id="seasonLabel">2026</span> Season</p>
-      <h1>SPU Peacocks<span class="accent">Fantasy Football League</span></h1>
-      <p class="lede">Ten managers. One group chat that never forgets. Every Tuesday one manager takes home $50, another gets publicly shamed, and the receipts get filed forever.</p>
-      <div class="status" id="status"><i></i><span>New recap every Tuesday, 6 AM</span></div>
-      <div class="cta-row">
-        <a class="btn btn-gold" id="recapBtn" href="https://stats.gooncocks.com" target="_blank" rel="noopener">See This Week's Recap</a>
-        <a class="btn btn-ghost" href="#archive">Past Weeks</a>
-      </div>
-      <div class="hero-meta">
-        <div><strong class="num">10</strong>Managers</div>
-        <div><strong class="num">$2,250</strong>In the pot</div>
-        <div><strong class="num">12</strong>Awards every week</div>
-      </div>
-    </div>
-    <div class="hero-side">
-      <div class="peacock" data-logo></div>
-      <div class="matchup-card" id="matchupCard" hidden>
-        <div class="matchup-head"><span id="mTitle">Biggest Blowout</span><span class="final">FINAL</span></div>
-        <div class="m-row win"><span class="m-who" id="mWinner"></span><span class="m-score num" id="mWinnerScore"></span></div>
-        <div class="m-row"><span class="m-who" id="mLoser"></span><span class="m-score num" id="mLoserScore"></span></div>
-        <div class="matchup-foot" id="mFoot"></div>
-      </div>
+<section class="hero" aria-labelledby="heroTitle">
+  <div class="hero-copy">
+    <p class="eyebrow">Saint Peter's University · <span id="seasonLabel">2026</span> Season</p>
+    <h1 id="heroTitle">SPU Peacocks<span class="accent">Fantasy Football League</span></h1>
+    <p class="lede">Ten managers. One group chat that never forgets. Every Tuesday one manager takes home $50, another gets publicly shamed, and the receipts get filed forever.</p>
+    <div class="cta-row">
+      <a class="btn btn-gold" id="recapBtn" href="https://stats.gooncocks.com" target="_blank" rel="noopener">See This Week's Recap</a>
+      <a class="btn btn-ghost" href="#archive">Past Weeks</a>
     </div>
   </div>
+  <div class="hero-art">
+    <img src="landing-hero.webp" width="975" height="741"
+         alt="The Gooncocks peacock in a gold crown and GOONCOCKS hoodie, holding a football in front of Saint Peter's University">
+  </div>
 </section>
+
+<div class="scoreline">
+  <div class="scoreline-row">
+    <div class="status" id="status"><i></i><span>New recap every Tuesday, 6 AM</span></div>
+    <p class="blowout" id="matchupCard" hidden><span class="lbl" id="mTitle">Biggest blowout</span><b id="mWinner"></b><span class="num" id="mWinnerScore"></span>over <b id="mLoser"></b><span class="num" id="mLoserScore"></span></p>
+  </div>
+</div>
 
 <div class="ticker-band" aria-label="Season standings">
   <div class="ticker-track" id="tickerTrack"></div>
@@ -472,7 +461,7 @@
   // Peacock crest everywhere it appears; falls back to the gold star if the image can't load.
   document.querySelectorAll('[data-logo]').forEach(function(box){
     var img = new Image();
-    img.alt = box.classList.contains('peacock') ? 'The Gooncocks peacock' : '';
+    img.alt = '';
     img.onerror = function(){ box.innerHTML = STAR; };
     img.src = LOGO;
     box.appendChild(img);
@@ -517,12 +506,11 @@
       'Week ' + d.week + ' is final. Week ' + (d.week + 1) + ' drops Tuesday at 6 AM: every score, every award, and the season power rankings.';
     var b = d.blowout;
     if (b){
-      document.getElementById('mTitle').textContent = 'Week ' + d.week + ' · Biggest Blowout';
+      document.getElementById('mTitle').textContent = 'Week ' + d.week + ' blowout';
       document.getElementById('mWinner').textContent = b.winner;
       document.getElementById('mWinnerScore').textContent = pts(b.winner_score);
       document.getElementById('mLoser').textContent = b.loser;
       document.getElementById('mLoserScore').textContent = pts(b.loser_score);
-      document.getElementById('mFoot').textContent = pts(b.margin) + '-point margin. That wasn\'t a matchup, that was a statement.';
       document.getElementById('matchupCard').hidden = false;
     }
   }
