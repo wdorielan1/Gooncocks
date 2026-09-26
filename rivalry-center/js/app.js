@@ -200,13 +200,20 @@
 
     $('fxNameA').textContent = name(s.a);
     $('fxNameB').textContent = name(s.b);
-    fitNames();
     $('fxTeamA').textContent = teamName(s.a);
     $('fxTeamB').textContent = teamName(s.b);
     setAvatar($('fxAvA'), s.a);
     setAvatar($('fxAvB'), s.b);
     $('fxWinsA').textContent = s.winsA;
     $('fxWinsB').textContent = s.winsB;
+    // Gold goes to whoever leads the series, on either side; a tie gets none.
+    var leadA = s.leader === s.a, leadB = s.leader === s.b;
+    $('fxWinsA').className = 'wa' + (leadA ? ' lead' : '');
+    $('fxWinsB').className = 'wb' + (leadB ? ' lead' : '');
+    $('fxAvA').className = 'av av-xl ' + (leadA ? 'av-gold' : 'av-blue');
+    $('fxAvB').className = 'av av-xl ' + (leadB ? 'av-gold' : 'av-blue');
+    $('barA').className = leadA ? 'gold' : 'blue';
+    $('barB').className = leadB ? 'gold' : leadA ? 'blue' : 'blue2';
     $('fxMeetings').textContent = s.meetings === 1 ? '1 meeting' : s.meetings + ' meetings' + (s.ties ? ' · ' + s.ties + (s.ties === 1 ? ' tie' : ' ties') : '');
     var total = s.meetings || 1;
     $('barA').style.width = (s.meetings ? s.winsA / total * 100 : 50) + '%';
@@ -234,6 +241,7 @@
       ? stat('Biggest victory', pts(s.biggest.margin) + ' pts', esc(name(s.biggest.winner)) + ' · ' + esc(when(s.biggest.game)))
       : stat('Biggest victory', '—', '', true);
     $('fxStats').innerHTML = leader + streak + playoff + closest + biggest;
+    fitNames(); // last, once the score's width is final
   }
 
   // ---------- spotlights ----------
@@ -385,7 +393,7 @@
           '<div><span class="nm">' + esc(name(id)) + '</span><b>' + pts(score) + '</b></div></div>';
       }
       return '<li class="rc"><div class="rc-when"><span>' + g.season + ' · ' + esc(gameLabel(g)) + '</span>' + chip + '</div>' +
-        '<div class="rc-body">' + sideHtml(s.a, A.mine, 'av-a') + sideHtml(s.b, A.theirs, 'av-b') +
+        '<div class="rc-body">' + sideHtml(s.a, A.mine, win === s.a ? 'av-gold' : 'av-blue') + sideHtml(s.b, A.theirs, win === s.b ? 'av-gold' : 'av-blue') +
         '<div class="rc-result"><span>' + (win ? esc(name(win)) + ' by ' + pts(margin) : 'Tie game') + '</span>' + tags.join('') + '</div></div></li>';
     }).join('');
     var more = $('moreBtn');
