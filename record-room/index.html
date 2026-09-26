@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07101f">
+<title>Gooncocks Record Room</title>
+<meta name="description" content="Every Gooncocks league record: highest scores, blowouts, streaks, titles and the records nobody wants.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Work+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="https://gooncocks.com" aria-label="Gooncocks home">
+      <img src="assets/gooncocks-logo.webp" alt="" width="52" height="52">
+      <span><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></span>
+    </a>
+    <nav class="nav" aria-label="Site">
+      <a href="https://stats.gooncocks.com/">This Week</a>
+      <a class="keep" href="https://stats.gooncocks.com/rivalries.html">Rivalries</a>
+      <a class="keep" href="https://stats.gooncocks.com/careers.html">Careers</a>
+      <a class="on" href="#top" aria-current="page">Record Room</a>
+      <a class="keep" href="https://gooncocks.com">Home</a>
+    </nav>
+    <span class="season-tag" id="seasonTag"></span>
+  </div>
+</header>
+
+<main class="page" id="top">
+  <section class="hero">
+    <div class="lights" aria-hidden="true"><i class="rig l"></i><i class="rig r"></i></div>
+    <div class="hero-head">
+      <div>
+        <p class="eyebrow">History has a scoreboard.</p>
+        <h1>The Record Room</h1>
+        <p class="tagline">Someone set it. Everyone is chasing it.</p>
+      </div>
+      <p class="source" id="sourceBadge"></p>
+    </div>
+    <form class="controls" id="controls" aria-label="Record filters">
+      <label class="ctl" for="seasonSel"><span class="ctl-k">Season</span><select id="seasonSel"></select></label>
+      <fieldset class="seg">
+        <legend class="sr-only">Game type</legend>
+        <input type="radio" name="gtype" id="typeRegular" value="regular" checked><label for="typeRegular">Regular season</label>
+        <input type="radio" name="gtype" id="typePlayoff" value="playoff"><label for="typePlayoff">Playoffs</label>
+        <input type="radio" name="gtype" id="typeBoth" value="both"><label for="typeBoth">Both</label>
+      </fieldset>
+      <label class="ctl" for="catSel"><span class="ctl-k">Category</span><select id="catSel">
+        <option value="all">All categories</option><option value="scoring">Scoring</option><option value="wins">Wins</option>
+        <option value="streaks">Streaks</option><option value="hardware">Hardware</option></select></label>
+      <label class="toggle" for="standardOnly"><input type="checkbox" id="standardOnly"> Standard scoring only</label>
+      <span class="coverage" id="coverage"></span>
+    </form>
+  </section>
+
+  <section class="featured" id="featured" aria-label="Featured records"></section>
+
+  <div class="main">
+    <section class="panel book" aria-labelledby="bookTitle">
+      <div class="book-head">
+        <h2 id="bookTitle">The all-time record book</h2>
+        <label class="search" for="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+          <input id="search" type="search" placeholder="Find a record or manager…" autocomplete="off"></label>
+      </div>
+      <div class="cats" role="tablist" aria-label="Record categories">
+        <button type="button" role="tab" data-cat="all">All</button>
+        <button type="button" role="tab" data-cat="scoring">Scoring</button>
+        <button type="button" role="tab" data-cat="wins">Wins</button>
+        <button type="button" role="tab" data-cat="streaks">Streaks</button>
+        <button type="button" role="tab" data-cat="hardware">Hardware</button>
+      </div>
+      <div class="scroll"><table class="records" id="recordTable"></table></div>
+      <button type="button" class="more" id="moreBtn" hidden></button>
+      <p class="fine" id="bookNote"></p>
+    </section>
+
+    <aside class="side" aria-label="Record spotlight">
+      <div class="side-head"><h2>Record spotlight</h2></div>
+      <section class="spot" id="spotlight" aria-live="polite"></section>
+      <section class="panel chall" aria-labelledby="challTitle">
+        <div class="side-head"><h2 id="challTitle">The closest challengers</h2></div>
+        <div class="scroll"><table class="ranks" id="challengers"></table></div>
+        <p class="fine">Select a row to see that performance.</p>
+      </section>
+    </aside>
+  </div>
+
+  <section class="unwanted" aria-labelledby="unwantedTitle">
+    <div class="sec-head"><h2 id="unwantedTitle">The records nobody wants</h2></div>
+    <div class="uw-grid" id="unwanted"></div>
+  </section>
+
+  <section class="rafters" aria-labelledby="raftersTitle">
+    <div class="sec-head"><h2 id="raftersTitle">Banners in the rafters</h2></div>
+    <p class="sec-sub">Every champion, from each season’s final Yahoo standings.</p>
+    <ol class="banners" id="banners"></ol>
+  </section>
+
+  <nav class="jump" aria-label="More history">
+    <a href="https://stats.gooncocks.com/careers.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3M12 14v4M8 21h8M9 18h6"/></svg>
+      <b>Career Center</b><span>Explore a manager’s complete story &rarr;</span></a>
+    <a href="https://stats.gooncocks.com/rivalries.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3 20c0-3 2.2-5 5-5s5 2 5 5M11 20c0-3 2.2-5 5-5s5 2 5 5"/></svg>
+      <b>Rivalry Center</b><span>Compare two managers &rarr;</span></a>
+  </nav>
+
+  <p class="fine foot-note" id="footNote"></p>
+</main>
+
+<footer class="foot">
+  <div class="foot-in">
+    <span class="foot-brand"><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></span>
+    <p>The numbers stay. The excuses expire.</p>
+  </div>
+</footer>
+
+<div class="modal" id="matchModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="matchTitle">
+    <button type="button" class="modal-x" id="matchClose" aria-label="Close">&times;</button>
+    <div id="matchBody"></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="copy-fallback" id="copyFallback" role="dialog" aria-labelledby="copyTitle" hidden>
+  <p id="copyTitle">Copy this record</p>
+  <textarea id="copyText" rows="7" readonly></textarea>
+  <button type="button" id="copyClose">Done</button>
+</div>
+
+<!-- DATA: the league history (a snapshot of the real Yahoo history).
+     To read a live history file instead, set the URL below. -->
+<script src="data/league-history.js"></script>
+<script>
+  // window.GOONCOCKS_HISTORY_URL = '/rivalry-history.json';
+</script>
+<!-- /DATA -->
+<script src="js/data.js"></script>
+<script src="js/records.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
