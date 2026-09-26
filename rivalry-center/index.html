@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07101f">
+<title>Gooncocks Rivalry Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Work+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="https://gooncocks.com" aria-label="Gooncocks home">
+      <img src="assets/peacock.webp" alt="" width="46" height="46">
+      <span><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></span>
+    </a>
+    <nav class="nav" aria-label="Site">
+      <a href="https://stats.gooncocks.com/">This Week</a>
+      <a href="https://stats.gooncocks.com/#awards">Awards</a>
+      <a href="https://stats.gooncocks.com/#matchups">Matchups</a>
+      <a class="on" href="#top" aria-current="page">Rivalries</a>
+      <a href="https://gooncocks.com/#archive">History</a>
+    </nav>
+    <span class="season-tag" id="seasonTag"></span>
+  </div>
+</header>
+
+<main class="page" id="top">
+  <section class="intro">
+    <div>
+      <p class="eyebrow">The league never forgets</p>
+      <h1>Rivalry Center</h1>
+      <p class="lede">Every matchup. Every grudge. Every receipt.</p>
+    </div>
+    <p class="source-badge" id="sourceBadge">Loading history…</p>
+  </section>
+
+  <form class="controls" id="controls" aria-label="Choose a rivalry">
+    <div class="pair">
+      <label class="pick pick-a" for="managerA">
+        <span class="pick-label">Manager</span>
+        <span class="av av-a" id="pickAvA" aria-hidden="true"></span>
+        <select id="managerA" name="managerA"></select>
+      </label>
+      <button type="button" class="swap" id="swapBtn" aria-label="Swap manager and opponent" title="Swap sides">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h14l-3-3M20 16H6l3 3"/></svg>
+      </button>
+      <label class="pick pick-b" for="managerB">
+        <span class="pick-label">Opponent</span>
+        <span class="av av-b" id="pickAvB" aria-hidden="true"></span>
+        <select id="managerB" name="managerB"></select>
+      </label>
+    </div>
+    <label class="pick pick-season" for="seasonSel">
+      <span class="pick-label">Season</span>
+      <select id="seasonSel" name="season"></select>
+    </label>
+    <fieldset class="seg">
+      <legend class="sr-only">Game type</legend>
+      <input type="radio" name="gameType" id="typeAll" value="all" checked><label for="typeAll">All games</label>
+      <input type="radio" name="gameType" id="typeRegular" value="regular"><label for="typeRegular">Regular season</label>
+      <input type="radio" name="gameType" id="typePlayoff" value="playoff"><label for="typePlayoff">Playoffs</label>
+    </fieldset>
+    <label class="toggle" for="consolation"><input type="checkbox" id="consolation" name="consolation"> Include consolation games</label>
+    <button type="button" class="share" id="shareBtn">Share rivalry
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16L16 8M9 8h7v7"/></svg>
+    </button>
+  </form>
+
+  <section class="feature" id="feature" aria-labelledby="fxHeadline">
+    <div class="rig rig-l" aria-hidden="true"></div>
+    <div class="rig rig-r" aria-hidden="true"></div>
+    <p class="fx-scope" id="fxScope"></p>
+    <div class="duel">
+      <div class="fighter fighter-a">
+        <span class="av av-a av-xl" id="fxAvA" aria-hidden="true"></span>
+        <div><h2 id="fxNameA"></h2><p class="team" id="fxTeamA"></p></div>
+      </div>
+      <div class="tally">
+        <p class="big" aria-live="polite"><span class="wa" id="fxWinsA"></span><span class="dash" aria-hidden="true"></span><span class="wb" id="fxWinsB"></span></p>
+        <p class="meetings" id="fxMeetings"></p>
+        <div class="bar" aria-hidden="true"><span class="bar-a" id="barA"></span><span class="bar-t" id="barT"></span><span class="bar-b" id="barB"></span></div>
+      </div>
+      <div class="fighter fighter-b">
+        <div><h2 id="fxNameB"></h2><p class="team" id="fxTeamB"></p></div>
+        <span class="av av-b av-xl" id="fxAvB" aria-hidden="true"></span>
+      </div>
+    </div>
+    <p class="headline" id="fxHeadline"></p>
+    <dl class="stats" id="fxStats"></dl>
+  </section>
+
+  <section class="spots" id="spots" aria-label="Rivalry spotlights"></section>
+
+  <div class="lower">
+    <section class="panel owns" aria-labelledby="ownsTitle">
+      <div class="panel-head"><h2 id="ownsTitle">Who owns who?</h2></div>
+      <p class="panel-sub">Each square is the row manager's record against the column manager. Brighter squares mean 65% or more of the games went one way. Pick one to open the full history.</p>
+      <div class="grid-wrap" id="gridWrap"><table class="owns-grid" id="grid"></table></div>
+      <div class="grid-caption" id="gridCaption" aria-live="polite"></div>
+      <ul class="legend" aria-label="Grid colors">
+        <li><i class="lg-win"></i>Winning record</li>
+        <li><i class="lg-even"></i>Even</li>
+        <li><i class="lg-loss"></i>Losing record</li>
+        <li><i class="lg-none"></i>No meetings</li>
+      </ul>
+    </section>
+
+    <section class="panel receipts" aria-labelledby="receiptsTitle">
+      <div class="panel-head"><h2 id="receiptsTitle">The receipts</h2></div>
+      <p class="panel-kicker" id="receiptsSub"></p>
+      <ol class="rc-list" id="receipts"></ol>
+      <button type="button" class="more" id="moreBtn" hidden></button>
+    </section>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="foot-in">
+    <span class="foot-brand"><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></span>
+    <p>History makes the rivalry.</p>
+    <p class="foot-note" id="footNote"></p>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="copy-fallback" id="copyFallback" role="dialog" aria-labelledby="copyFallbackTitle" hidden>
+  <p id="copyFallbackTitle">Copy this rivalry summary</p>
+  <textarea id="copyText" rows="7" readonly></textarea>
+  <button type="button" id="copyClose">Done</button>
+</div>
+
+<!-- League history. Demo data today; see README.md to swap in a Yahoo export. -->
+<script src="data/demo-history.js"></script>
+<script>
+  // To load a JSON export instead, uncomment and point at the file:
+  // window.GOONCOCKS_HISTORY_URL = 'data/history.json';
+</script>
+<script src="js/data.js"></script>
+<script src="js/rivalry.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
