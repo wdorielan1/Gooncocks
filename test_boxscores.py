@@ -62,28 +62,28 @@ check("only finished weeks are collected", sorted(league_history.box_weeks(seaso
 
 # ---- a full run
 yahoo = FakeYahoo()
-box, changed = league_history.fetch_boxscores(yahoo, season_file, None, time.time() + 60, log=lambda *a: None)
+box, changed, _ = league_history.fetch_boxscores(yahoo, season_file, None, time.time() + 60, log=lambda *a: None)
 check("fetches each finished week once", yahoo.calls == [1, 2], yahoo.calls)
 check("marks the season complete", box["complete"] and changed)
 again = FakeYahoo()
-box2, changed2 = league_history.fetch_boxscores(again, season_file, box, time.time() + 60, log=lambda *a: None)
+box2, changed2, _ = league_history.fetch_boxscores(again, season_file, box, time.time() + 60, log=lambda *a: None)
 check("a later run asks Yahoo for nothing", again.calls == [] and not changed2, again.calls)
 
 # ---- deadline: stops and resumes
 late = FakeYahoo()
-part, _ = league_history.fetch_boxscores(late, season_file, None, time.time() - 1, log=lambda *a: None)
+part, _, _ = league_history.fetch_boxscores(late, season_file, None, time.time() - 1, log=lambda *a: None)
 check("past the deadline nothing is fetched and it isn't complete", late.calls == [] and not part["complete"])
 
 # ---- a week Yahoo refuses is marked, not retried; a rate limit stops the run
 bad = FakeYahoo(fail_week=1)
-b1, _ = league_history.fetch_boxscores(bad, season_file, None, time.time() + 60, log=lambda *a: None)
+b1, _, _ = league_history.fetch_boxscores(bad, season_file, None, time.time() + 60, log=lambda *a: None)
 check("refused week is marked unavailable", "unavailable" in b1["weeks"]["1"] and "teams" in b1["weeks"]["2"])
 retry = FakeYahoo()
 league_history.fetch_boxscores(retry, season_file, b1, time.time() + 60, log=lambda *a: None)
 check("unavailable week isn't asked for again", retry.calls == [], retry.calls)
 slow = FakeYahoo(limit_week=1)
-b2, _ = league_history.fetch_boxscores(slow, season_file, None, time.time() + 60, log=lambda *a: None)
-check("rate limit stops the run without marking the week", slow.calls == [1] and "1" not in b2["weeks"] and not b2["complete"],
+b2, _, busy = league_history.fetch_boxscores(slow, season_file, None, time.time() + 60, log=lambda *a: None)
+check("rate limit stops the run without marking the week", busy and slow.calls == [1] and "1" not in b2["weeks"] and not b2["complete"],
       (slow.calls, b2["weeks"].keys()))
 check("server errors and network trouble count as temporary",
       league_history._temporary(RuntimeError("Yahoo returned HTTP 503: busy")) and league_history._temporary(TimeoutError("timed out"))
@@ -92,7 +92,7 @@ check("server errors and network trouble count as temporary",
 
 # ---- a different league for the year starts over
 other = FakeYahoo()
-b3, _ = league_history.fetch_boxscores(other, dict(season_file, league_key="400.l.2"), box, time.time() + 60, log=lambda *a: None)
+b3, _, _ = league_history.fetch_boxscores(other, dict(season_file, league_key="400.l.2"), box, time.time() + 60, log=lambda *a: None)
 check("saved file from another league is ignored", other.calls == [1, 2] and b3["league_key"] == "400.l.2")
 
 # ---- public file keyed by the history's game ids, "a" = managerA
@@ -120,6 +120,19 @@ week = lambda_function._YahooHistory("tok").box_week("400.l.1", 3, ["t.%d" % i f
 check("adapter returns every team", sorted(week) == sorted("t.%d" % i for i in range(1, 16)))
 check("adapter row shape", week["t.1"][0][:4] == ["WR", "Star t.1", "WR", "MIN"] and isinstance(week["t.1"][0][4], float), week["t.1"][0])
 check("points asked for 25 players at a time", sorted(asked) == [5, 25], asked)
+
+# ---- once Yahoo is busy, the Lambda stops asking for every other season too
+bucket = {}
+real_load, real_put = lambda_function._load_json, lambda_function._put
+lambda_function._load_json = lambda s3, b, k, d: json.loads(bucket[k]) if k in bucket else d
+lambda_function._put = lambda s3, b, k, body, ct: bucket.__setitem__(k, body)
+seasons = {y: dict(season_file, league_key="400.l." + y) for y in ("2021", "2022", "2023")}
+limited = FakeYahoo(limit_week=1)
+pending = lambda_function._refresh_boxscores(None, "b", limited, seasons, {}, "2024", time.time() + 60)
+check("a busy Yahoo is asked only once per run", limited.calls == [1] and sorted(pending) == ["2021", "2022", "2023"],
+      (limited.calls, pending))
+check("public files still written while busy", all("boxscores/%s.json" % y in bucket for y in seasons))
+lambda_function._load_json, lambda_function._put = real_load, real_put
 
 # ---- page bundling: the Record Room ships as one file with the pop-up inside
 page = lambda_function._record_page_html()

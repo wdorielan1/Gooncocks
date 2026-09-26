@@ -414,7 +414,7 @@ class _YahooHistory:
         """{team key: [[slot, name, position, NFL team, points], ...]} for
         every team that played that week: one roster call per team plus
         one points call per 25 players, a few at a time."""
-        with ThreadPoolExecutor(max_workers=5) as pool:
+        with ThreadPoolExecutor(max_workers=3) as pool:  # gentle: Yahoo rate limits bursts
             rosters = dict(zip(team_keys, pool.map(lambda k: get_team_roster(self.token, k, week), team_keys)))
             keys = sorted({p["player_key"] for r in rosters.values() for p in r if p.get("player_key")})
             points = {}
@@ -476,15 +476,20 @@ def _refresh_boxscores(s3, bucket, yahoo, seasons, game_keys, current, deadline)
     `deadline`, and republishes each season's public box score file that
     changed. Returns the seasons still missing weeks."""
     store = _rivalry_store(s3, bucket)
-    pending = []
+    pending, busy = [], False
     for year in sorted(seasons, key=int, reverse=True):
         saved = store.load(league_history.BOX_KEY.format(year), None)
         if (saved and saved.get("complete") and saved.get("league_key") == seasons[year]["league_key"]
                 and year != current):
             box, changed = saved, False
+        elif busy:
+            box, changed = saved or {"league_key": seasons[year]["league_key"], "weeks": {}, "complete": False}, False
         else:
-            box, changed = league_history.fetch_boxscores(yahoo, seasons[year], saved, deadline)
-        if changed or saved is None:
+            box, changed, busy = league_history.fetch_boxscores(yahoo, seasons[year], saved, deadline)
+            if busy:
+                print("  Yahoo is limiting how fast we can ask, so lineups stop here for this run."
+                      " Wait 30-60 minutes, then run it again.")
+        if changed or (saved is None and box["weeks"]):
             store.save(league_history.BOX_KEY.format(year), box)
             got = sum(1 for w in box["weeks"].values() if "teams" in w)
             print(f"  {year} box scores: {got} weeks saved" + ("" if box["complete"] or year == current else " so far"))

@@ -398,11 +398,12 @@ def fetch_boxscores(yahoo, season_file, saved, deadline, log=print):
     """Fills in `saved` (this season's box score file, or None) with every
     finished week not already stored, one Yahoo week at a time, stopping at
     `deadline`. A week Yahoo won't return is marked unavailable so it isn't
-    asked for again; being rate limited just stops this run.
-    Returns (info, changed)."""
+    asked for again. If Yahoo is busy or rate limiting, it stops and says
+    so, so the caller can stop asking for other seasons too.
+    Returns (info, changed, busy)."""
     league_key = season_file["league_key"]
     info = saved if saved and saved.get("league_key") == league_key else {"league_key": league_key, "weeks": {}}
-    changed = False
+    changed = busy = False
     todo = sorted(box_weeks(season_file).items(), key=lambda kv: int(kv[0]))
     for week, keys in todo:
         if week in info["weeks"]:
@@ -413,12 +414,13 @@ def fetch_boxscores(yahoo, season_file, saved, deadline, log=print):
             info["weeks"][week] = {"teams": yahoo.box_week(league_key, int(week), keys)}
         except Exception as exc:
             if _temporary(exc):
-                log(f"    Yahoo didn't answer for week {week} ({str(exc)[:120]}); stopping here for this run.")
+                log(f"    Yahoo didn't answer for week {week} ({str(exc).strip()[:120]}).")
+                busy = True
                 break
             info["weeks"][week] = {"unavailable": str(exc)[:200]}
         changed = True
     info["complete"] = bool(season_file.get("complete")) and all(w in info["weeks"] for w, _ in todo)
-    return info, changed
+    return info, changed, busy
 
 
 def public_boxscores(year, box, game_keys):

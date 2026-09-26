@@ -113,8 +113,9 @@
         '<tr class="bx-tot"><td class="a">Bench</td><td class="bx-n a">' + pts(t[0][1]) + '</td><td class="bx-s"></td><td class="bx-n b">' + pts(t[1][1]) + '</td><td class="b">Bench</td></tr>';
     }
     html += '</tbody></table>';
-    var off = [game.a, game.b].some(function (s, i) { return typeof s.score === 'number' && Math.abs(s.score - t[i][0]) > 0.05; });
-    if (off) html += '<p class="bx-note">Yahoo’s later stat corrections can make players’ points add up slightly differently from the final score.</p>';
+    var off = [game.a, game.b].filter(function (s, i) { return typeof s.score === 'number' && Math.abs(s.score - t[i][0]) > 0.05; })
+      .map(function (s) { var i = s === game.a ? 0 : 1; return esc(s.name) + '’s starters add up to ' + pts(t[i][0]) + ' (final: ' + pts(s.score) + ')'; });
+    if (off.length) html += '<p class="bx-note">' + off.join('; ') + '. Yahoo changed some points after the game went final, and the lineups show its current numbers.</p>';
     return html;
   }
 
