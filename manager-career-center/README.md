@@ -48,7 +48,7 @@ python3 -m http.server 8081   # then open http://localhost:8081
 | `data/league-history.js` | **Snapshot of the real Yahoo history** (same format as the Rivalry Center) |
 | `data/payouts.js` | **Payout rules by season.** Edit this to correct any year. |
 | `tools/snapshot_history.py` | Refreshes the snapshot from the Lambda's saved season files |
-| `assets/peacock.webp` | Header logo |
+| `assets/gooncocks-logo.webp` | The original Gooncocks badge, for the header |
 
 Every number comes from the one history file plus the payout rules. Nothing is
 typed into the page by hand.
@@ -64,6 +64,10 @@ typed into the page by hand.
 - **Goon / Cock of the Week:** the highest and lowest score of each completed
   regular-season week, for every year. Money for Goon of the Week only started
   in 2026. Exact ties would share the award and split the $50.
+- **Who's on the leaderboard:** the league's 10 current managers. Former
+  managers and one-season fill-ins stay in the Manager and Versus dropdowns
+  under "Former managers". Managers listed in `EXCLUDED_MANAGERS` in
+  `lambda_function.py` are left out of every record.
 - **Win-% leader card:** needs at least 40 regular-season games (10 when one
   season is selected). Ties show as joint leaders.
 - **Winnings are estimates** from `data/payouts.js`, not payment records:

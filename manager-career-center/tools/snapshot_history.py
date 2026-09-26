@@ -49,6 +49,7 @@ def main():
     current = index["current_season"]
     history = league_history.build_history(
         seasons, current, resolve, index["seasons"][current].get("name") or "", standings=index["seasons"],
+        excluded=lambda_function._excluded,
     )
     history["label"] = history["label"].rstrip(".") + " (snapshot)."
     out = os.path.join(HERE, "..", "data", "league-history.js")

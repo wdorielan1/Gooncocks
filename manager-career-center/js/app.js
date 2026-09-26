@@ -59,8 +59,9 @@
     }
     var hash = location.hash.replace('#', '');
     if (VIEWS.indexOf(hash) >= 0) state.view = hash;
-    var first = data.managers[0] ? data.managers[0].id : null;
-    if (!state.selected) state.selected = first;
+    var top = boardRows()[0];
+    var first = top ? top.manager.id : (data.managers[0] || {}).id;
+    if (!state.selected || !byId[state.selected].active) state.selected = first;
     if (!state.profile) state.profile = state.selected;
     if (!state.a) state.a = state.selected;
     if (!state.b || state.b === state.a) state.b = (data.managers.filter(function (m) { return m.id !== state.a; })[0] || {}).id;
@@ -98,8 +99,10 @@
     cock: function (r) { return r.c.cock; }
   };
 
+  // The leaderboard and leader cards are the league's current managers only;
+  // former managers stay reachable through the Manager / Versus dropdowns.
   function boardRows() {
-    var rows = Career.leaderboard(data, scope());
+    var rows = Career.leaderboard(data, scope()).filter(function (r) { return r.manager.active; });
     var key = SORTS[state.sortKey] ? state.sortKey : 'titles';
     var dir = state.sortDir === 'asc' ? 1 : -1;
     rows.sort(function (x, y) {
@@ -168,7 +171,7 @@
     }).join('') : '<tr class="empty-row"><td colspan="9">No managers match “' + esc(state.search) + '”.</td></tr>';
     $('leaderboard').innerHTML = head + '<tbody>' + body + '</tbody>';
     $('boardNote').textContent = 'Select a column to sort and a row to preview. * Fewer than ' + minGames +
-      ' regular-season games, so not eligible for the win-% leader card.';
+      ' regular-season games, so not eligible for the win-% leader card. Former managers are in the Manager dropdowns.';
     renderPreview(all);
   }
 
@@ -192,7 +195,7 @@
   }
 
   function renderOverview() {
-    var rows = Career.leaderboard(data, scope());
+    var rows = Career.leaderboard(data, scope()).filter(function (r) { return r.manager.active; });
     $('scopeOverview').textContent = scopeLabel();
     if (document.activeElement !== $('search')) $('search').value = state.search;
     renderLeaders(rows);
