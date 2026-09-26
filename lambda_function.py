@@ -124,6 +124,10 @@ MANAGER_NAMES = {
     "Jose": "Jose",
     "Samuel": "Sam",
     "Chett": "Chet",
+    # Former managers - listed so the Rivalry Center and Champion Wall show
+    # their real name. Anyone not in this season's league stays out of the
+    # Who Owns Who grid and only appears under "Former managers".
+    "adix": "Adix",
 }
 
 
