@@ -322,7 +322,8 @@ h1 { font: 400 clamp(44px, 7.4vw, 86px)/.95 var(--display); text-transform: uppe
   .brand span { display: none; }
 }
 
-/* Small phones: the logo already links home, so the menu keeps the three history pages. */
-@media (max-width: 440px) {
-  .nav a[href="https://stats.gooncocks.com/"], .nav a[href="https://gooncocks.com"] { display: none; }
+/* Small phones: the logo already links home and the title says where you are,
+   so the menu drops Home and this page's own link and keeps every other page. */
+@media (max-width: 560px) {
+  .nav a.on, .nav a[href="https://gooncocks.com"] { display: none; }
 }

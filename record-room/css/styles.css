@@ -291,6 +291,10 @@ td { padding: 9px 10px; border-bottom: 1px solid #ffffff0d; white-space: nowrap;
 
 @media (max-width: 1060px) {
   .nav a:not(.keep):not(.on) { display: none; }
+  .season-tag { display: none; }
+}
+@media (max-width: 760px) {
+  .brand span { display: none; }
   .main { grid-template-columns: minmax(0, 1fr); }
   .coverage { margin-left: 0; text-align: left; }
 }
@@ -347,7 +351,8 @@ button.feat-body:hover { background: #ffffff08; }
 .lk:hover { background: #ffffff14; }
 .list .res { color: var(--muted); }
 .dim-when { display: block; margin-top: 4px; font: 700 12px/1.2 var(--label); letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
-/* Small phones: the logo already links home, so the menu keeps the three history pages. */
-@media (max-width: 440px) {
-  .nav a[href="https://stats.gooncocks.com/"], .nav a[href="https://gooncocks.com"] { display: none; }
+/* Small phones: the logo already links home and the title says where you are,
+   so the menu drops Home and this page's own link and keeps every other page. */
+@media (max-width: 560px) {
+  .nav a.on, .nav a[href="https://gooncocks.com"] { display: none; }
 }

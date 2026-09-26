@@ -325,8 +325,11 @@ STYLE_BLOCK = """
   .f-note{border-left:1px solid var(--line2);padding-left:28px;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--muted);line-height:1.6}
 
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  @media(max-width:1240px){.nav a:not(.keep):not(.on){display:none}}
+  @media(max-width:780px){.brand span{display:none}}
   @media(max-width:1000px){
     .nav a:not(.keep){display:none}
+    .nav{gap:20px}
     .lead{grid-template-columns:1fr}
     .duo{grid-template-columns:1fr}
     .big-art{width:58%;object-position:100% 30%}
@@ -400,6 +403,7 @@ STYLE_BLOCK = """
   @media(max-width:400px){.top .wrap{gap:8px}.brand img{width:34px;height:34px}.nav{gap:10px}.nav a{font-size:12.5px}.wk summary{font-size:13px;padding:8px 11px}.wk summary:after{margin-left:6px}}
   @media(max-width:400px){.aw-stat b{font-size:24px}}
   @media(max-width:440px){.nav a.home{display:none}}
+  @media(max-width:360px){.brand{flex:none}.top .wrap{padding:0 10px;gap:6px}.nav{gap:7px}.nav a{font-size:12px}.wk summary{padding:7px 9px;font-size:12px}.wk summary:after{margin-left:5px}}
   @media(max-width:900px){.bn-row{grid-template-columns:minmax(0,1fr)}}
   @media(max-width:480px){.bn-title{font-size:24px}.bn-title:before,.bn-title:after{flex-basis:24px}.bn-foot{flex-direction:column;align-items:stretch}.bn-btn{justify-content:center}.nr-foot{grid-template-columns:minmax(0,1fr)}.nr-art{min-height:210px}.nr-art:before{background:linear-gradient(90deg,#050914f5 0,#050914d9 60%,#05091466 100%)}}
 </style>
