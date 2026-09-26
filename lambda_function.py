@@ -365,6 +365,8 @@ class _YahooHistory:
         team = dict(team)
         team["known"] = _known_manager_name(team)
         guid = team.get("manager_guid")
+        if guid and guid.startswith("--"):
+            guid = None  # Yahoo sends "--hidden--" instead of other managers' accounts
         team["manager_guid"] = hashlib.sha1(guid.encode("utf-8")).hexdigest()[:16] if guid else None
         team.pop("projected", None)
         return team
@@ -469,7 +471,8 @@ def _refresh_rivalry(s3, bucket, yahoo, league_key, deadline, rediscover=False, 
 
     standings_teams = [t for season in index["seasons"].values() for t in season.get("teams", [])]
     resolve = league_history.linked(_history_name, league_history.account_names(seasons, _history_name, standings_teams))
-    history = league_history.build_history(seasons, current, resolve, index["seasons"][current].get("name") or "")
+    history = league_history.build_history(seasons, current, resolve, index["seasons"][current].get("name") or "",
+                                           standings=index["seasons"])
     _put(s3, bucket, league_history.PUBLIC_KEY, json.dumps(history, separators=(",", ":")), "application/json")
     _put(s3, bucket, RIVALRY_PAGE_KEY, _rivalry_page_html(), "text/html")
     for year in skipped:

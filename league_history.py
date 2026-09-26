@@ -201,24 +201,40 @@ def _label_rounds(rows):
             r["round"] = "Playoffs"
 
 
-def account_names(seasons, known_name, extra_teams=()):
-    """{Yahoo account (hashed): MANAGER_NAMES name} for every account that
-    shows up at least once under a listed nickname. People change their
-    Yahoo nickname over the years; this links their other seasons to them."""
-    def teams():
-        for season in seasons.values():
-            for games in season["weeks"].values():
-                for g in games:
-                    yield g["team_a"]
-                    yield g["team_b"]
-        yield from extra_teams
+def _season_teams(season):
+    for games in season["weeks"].values():
+        for g in games:
+            yield g["team_a"]
+            yield g["team_b"]
 
-    names = {}
-    for t in teams():
+
+def shared_accounts(seasons):
+    """Yahoo account IDs that more than one team used in the same season.
+    Yahoo hides other managers' accounts (every team comes back as
+    "--hidden--"), so an ID like that says nothing about who someone is."""
+    shared = set()
+    for season in seasons.values():
+        teams_by_account = {}
+        for t in _season_teams(season):
+            if t.get("manager_guid"):
+                teams_by_account.setdefault(t["manager_guid"], set()).add(t.get("team_key") or t.get("name"))
+        shared |= {a for a, teams in teams_by_account.items() if len(teams) > 1}
+    return shared
+
+
+def account_names(seasons, known_name, extra_teams=()):
+    """{Yahoo account (hashed): MANAGER_NAMES name} for every real account
+    that shows up under a listed nickname, so someone's seasons under an
+    older nickname still count for them. Placeholder or shared IDs, and
+    any ID seen under two different listed names, are ignored."""
+    unreliable = shared_accounts(seasons)
+    seen = {}
+    teams = [t for season in seasons.values() for t in _season_teams(season)] + list(extra_teams)
+    for t in teams:
         name, account = known_name(t), t.get("manager_guid")
-        if name and account:
-            names.setdefault(account, name)
-    return names
+        if name and account and account not in unreliable:
+            seen.setdefault(account, set()).add(name)
+    return {account: names.pop() for account, names in seen.items() if len(names) == 1}
 
 
 def linked(known_name, names):
@@ -226,30 +242,33 @@ def linked(known_name, names):
     return lambda team: known_name(team) or names.get(team.get("manager_guid"))
 
 
-def build_history(seasons, current_season, known_name, league_name=""):
+def build_history(seasons, current_season, known_name, league_name="", standings=None):
     """The Rivalry Center's history file from the stored season files.
-    `seasons` is {year: season file}. People are matched across seasons by
-    MANAGER_NAMES (Yahoo guid or nickname); anyone not listed is matched by
-    their Yahoo account alone and shown by nickname. Yahoo account IDs
-    never leave this function - former managers get an opaque ID."""
+    `seasons` is {year: season file}; `standings` is {year: index season}
+    with Yahoo's final ranks. People are matched across seasons by
+    MANAGER_NAMES; anyone not listed is matched by their Yahoo nickname
+    (or team name when Yahoo hides the nickname) and listed as a former
+    manager. Yahoo account IDs never leave this function."""
+    unreliable = shared_accounts(seasons)
     people = {}   # id -> {"name", "seasons": set()}
-    by_guid = {}
 
     def person(team):
         name = known_name(team)
         if name:
             pid = _slug(name)
         else:
-            account = team.get("manager_guid") or team.get("manager") or team.get("team_key") or team.get("name")
-            pid = by_guid.get(account) or "x" + hashlib.sha1(str(account).encode()).hexdigest()[:8]
-            by_guid[account] = pid
             nickname = team.get("manager")
-            name = nickname if nickname and nickname != "--hidden--" else (team.get("name") or "Former manager")
+            hidden = not nickname or nickname.startswith("--")
+            account = team.get("manager_guid")
+            if not account or account in unreliable:
+                account = ("team:" + str(team.get("name"))) if hidden else ("nick:" + nickname.lower())
+            pid = "x" + hashlib.sha1(str(account).encode()).hexdigest()[:8]
+            name = team.get("name") or "Former manager" if hidden else nickname
         entry = people.setdefault(pid, {"name": name, "seasons": set()})
-        entry["name"] = name  # seasons run oldest to newest, so the latest nickname wins
+        entry["name"] = name  # seasons run oldest to newest, so the latest name wins
         return pid
 
-    teams, matchups = {}, []
+    teams, matchups, pid_by_team = {}, [], {}
     for year in sorted(seasons, key=int):
         rows = []
         for week_key, games in sorted(seasons[year]["weeks"].items(), key=lambda kv: int(kv[0])):
@@ -261,6 +280,7 @@ def build_history(seasons, current_season, known_name, league_name=""):
                 for pid, t in ((pa, a), (pb, b)):
                     people[pid]["seasons"].add(int(year))
                     teams.setdefault(str(year), {})[pid] = t.get("name") or ""
+                    pid_by_team[(str(year), t.get("name"))] = pid
                 final = g.get("status") == "postevent" and a.get("score") is not None and b.get("score") is not None
                 week = g.get("week") or int(week_key)
                 rows.append({
@@ -276,6 +296,24 @@ def build_history(seasons, current_season, known_name, league_name=""):
         _label_rounds(rows)
         matchups.extend(rows)
 
+    # Yahoo's final standings, matched to the same people through the team
+    # names they used that season.
+    final_standings = {}
+    for year, season in sorted((standings or {}).items()):
+        if str(year) not in teams or season.get("skipped"):
+            continue
+        ranks = {}
+        for t in season.get("teams", []):
+            pid = pid_by_team.get((str(year), t.get("team")))
+            if pid is None:
+                pid = person({"name": t.get("team"), "manager": t.get("manager"),
+                              "manager_guid": t.get("manager_guid"), "known": t.get("known")})
+            if t.get("rank"):
+                ranks[pid] = int(t["rank"])
+        final_standings[str(year)] = {
+            "finished": bool(season.get("is_finished")), "teams": len(season.get("teams", [])), "ranks": ranks,
+        }
+
     current = int(current_season)
     managers = sorted(
         ({"id": pid, "name": p["name"], "active": current in p["seasons"]} for pid, p in people.items()),
@@ -289,6 +327,7 @@ def build_history(seasons, current_season, known_name, league_name=""):
         "photoBaseUrl": PHOTO_BASE_URL,
         "managers": managers,
         "teams": teams,
+        "standings": final_standings,
         "matchups": matchups,
     }
 
