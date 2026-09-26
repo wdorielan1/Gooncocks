@@ -459,12 +459,14 @@ def _refresh_rivalry(s3, bucket, yahoo, league_key, deadline, rediscover=False, 
         print(f"  {year}: {sum(len(g) for g in info['weeks'].values())} matchups saved"
               + ("" if info.get("complete") or year == current else " so far"))
 
-    history = league_history.build_history(seasons, current, _history_name, index["seasons"][current].get("name") or "")
+    standings_teams = [t for season in index["seasons"].values() for t in season.get("teams", [])]
+    resolve = league_history.linked(_history_name, league_history.account_names(seasons, _history_name, standings_teams))
+    history = league_history.build_history(seasons, current, resolve, index["seasons"][current].get("name") or "")
     _put(s3, bucket, league_history.PUBLIC_KEY, json.dumps(history, separators=(",", ":")), "application/json")
     _put(s3, bucket, RIVALRY_PAGE_KEY, _rivalry_page_html(), "text/html")
     for year in skipped:
         index["seasons"][year]["skipped"] = True
-    return index, history, pending
+    return index, history, pending, resolve
 
 
 def _action_rivalry_history(event, context=None):
@@ -472,7 +474,7 @@ def _action_rivalry_history(event, context=None):
     league_key = event.get("league_key") or _require_env("LEAGUE_KEY")
     s3 = boto3.client("s3")
     yahoo = _YahooHistory(_get_access_token())
-    index, history, pending = _refresh_rivalry(
+    index, history, pending, resolve = _refresh_rivalry(
         s3, bucket, yahoo, league_key, _deadline(context), rediscover=bool(event.get("rediscover")),
         include=event.get("include") or [], exclude=event.get("exclude") or [],
     )
@@ -490,7 +492,7 @@ def _action_rivalry_history(event, context=None):
         print("Managers not in this season's league (add their Yahoo nickname to MANAGER_NAMES"
               f" if any of them is a current manager on an old account): {', '.join(former)}")
 
-    champs = league_history.champions(index, lambda t: _history_name(t) or t.get("manager"))
+    champs = league_history.champions(index, lambda t: resolve(t) or t.get("manager"))
     if champs:
         _put(s3, bucket, "history.json", json.dumps(champs), "application/json")
         landing = _load_json(s3, bucket, "landing.json", None)
@@ -521,7 +523,7 @@ def _update_rivalry_week(league_key, context):
     if _load_json(s3, bucket, league_history.INDEX_KEY, None) is None:
         print('Rivalry Center not set up yet - run {"action": "rivalry_history"} once to turn it on.')
         return
-    _index, _history, pending = _refresh_rivalry(s3, bucket, _YahooHistory(_get_access_token()), league_key, _deadline(context, 10))
+    _index, _history, pending, _resolve = _refresh_rivalry(s3, bucket, _YahooHistory(_get_access_token()), league_key, _deadline(context, 10))
     print("Updated the Rivalry Center." + (f" Older seasons still missing: {', '.join(pending)}." if pending else ""))
 
 

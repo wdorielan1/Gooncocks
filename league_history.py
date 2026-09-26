@@ -201,6 +201,31 @@ def _label_rounds(rows):
             r["round"] = "Playoffs"
 
 
+def account_names(seasons, known_name, extra_teams=()):
+    """{Yahoo account (hashed): MANAGER_NAMES name} for every account that
+    shows up at least once under a listed nickname. People change their
+    Yahoo nickname over the years; this links their other seasons to them."""
+    def teams():
+        for season in seasons.values():
+            for games in season["weeks"].values():
+                for g in games:
+                    yield g["team_a"]
+                    yield g["team_b"]
+        yield from extra_teams
+
+    names = {}
+    for t in teams():
+        name, account = known_name(t), t.get("manager_guid")
+        if name and account:
+            names.setdefault(account, name)
+    return names
+
+
+def linked(known_name, names):
+    """known_name, extended to recognize those linked Yahoo accounts."""
+    return lambda team: known_name(team) or names.get(team.get("manager_guid"))
+
+
 def build_history(seasons, current_season, known_name, league_name=""):
     """The Rivalry Center's history file from the stored season files.
     `seasons` is {year: season file}. People are matched across seasons by
