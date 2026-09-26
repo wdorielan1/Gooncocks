@@ -23,6 +23,7 @@ import re
 from html import escape
 
 from awards import compute_awards, identity, rank_teams
+import weekly_history
 
 SITE_URL = "https://stats.gooncocks.com"
 HOME_URL = "https://gooncocks.com"
@@ -35,6 +36,8 @@ HERO_ART_URL = f"{SITE_URL}/landing-hero.webp"
 # Goon / Cock of the Week card art (a partying king peacock, and a sad
 # one on the locker-room bench). Uploaded alongside the hero art.
 GOON_ART_URL = f"{SITE_URL}/goon-art.webp"
+RIVALRY_ART_URL = f"{SITE_URL}/rivalry-art.webp"
+RECORD_ART_URL = f"{SITE_URL}/record-art.webp"
 COCK_ART_URL = f"{SITE_URL}/cock-art.webp"
 
 # Per-manager headshots, if uploaded. Convention: a manager named "Chet"
@@ -243,6 +246,47 @@ STYLE_BLOCK = """
   .g-team.lose b{margin:0 6px 0 0;color:#e4e8f1}
   .g-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;border-left:1px solid var(--line);font-size:12.5px;color:#cfd6e4;align-self:stretch}
   .badge{background:var(--gold);color:#141005;font:400 12px/1 var(--display);letter-spacing:1px;padding:5px 8px}
+  .bn-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:22px;align-items:stretch}
+  .bn-row:has(> .bn:only-child){grid-template-columns:minmax(0,1fr)}
+  .bn{display:flex;flex-direction:column;min-width:0;border:1px solid var(--line2);border-radius:4px;background:var(--panel);overflow:hidden}
+  .bn-title{display:flex;align-items:center;justify-content:center;gap:14px;padding:12px 16px;font-size:30px;letter-spacing:1.5px;border-top:3px solid var(--gold);background:#0a1530}
+  .bn-crown{width:22px;height:16px;background:var(--gold);clip-path:polygon(0 100%,0 20%,25% 55%,50% 0,75% 55%,100% 20%,100% 100%)}
+  .bn-title:before,.bn-title:after{content:'';flex:0 1 70px;height:1px;background:var(--gold);opacity:.7}
+  .rw-art{position:relative;aspect-ratio:2/1;display:grid;grid-template-columns:1fr auto 1fr;align-items:end;padding:0 16px 14px;
+    background:url(__RIVALRY_ART__) center/cover,linear-gradient(100deg,#1f5bd8 0,#0d2a6e 45%,#6e1219 55%,#b3262d 100%)}
+  .rw-art:before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,#050a18d9)}
+  .rw-art>*{position:relative}
+  .rw-name{font:400 clamp(40px,5.6vw,68px)/.9 var(--display);color:#fff;text-transform:uppercase;text-shadow:0 4px 0 #000a,0 0 24px #000;min-width:0;overflow-wrap:anywhere}
+  .rw-art.long .rw-name{font-size:clamp(30px,4.2vw,50px)}
+  .rw-name.b{text-align:right}
+  .rw-vs{font:400 34px/1 var(--display);color:var(--gold);padding:0 10px 6px;text-shadow:0 3px 0 #000a}
+  .rw-tag{position:absolute;top:12px;right:12px;background:#0a1530e6;border:1px solid var(--gold);color:var(--gold);font:700 11px/1 'Work Sans',sans-serif;letter-spacing:2px;padding:6px 9px}
+  .bn-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));text-align:center;padding:14px 10px 10px}
+  .bn-stats div+div{border-left:1px solid var(--line2)}
+  .bn-stats b{display:block;font:400 clamp(30px,3.4vw,40px)/1 var(--display);font-variant-numeric:tabular-nums}
+  .bn-stats small{display:block;margin-top:6px;font-size:11px;font-weight:700;letter-spacing:2px;color:#cfd6e4}
+  .bn-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:auto 14px 14px;padding-top:12px;border-top:1px solid var(--line2)}
+  .bn-foot p{font-size:13.5px;color:#dfe4ee}
+  .bn-btn{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;background:var(--gold);color:#141005;border:0;border-radius:3px;padding:11px 16px;font:400 15px/1 var(--display);letter-spacing:1px;cursor:pointer}
+  .bn-btn:hover{background:#ffd460}
+  .bn-link{background:none;border:0;padding:0;color:var(--gold);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+  .nr-art{position:relative;flex:1;min-height:250px;display:flex;flex-direction:column;justify-content:center;padding:22px 24px;
+    background:url(__RECORD_ART__) right center/cover,radial-gradient(circle at 78% 30%,#8a6414 0,#3a2a08 22%,#0b1022 60%)}
+  .nr-art:before{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#050914f0 0,#050914b3 45%,transparent 75%)}
+  .nr-art>*{position:relative}
+  .nr-eyebrow{font-size:12px;font-weight:700;letter-spacing:4px;color:var(--gold)}
+  .nr-title{margin-top:10px;font-size:clamp(46px,6vw,78px);line-height:.92;color:#fff;text-shadow:0 4px 0 #0008}
+  .nr-title span{display:block;background:linear-gradient(180deg,#fff0b0,#f6c343 55%,#dc9d22);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .nr-foot{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 18px;padding:16px 18px;background:#0a1530;border-top:1px solid var(--line2)}
+  .nr-chip{display:inline-block;border:1px solid #3d7bff;color:#8fb0ff;font-size:10.5px;font-weight:700;letter-spacing:2.4px;padding:5px 8px}
+  .nr.bad .nr-chip{border-color:#ff6b6b;color:#ff8a8a}
+  .nr-what h3{margin-top:8px;font-size:clamp(24px,2.6vw,32px);line-height:1}
+  .nr-val b{display:block;font:400 clamp(40px,4.4vw,56px)/.95 var(--display);background:linear-gradient(180deg,#fff0b0,#f6c343 55%,#dc9d22);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .nr.bad .nr-val b{background:none;color:#ff8a8a}
+  .nr-val p{margin-top:4px;font-size:13px;font-weight:700;letter-spacing:1.5px}
+  .nr-val small{display:block;margin-top:3px;font-size:12.5px;color:var(--muted)}
+  .nr-act{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .nr-more{font-size:13px;font-weight:600;color:var(--gold)}
   .game[data-box]{cursor:pointer}.game[data-box]:hover{border-color:var(--line2)}
   .g-box{margin-left:auto;padding:4px 0;border:0;background:none;color:var(--gold);font:400 12px/1 var(--display);letter-spacing:1px;cursor:pointer}
   .g-box:hover{text-decoration:underline}
@@ -356,8 +400,12 @@ STYLE_BLOCK = """
   @media(max-width:400px){.top .wrap{gap:8px}.brand img{width:34px;height:34px}.nav{gap:10px}.nav a{font-size:12.5px}.wk summary{font-size:13px;padding:8px 11px}.wk summary:after{margin-left:6px}}
   @media(max-width:400px){.aw-stat b{font-size:24px}}
   @media(max-width:440px){.nav a.home{display:none}}
+  @media(max-width:900px){.bn-row{grid-template-columns:minmax(0,1fr)}}
+  @media(max-width:480px){.bn-title{font-size:24px}.bn-title:before,.bn-title:after{flex-basis:24px}.bn-foot{flex-direction:column;align-items:stretch}.bn-btn{justify-content:center}.nr-foot{grid-template-columns:minmax(0,1fr)}.nr-art{min-height:210px}}
 </style>
 """
+STYLE_BLOCK = STYLE_BLOCK.replace("__RIVALRY_ART__", RIVALRY_ART_URL).replace("__RECORD_ART__", RECORD_ART_URL)
+
 
 # Line icons for each award, drawn to a 24x24 box.
 _ICONS = {
@@ -539,6 +587,108 @@ def _box_data(m, season, week):
             "b": side(m.team_b_name, m.team_b_manager, m.team_b_score)}
 
 
+def _mid(name):
+    """A manager's id in the history file: their name, letters and digits only."""
+    return re.sub(r"[^a-z0-9]+", "", str(name or "").lower())
+
+
+def _pts(n):
+    return f"{n:,.2f}"
+
+
+def _rivalry_banner(week, season, matchups, history):
+    pairs, games = [], {}
+    for m in matchups:
+        if m.team_a_manager and m.team_b_manager:
+            a, b = _mid(m.team_a_manager), _mid(m.team_b_manager)
+            pairs.append((a, b))
+            games[frozenset((a, b))] = m
+    ranked = weekly_history.pick_rivalry(history, pairs)
+    if not ranked or not ranked[0]["meetings"]:
+        return ""
+    card = weekly_history.rivalry_card(history, ranked[0], week)
+    a, b = card["a"], card["b"]
+    m = games[frozenset((a["id"], b["id"]))]
+    sa, sb = (m.team_a_score, m.team_b_score) if _mid(m.team_a_manager) == a["id"] else (m.team_b_score, m.team_a_score)
+    won = a["name"] if sa > sb else b["name"] if sb > sa else None
+    result = (f"<b>{escape(won)}</b> won {_pts(max(sa, sb))}–{_pts(min(sa, sb))} this week" if won
+              else f"A {_pts(sa)} tie this week")
+    lead = (f"{escape(card['leader'])} leads the series." if card["leader"] else "The series is dead even.")
+    box = _box_data(m, season, week)
+    box_btn = (f'<button type="button" class="bn-link" data-box="{escape(json.dumps(box), quote=True)}">Box score</button>'
+               if box else "")
+    size = " long" if max(len(a["name"]), len(b["name"])) > 7 else ""
+    href = f"{SITE_URL}/rivalries.html#{a['id']}-vs-{b['id']}"
+    return f"""
+    <article class="bn rw" aria-labelledby="rw-title">
+      <h2 class="bn-title" id="rw-title"><span class="bn-crown" aria-hidden="true"></span>RIVALRY WATCH<span class="bn-crown" aria-hidden="true"></span></h2>
+      <div class="rw-art{size}">
+        <span class="rw-tag">GAME OF THE WEEK</span>
+        <span class="rw-name a">{escape(a["name"])}</span><span class="rw-vs">VS</span><span class="rw-name b">{escape(b["name"])}</span>
+      </div>
+      <div class="bn-stats">
+        <div><b>{card["wins_a"]}–{card["wins_b"]}{f"–{card['ties']}" if card["ties"] else ""}</b><small>ALL-TIME SERIES</small></div>
+        <div><b>{card["meetings"]}</b><small>MEETINGS</small></div>
+        <div><b>{_pts(card["avg_margin"])}</b><small>AVG. MARGIN</small></div>
+      </div>
+      <div class="bn-foot">
+        <p>{result}. {lead} {box_btn}</p>
+        <a class="bn-btn" href="{href}">VIEW RIVALRY <i class="arrow"></i></a>
+      </div>
+    </article>"""
+
+
+def _record_banner(week, season, history):
+    rec = weekly_history.latest_record(history)
+    if not rec:
+        return ""
+    who = weekly_history.names(history)
+    def people(ids):
+        return " + ".join(escape(who.get(i, i)) for i in ids)
+    fresh = rec["season"] == season and rec["week"] == week
+    when = f"WEEK {rec['week']}" if rec["season"] == season else f"{rec['season']} WEEK {rec['week']}"
+    old = rec["old"]
+    fmt = (lambda v: "+" + _pts(v)) if rec["record"] == "big-margin" else _pts
+    chip = ("THE RECORD NOBODY WANTS" if rec["unwanted"] else
+            "STANDARD SCORING RECORD" if rec["scope"] == "standard" else "ALL-TIME LEAGUE RECORD")
+    g = rec["game"]
+    box = {"season": g["season"], "week": g["week"],
+           "a": {"id": g["managerA"], "name": who.get(g["managerA"], g["managerA"]), "team": "", "score": g["scoreA"]},
+           "b": {"id": g["managerB"], "name": who.get(g["managerB"], g["managerB"]), "team": "", "score": g["scoreB"]}}
+    query = "type=both" + ("&std=1" if rec["scope"] == "standard" else "")
+    more = (f'<a class="nr-more" href="{SITE_URL}/records.html#{rec["record"]}?{query}">+{rec["more"]} more record'
+            f'{"s" if rec["more"] > 1 else ""} broken</a>' if rec["more"] else
+            f'<a class="nr-more" href="{SITE_URL}/records.html#{rec["record"]}?{query}">See the record book</a>')
+    return f"""
+    <article class="bn nr{" bad" if rec["unwanted"] else ""}" aria-labelledby="nr-title">
+      <div class="nr-art">
+        <p class="nr-eyebrow">{"A NEW ENTRY IN LEAGUE HISTORY" if fresh else "THE LATEST RECORD TO FALL · " + when}</p>
+        <h2 class="nr-title" id="nr-title">{"NEW RECORD" if fresh else "RECORD"}<span>BROKEN</span></h2>
+      </div>
+      <div class="nr-foot">
+        <div class="nr-what"><span class="nr-chip">{chip}</span><h3>{escape(rec["name"]).upper()}</h3></div>
+        <div class="nr-val"><b>{fmt(rec["value"])}</b><p>{people(rec["holders"]).upper()} · {when}</p>
+          <small>Previous: {fmt(old["value"])} · {people(old["holders"])}, {old["season"]}</small></div>
+        <div class="nr-act"><button type="button" class="bn-btn" data-box="{escape(json.dumps(box), quote=True)}">VIEW BOX SCORE <i class="arrow"></i></button>{more}</div>
+      </div>
+    </article>"""
+
+
+def _banners_html(week, season, matchups, history):
+    """Rivalry Watch (left) and New Record Broken (right), from the league
+    history. Either one is left out when there's nothing to show."""
+    try:
+        cards = _rivalry_banner(week, season, matchups, history) + _record_banner(week, season, history)
+    except Exception:  # a bad history file must never break the weekly page
+        return ""
+    if not cards:
+        return ""
+    return f"""
+  <section class="bn-row" aria-label="Rivalry Watch and records">{cards}
+  </section>
+"""
+
+
 def _game_row(m, status, badge, box=None):
     badge_html = f'<span class="badge">{badge}</span>' if badge else ""
     box_attr = f' data-box="{escape(json.dumps(box), quote=True)}"' if box else ""
@@ -655,7 +805,7 @@ _BOX_JS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shared", "bo
 _BOX_CLICK = """
 <script>
 document.addEventListener('click', function(e){
-  var g = e.target.closest('.game[data-box]');
+  var g = e.target.closest('[data-box]');
   if (g && window.BoxScore) BoxScore.open(JSON.parse(g.getAttribute('data-box')));
 });
 </script>"""
@@ -701,10 +851,12 @@ _WEEK_SCRIPT = """
 
 
 def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None, extras=None, details=None,
-                weeks=None):
+                weeks=None, history=None):
     """`weeks` is every week number published so far this season (for the
     week menu and previous/next buttons); `standings` is power_rankings()
-    output, or None to leave the season tables out."""
+    output, or None to leave the season tables out. `history` is the league
+    history file (rivalry-history.json); with it, the Rivalry Watch and New
+    Record Broken banners go under the Goon/Cock cards."""
     details = details or {}
     extras = extras or {}
     week = int(week)
@@ -730,6 +882,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
         for m in sorted(matchups, key=lambda m: -max(m.team_a_score, m.team_b_score))
     )
     award_rows, empty_rows = _award_rows(matchups, awards, extras, details)
+    banners = _banners_html(week, season, matchups, history) if history and not is_sample else ""
     empties = f'<div class="empties">{empty_rows}</div>' if empty_rows else ""
 
     # Caption shown under the peacock when the link is texted or posted.
@@ -816,7 +969,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
       </div>
     </article>
   </div>
-
+{banners}
   <section class="sec" id="awards" aria-labelledby="awards-title">
     <div class="sec-head"><h2 id="awards-title">AROUND THE LEAGUE</h2></div>
     <p class="sec-sub">THE REST OF THIS WEEK'S HARDWARE</p>

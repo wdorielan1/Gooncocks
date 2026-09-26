@@ -202,6 +202,10 @@
     if (state.consolation && state.type !== 'regular') scope += ' · Incl. consolation';
     $('fxScope').textContent = scope;
 
+    $('rvA').textContent = name(s.a);
+    $('rvB').textContent = name(s.b);
+    $('rvBanner').setAttribute('aria-label', name(s.a) + ' versus ' + name(s.b));
+    $('rvBanner').classList.toggle('long', Math.max(name(s.a).length, name(s.b).length) > 8);
     $('fxNameA').textContent = name(s.a);
     $('fxNameB').textContent = name(s.b);
     $('fxTeamA').textContent = teamName(s.a);
@@ -469,6 +473,8 @@
     renderGrid(games);
     renderReceipts(s);
     save();
+    // The address names the pair, so a link opens the same rivalry.
+    try { history.replaceState(null, '', '#' + state.a + '-vs-' + state.b); } catch (e) { /* file:// or blocked */ }
   }
 
   function start(loaded) {
@@ -491,6 +497,18 @@
     $('footNote').textContent = live ? 'Records from Yahoo Fantasy league history.' : 'Illustrative stats. Yahoo history not loaded.';
 
     restore();
+    // A link like rivalries.html#will-vs-patrick opens that rivalry, all-time.
+    function pairFromHash() {
+      var m = /^#([a-z0-9]+)-vs-([a-z0-9]+)$/.exec(location.hash);
+      return m && byId[m[1]] && byId[m[2]] && m[1] !== m[2] ? [m[1], m[2]] : null;
+    }
+    function allTime() { state.season = 'all'; state.type = 'all'; state.consolation = false; }
+    var linked = pairFromHash();
+    if (linked) { state.a = linked[0]; state.b = linked[1]; allTime(); }
+    window.addEventListener('hashchange', function () {
+      var p = pairFromHash();
+      if (p && (p[0] !== state.a || p[1] !== state.b)) { allTime(); setPair(p[0], p[1], true); }
+    });
     var resizeTimer = null;
     window.addEventListener('resize', function () { clearTimeout(resizeTimer); resizeTimer = setTimeout(fitNames, 120); });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitNames);

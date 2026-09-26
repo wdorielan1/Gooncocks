@@ -95,6 +95,7 @@ from awards import (
     Matchup, award_details, compute_awards, compute_extra_awards, generate_recap, identity, power_rankings, week_records,
 )
 import league_history
+import weekly_history
 from discord_client import build_teaser, post_message
 from sample_data import SAMPLE_MATCHUPS
 from webpage import render_html
@@ -601,12 +602,20 @@ def _action_rivalry_history(event, context=None):
               f" if any of them is a current manager on an old account): {', '.join(former)}")
 
     _put(s3, bucket, "landing.html", _landing_page_html(), "text/html")  # picks up nav changes right away
+    try:
+        _upload_art(s3, bucket)  # the Rivalry Center and Record Room banners
+    except Exception:
+        traceback.print_exc()
     champs = league_history.champions(index, lambda t: resolve(t) or t.get("manager"))
     if champs:
         _put(s3, bucket, "history.json", json.dumps(champs), "application/json")
         landing = _load_json(s3, bucket, "landing.json", None)
         if landing is not None:
             landing["champions"] = champs
+            try:
+                landing["next_rivalry"] = _next_rivalry(history, int(landing.get("week") or 0), league_key)
+            except Exception:
+                traceback.print_exc()
             _put(s3, bucket, "landing.json", json.dumps(landing), "application/json")
         for c in champs:
             print(f"  Champion {c['season']}: {c['champion']} (runner-up {c['runner_up']})")
@@ -636,7 +645,8 @@ def _update_rivalry_week(league_key, context):
     if _load_json(s3, bucket, league_history.INDEX_KEY, None) is None:
         print('Rivalry Center not set up yet - run {"action": "rivalry_history"} once to turn it on.')
         return
-    _index, _history, pending, _resolve = _refresh_rivalry(s3, bucket, _YahooHistory(_get_access_token()), league_key, _deadline(context, 10))
+    # Leaves a minute for the weekly page itself, which is published after this.
+    _index, _history, pending, _resolve = _refresh_rivalry(s3, bucket, _YahooHistory(_get_access_token()), league_key, _deadline(context, 60))
     print("Updated the Rivalry Center." + (f" Older seasons still missing: {', '.join(pending)}." if pending else ""))
 
 
@@ -730,23 +740,71 @@ def _landing_data(week, matchups, standings, champions, previous):
 # Artwork shipped inside the Lambda zip and copied to the bucket root on
 # every publish: the peacock banner (landing hero + recap headline) and
 # the Goon / Cock of the Week card art.
-ART_FILES = ("landing-hero.webp", "goon-art.webp", "cock-art.webp")
+ART_FILES = ("landing-hero.webp", "goon-art.webp", "cock-art.webp", "rivalry-art.webp", "record-art.webp")
 
 
 def _upload_art(s3, bucket):
     here = os.path.dirname(os.path.abspath(__file__))
     for name in ART_FILES:
-        with open(os.path.join(here, name), "rb") as f:
+        path = os.path.join(here, name)
+        if not os.path.exists(path):
+            continue  # banners fall back to their plain background until the art is added
+        with open(path, "rb") as f:
             _put(s3, bucket, name, f.read(), "image/webp")
 
 
-def _publish_landing(s3, bucket, week, matchups, standings):
+def _publish_landing(s3, bucket, week, matchups, standings, history=None, league_key=None):
     previous = _load_json(s3, bucket, "landing.json", {})
     champions = _load_json(s3, bucket, "history.json", [])
     data = _landing_data(week, matchups, standings, champions, previous)
+    if int(week) == data["week"]:
+        try:
+            data["next_rivalry"] = _next_rivalry(history, int(week), league_key)
+        except Exception:
+            traceback.print_exc()
+            print("Skipped next week's Rivalry Watch on the landing page - see the error above.")
+            data["next_rivalry"] = None
+    else:
+        data["next_rivalry"] = previous.get("next_rivalry")
+    pick = data.get("next_rivalry")
+    print(f"Landing page Rivalry Watch: week {pick['week']}, {pick['a']['name']} vs {pick['b']['name']}" if pick
+          else "Landing page Rivalry Watch: hidden (no next week).")
     _put(s3, bucket, "landing.json", json.dumps(data), "application/json")
     _put(s3, bucket, "landing.html", _landing_page_html(), "text/html")
     print("Updated the landing page (landing.html + landing.json).")
+
+
+def _next_week_pairs(history, week, league_key):
+    """Next week's (manager id, manager id) matchups, consolation games
+    left out: from the history's scheduled games, else straight from
+    Yahoo's scoreboard. Empty when there's no next week."""
+    if history and history.get("matchups"):
+        season = max(g["season"] for g in history["matchups"])
+        pairs = [(g["managerA"], g["managerB"]) for g in history["matchups"]
+                 if g["season"] == season and g["week"] == week + 1 and g.get("gameType") != "consolation"]
+        if pairs:
+            return pairs
+    if not league_key:
+        return []
+    scoreboard = get_scoreboard(_get_access_token(), league_key, week=week + 1)
+    meta = scoreboard_meta(scoreboard)
+    if meta.get("end_week") and week + 1 > int(meta["end_week"]):
+        return []
+    if scoreboard_week(scoreboard) not in (None, week + 1):
+        return []
+    return [(league_history._slug(_manager_name(m["team_a"])), league_history._slug(_manager_name(m["team_b"])))
+            for m in parse_matchups(scoreboard) if not m.get("is_consolation")]
+
+
+def _next_rivalry(history, week, league_key):
+    """The landing page's Rivalry Watch: of next week's games, the one with
+    the closest all-time rivalry. None when there's no next week."""
+    if not history:
+        return None
+    ranked = weekly_history.pick_rivalry(history, _next_week_pairs(history, week, league_key))
+    if not ranked:
+        return None
+    return weekly_history.rivalry_card(history, ranked[0], week + 1)
 
 
 def _standings_with_week(s3, bucket, week, matchups):
@@ -770,7 +828,8 @@ def _save_standings(s3, bucket, standings):
     )
 
 
-def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, transactions=None, notify=True):
+def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, transactions=None, notify=True,
+                  league_key=None):
     """Renders the webpage, uploads it to S3, and posts a Discord teaser
     if DISCORD_WEBHOOK_URL is set. Returns the page's public URL.
 
@@ -813,9 +872,16 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
         traceback.print_exc()
         print("Skipped uploading the page artwork this run - see the error above.")
 
+    history = None
+    if not is_sample:
+        try:
+            history = _load_json(s3, bucket, league_history.PUBLIC_KEY, None)
+        except Exception:
+            traceback.print_exc()
+            print("Skipped the Rivalry Watch and record banners this run - see the error above.")
     html = render_html(
         week, matchups, is_sample=is_sample, bonus_note=bonus_note, standings=standings_ranked, extras=extras,
-        details=details, weeks=published_weeks,
+        details=details, weeks=published_weeks, history=history,
     )
     website_url = os.environ.get("S3_WEBSITE_URL")
     page_url = f"{website_url.rstrip('/')}/recap.html" if website_url else f"s3://{bucket}/recap.html"
@@ -834,7 +900,7 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
 
     if not is_sample:
         try:
-            _publish_landing(s3, bucket, week, matchups, standings)
+            _publish_landing(s3, bucket, week, matchups, standings, history, league_key)
         except Exception:
             traceback.print_exc()
             print("Skipped updating the landing page this run - see the error above.")
@@ -855,15 +921,18 @@ def _action_publish_demo():
 
 def _action_publish(event, context=None):
     week, matchups, rosters, transactions = _fetch_real_matchups(event)
-    page_url, archive_url = _publish_page(
-        week, matchups, is_sample=False, bonus_note=event.get("bonus_note"),
-        rosters=rosters, transactions=transactions, notify=event.get("discord", True),
-    )
+    league_key = event.get("league_key") or _require_env("LEAGUE_KEY")
+    # The history goes first, so the page's Rivalry Watch and New Record
+    # Broken banners already count this week's games.
     try:
-        _update_rivalry_week(event.get("league_key") or _require_env("LEAGUE_KEY"), context)
+        _update_rivalry_week(league_key, context)
     except Exception:
         traceback.print_exc()
         print("Skipped updating the Rivalry Center this run - see the error above.")
+    page_url, archive_url = _publish_page(
+        week, matchups, is_sample=False, bonus_note=event.get("bonus_note"),
+        rosters=rosters, transactions=transactions, notify=event.get("discord", True), league_key=league_key,
+    )
     return {"page_url": page_url, "archive_url": archive_url}
 
 

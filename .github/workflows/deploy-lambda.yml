@@ -24,7 +24,7 @@ concurrency:
 env:
   AWS_REGION: us-east-2
   FUNCTION_NAME: gooncockfantasy
-  LAMBDA_FILES: lambda_function.py awards.py webpage.py yahoo_client.py discord_client.py sample_data.py league_history.py
+  LAMBDA_FILES: lambda_function.py awards.py webpage.py yahoo_client.py discord_client.py sample_data.py league_history.py weekly_history.py
 
 jobs:
   deploy:
@@ -43,6 +43,7 @@ jobs:
           python -c "import lambda_function"
           python test_awards.py
           python test_boxscores.py
+          python test_weekly_history.py
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
