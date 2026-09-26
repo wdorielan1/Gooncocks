@@ -96,8 +96,12 @@ webpage._season = lambda today=None: 2024
 html = webpage.render_html(1, week_games, is_sample=False, history=real)
 check("both banners render", 'class="bn rw"' in html and 'class="bn nr' in html)
 check("rivalry banner picks the closest rivalry this week", "rivalries.html#cy-vs-di" in html)
+rw = html[html.index('class="bn rw"'):html.index('class="bn nr')]
+import re as _re
+series_spans = _re.findall(r'<span class="([^"]*)">\d+</span>', rw)
 check("this week's winner is highlighted (name, series count, score)",
-      'class="rw-name a win">Cy' in html and '<span class="win">3</span>' in html and '<b class="gold">101.00</b>' in html)
+      'class="rw-name a win">Cy' in rw and 'class="rw-name b">Di' in rw and series_spans == ["win", ""]
+      and '<b class="gold">101.00</b>' in rw, series_spans)
 check("record banner opens a box score", html.count('data-box=') >= len(week_games) + 1)
 rec = wh.latest_record(real)
 check("record banner links to that record in the Record Room",
