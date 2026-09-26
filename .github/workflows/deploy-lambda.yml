@@ -8,6 +8,7 @@ on:
       - "landing.html"
       - "*.webp"
       - "rivalry-center/**"
+      - "manager-career-center/**"
   workflow_dispatch:
 
 permissions:
@@ -49,6 +50,7 @@ jobs:
         run: |
           zip -j lambda.zip $LAMBDA_FILES landing.html *.webp
           zip -r lambda.zip rivalry-center/index.html rivalry-center/css rivalry-center/js rivalry-center/assets
+          zip -r lambda.zip manager-career-center/index.html manager-career-center/css manager-career-center/js manager-career-center/assets manager-career-center/data/payouts.js
           aws lambda update-function-code --function-name "$FUNCTION_NAME" --zip-file fileb://lambda.zip > /dev/null
           aws lambda wait function-updated --function-name "$FUNCTION_NAME"
           echo "Deployed $(date -u) from commit $GITHUB_SHA"

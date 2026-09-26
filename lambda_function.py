@@ -361,6 +361,8 @@ def _action_history(event):
 
 RIVALRY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rivalry-center")
 RIVALRY_PAGE_KEY = "rivalries.html"
+CAREER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "manager-career-center")
+CAREER_PAGE_KEY = "careers.html"
 
 
 class _YahooHistory:
@@ -413,19 +415,32 @@ def _deadline(context, reserve=15):
     return time.time() + max(5, remaining - reserve)
 
 
-def _rivalry_page_html():
-    """rivalries.html: the rivalry-center/ page as one file (styles, scripts
-    and logo inlined), reading the live history file instead of demo data."""
+def _bundle_page(folder, logo, data_files=()):
+    """One of the standalone page folders (rivalry-center/, manager-career-
+    center/) as a single file: styles, scripts and logo inlined, and the
+    block between its DATA markers swapped for the live history file (plus
+    any data files it still needs, like the payout rules)."""
     def read(path, mode="r"):
-        with open(os.path.join(RIVALRY_DIR, path), mode, **({} if "b" in mode else {"encoding": "utf-8"})) as f:
+        with open(os.path.join(folder, path), mode, **({} if "b" in mode else {"encoding": "utf-8"})) as f:
             return f.read()
     page = read("index.html")
     page = page.replace('<link rel="stylesheet" href="css/styles.css">', "<style>\n" + read("css/styles.css") + "\n</style>")
-    start, end = page.index("<!-- DATA -->"), page.index("<!-- /DATA -->") + len("<!-- /DATA -->")
-    page = page[:start] + "<script>window.GOONCOCKS_HISTORY_URL = '/" + league_history.PUBLIC_KEY + "';</script>" + page[end:]
+    start, end = page.index("<!-- DATA"), page.index("<!-- /DATA -->") + len("<!-- /DATA -->")
+    data = "".join("<script>\n" + read(f) + "\n</script>\n" for f in data_files)
+    page = page[:start] + data + "<script>window.GOONCOCKS_HISTORY_URL = '/" + league_history.PUBLIC_KEY + "';</script>" + page[end:]
     page = re.sub(r'<script src="(js/[\w.-]+)"></script>', lambda m: "<script>\n" + read(m.group(1)) + "\n</script>", page)
-    logo = "data:image/webp;base64," + base64.b64encode(read("assets/peacock.webp", "rb")).decode("ascii")
-    return page.replace('src="assets/peacock.webp"', f'src="{logo}"')
+    image = "data:image/webp;base64," + base64.b64encode(read(logo, "rb")).decode("ascii")
+    return page.replace(f'src="{logo}"', f'src="{image}"')
+
+
+def _rivalry_page_html():
+    """rivalries.html, built from rivalry-center/."""
+    return _bundle_page(RIVALRY_DIR, "assets/peacock.webp")
+
+
+def _career_page_html():
+    """careers.html, built from manager-career-center/ (with its payout rules)."""
+    return _bundle_page(CAREER_DIR, "assets/gooncocks-logo.webp", data_files=("data/payouts.js",))
 
 
 def _rivalry_store(s3, bucket):
@@ -485,6 +500,7 @@ def _refresh_rivalry(s3, bucket, yahoo, league_key, deadline, rediscover=False, 
                                            standings=index["seasons"], excluded=_excluded)
     _put(s3, bucket, league_history.PUBLIC_KEY, json.dumps(history, separators=(",", ":")), "application/json")
     _put(s3, bucket, RIVALRY_PAGE_KEY, _rivalry_page_html(), "text/html")
+    _put(s3, bucket, CAREER_PAGE_KEY, _career_page_html(), "text/html")
     for year in skipped:
         index["seasons"][year]["skipped"] = True
     return index, history, pending, resolve
@@ -537,11 +553,12 @@ def _action_rivalry_history(event, context=None):
         print(f"\nNot finished - still missing weeks from {', '.join(pending)}. Run this again to continue.")
     else:
         print(f"\nDone. {len(finals)} games from {years[0] if years else '-'} to {years[-1] if years else '-'} are live at"
-              f" https://stats.gooncocks.com/{RIVALRY_PAGE_KEY}")
+              f" https://stats.gooncocks.com/{RIVALRY_PAGE_KEY} and https://stats.gooncocks.com/{CAREER_PAGE_KEY}")
     return {
         "seasons": sorted(index["seasons"], key=int), "final_games": len(finals),
         "still_missing": pending, "former_managers": former, "champions": champs,
         "page": f"https://stats.gooncocks.com/{RIVALRY_PAGE_KEY}",
+        "careers_page": f"https://stats.gooncocks.com/{CAREER_PAGE_KEY}",
     }
 
 
