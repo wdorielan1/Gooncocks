@@ -3,42 +3,44 @@ Renders the shareable recap webpage as an HTML string, using the exact same
 award data as awards.generate_recap() (via compute_awards()/rank_teams())
 so the text recap and the webpage never disagree.
 
-Visual design ported from the "Gooncocks Recap" static mockup Will had
-generated separately (peacock mascot art, masthead nav, hero with the
-masked logo image, shame banner, award cards, animated ranking chart,
-scoreboard grid). The mascot image is expected to live in the
-same S3 bucket as this page - see LOGO_URL below.
+Layout follows the "sports network" mockup Will picked: a score strip
+across the top, a "<Goon> takes the crown" hero next to the season's
+pecking order, gold Goon / red Cock of the Week cards, the rest of the
+awards as rows with expandable receipts, every matchup, and weekly
+scoring next to season standings. The artwork lives in the same S3
+bucket as the page - see the *_URL constants below.
 
 render_html(week, matchups) returns a complete, self-contained HTML page
 (styles inlined, no external dependencies except Google Fonts and the
-logo image) ready to upload somewhere public - see lambda_function.py's
+images) ready to upload somewhere public - see lambda_function.py's
 _publish_page for the AWS side of that.
 """
+import datetime
 import re
 from html import escape
 
 from awards import compute_awards, identity, rank_teams
 
-LOGO_URL = "https://stats.gooncocks.com/gooncocks-logo.png"
+SITE_URL = "https://stats.gooncocks.com"
 HOME_URL = "https://gooncocks.com"
+LOGO_URL = f"{SITE_URL}/gooncocks-logo.png"
 
-# Sad/losing peacock artwork that peeks in on the right side of the Cock
-# of the Week shame banner - same visual treatment as LOGO_URL's peacock
-# in the hero section, just a different (defeated-looking) image and
-# scaled down for the shame banner's compact size. Expected at the bucket
-# root alongside the logo.
-SHAME_ART_URL = "https://stats.gooncocks.com/cock-of-the-week.png"
+# The crowned-peacock banner art. lambda_function.py uploads it to the
+# bucket root on every publish (it's the landing page's hero too).
+HERO_ART_URL = f"{SITE_URL}/landing-hero.webp"
+
+# Sad/losing peacock artwork on the Cock of the Week card. Expected at the
+# bucket root alongside the logo.
+SHAME_ART_URL = f"{SITE_URL}/cock-of-the-week.png"
 
 # Per-manager headshots, if uploaded. Convention: a manager named "Chet"
 # maps to photos/chet.jpg - lowercased, apostrophes dropped, everything
 # else non-alphanumeric collapsed to a dash. Keyed by manager (a person),
 # not by team name, since team names get renamed mid-season and a manager
 # doesn't - so a rename never orphans someone's photo. Falls back to the
-# team name when no manager is known (e.g. sample data, or manual entries
-# that skip manager_a/manager_b). A team/manager with no photo uploaded
-# just renders without one (onerror removes the broken-image element
-# rather than showing a placeholder icon).
-PHOTO_BASE_URL = "https://stats.gooncocks.com/photos/"
+# team name when no manager is known (e.g. sample data). Anyone without a
+# photo gets a letter badge instead (the image removes itself on error).
+PHOTO_BASE_URL = f"{SITE_URL}/photos/"
 
 
 def _slugify(name: str) -> str:
@@ -46,209 +48,404 @@ def _slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
-def _display_name(team, manager):
-    """'Chett's Angels — Chet' when the manager is known, else just the
-    team name."""
-    return f"{team} — {manager}" if manager else team
+def _who(team, manager):
+    """The name shown on the page: the manager when known, else the team.
+    Names come from Yahoo, where league members type them, so escaped."""
+    return escape(identity(team, manager) or "")
 
 
-def _headshot_img(team, manager, css_class):
-    key = identity(team, manager)
-    if not key:
-        return ""
-    url = f"{PHOTO_BASE_URL}{_slugify(key)}.jpg"
-    return f'<img class="{css_class}" src="{url}" alt="{key}" onerror="this.remove()">'
+def _avatar(team, manager, tone="blue", size=""):
+    """A round letter badge, covered by the manager's headshot when one has
+    been uploaded. tone picks the badge color: gold (winner), blue, red,
+    or dark (on a gold background)."""
+    key = identity(team, manager) or "?"
+    photo = f'<img src="{PHOTO_BASE_URL}{_slugify(key)}.jpg" alt="" loading="lazy" onerror="this.remove()">'
+    return f'<span class="av av-{tone} {size}" aria-hidden="true">{escape(key[:1].upper())}{photo}</span>'
+
+
+def _season(today=None):
+    today = today or datetime.date.today()
+    return today.year if today.month >= 3 else today.year - 1
+
 
 STYLE_BLOCK = """
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Teko:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Permanent+Marker&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{color-scheme:dark;--bg:#0b1220;--surface:#101a2b;--line:#263044;--text:#eef1f8;--muted:#94a0b3;--gold:#e7a33b;--blue:#3074ec;--red:#d1503f}
+  :root{color-scheme:dark;--bg:#07101f;--panel:#0b1629;--panel2:#0e1b33;--line:#1d2c4a;--line2:#2a3d63;--text:#f2f4f9;--muted:#9aa6bd;--dim:#6c7a95;--gold:#f6c343;--gold2:#e2a92a;--blue:#1f5bd8;--red:#b3262d;--red2:#7c161b;--display:Anton,Impact,'Arial Narrow',sans-serif}
   *{box-sizing:border-box}
-  html{scroll-behavior:smooth;scroll-padding-top:30px}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:'Work Sans',sans-serif;font-size:16px}
+  html{scroll-behavior:smooth;scroll-padding-top:16px}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Work Sans',system-ui,sans-serif;font-size:15px;line-height:1.45;overflow-x:hidden}
   a{color:inherit;text-decoration:none}
-  a:focus-visible{outline:2px solid var(--gold);outline-offset:6px}
-  .masthead{max-width:1440px;margin:auto;padding:24px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
-  .brand{display:flex;align-items:center;gap:12px;font-family:Teko,'Arial Narrow',sans-serif;font-size:32px;font-weight:600;line-height:1}
-  .brand img{width:52px;height:52px;border-radius:50%;object-fit:cover}
-  .brand small{display:block;font-family:'Work Sans',sans-serif;font-size:10px;letter-spacing:1.8px;color:var(--muted);margin-top:7px}
-  nav{display:flex;gap:30px;font-size:14px;color:var(--muted)}
-  nav a:hover,nav .active{color:var(--gold)}
-  nav{align-items:center}
-  nav a.home-link{color:var(--bg);background:var(--gold);padding:7px 14px;border-radius:100px;font-weight:600;white-space:nowrap}
-  nav a.home-link:hover{background:#f0b458;color:var(--bg)}
-  .season{font-size:12px;letter-spacing:1px;color:var(--muted)}
-  .season span,.slash{margin:0 12px;color:#4a5770}
-  main{max-width:1328px;padding:0 20px;margin:auto}
-  .edition{display:flex;justify-content:space-between;padding:28px 0 20px;font-size:12px;letter-spacing:1.8px;font-weight:600;flex-wrap:wrap;gap:8px}
-  .demo{color:var(--muted);font-size:11px}
-  .hero{min-height:450px;position:relative;isolation:isolate;overflow:hidden;background:#060d19;border:1px solid #343647;border-top:3px solid var(--gold)}
-  .hero-art{position:absolute;right:-15px;top:-45px;width:520px;height:520px;object-fit:cover;z-index:-2;opacity:.8;mask-image:linear-gradient(90deg,transparent,black 25%);-webkit-mask-image:linear-gradient(90deg,transparent,black 25%)}
-  .hero:after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#09111d 2%,#09111de6 29%,transparent 72%),linear-gradient(0deg,#09111d,transparent 35%);z-index:-1}
-  .yardlines{position:absolute;inset:0;z-index:-1;background:repeating-linear-gradient(90deg,transparent 0,transparent 99px,#ffffff08 100px,#ffffff08 101px)}
-  .hero-content{padding:32px 28px 52px;position:relative}
-  .eyebrow{font-size:12px;letter-spacing:1.9px;font-weight:600;margin:0 0 12px;color:var(--muted)}
-  .hero .eyebrow{color:var(--gold);display:flex;align-items:center;gap:12px}
-  .crown{font-size:25px}
-  h1,h2,h3,p{margin-top:0}
-  h1,h2,h3{font-family:Teko,'Arial Narrow',Impact,sans-serif;font-weight:600}
-  h1{font-size:72px;line-height:.85;letter-spacing:.5px;margin:16px 0 20px}
-  h1 span{color:var(--gold)}
-  .champion{font-family:Teko,Impact,sans-serif;font-size:32px;text-transform:uppercase;letter-spacing:1px;line-height:1.1;display:flex;align-items:center;gap:14px}
-  .hero-headshot{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);flex:none}
-  .shame-headshot{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--red);flex:none}
-  .award-headshot{width:26px;height:26px;border-radius:50%;object-fit:cover;border:1px solid var(--line);flex:none}
-  .bonus-headshot{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--blue);flex:none}
-  .bonus{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--blue);padding:20px 24px;display:flex;gap:16px;align-items:center;margin:0 0 40px;flex-wrap:wrap}
-  .bonus-icon{width:44px;height:44px;border:1px solid #2b4a86;color:var(--blue);background:#122040;display:grid;place-items:center;font-size:20px;flex:none}
-  .bonus .eyebrow{color:#7aa8ff;font-size:11px;margin-bottom:6px}
-  .bonus h3{font-size:20px;margin:0 0 4px;line-height:1.1}
-  .bonus p{font-size:13px;color:var(--muted);margin:0}
+  a:focus-visible,summary:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+  h1,h2,h3,p{margin:0}
+  h1,h2,h3{font-family:var(--display);font-weight:400;letter-spacing:.5px;text-transform:uppercase}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+  .kicker{font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+  .kicker:after{content:'';flex:1;max-width:90px;height:2px;background:currentColor;opacity:.8}
+  .num{font-family:var(--display);font-variant-numeric:tabular-nums;letter-spacing:.3px}
+
+  /* avatars */
+  .av{position:relative;flex:none;display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;font:700 12px/1 'Work Sans',sans-serif;overflow:hidden;color:#fff;background:var(--blue)}
+  .av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .av-gold{background:var(--gold);color:#1a1405}
+  .av-dark{background:#0b1629;color:#fff;box-shadow:0 0 0 3px #0b1629}
+  .av-red{background:#fff;color:var(--red)}
+  .av-lg{width:64px;height:64px;font:400 34px/1 var(--display)}
+
+  /* masthead */
+  .top{border-bottom:1px solid var(--line);background:#060e1c}
+  .top .wrap{display:flex;align-items:center;gap:24px;min-height:84px}
+  .brand{display:flex;align-items:center;gap:14px;margin-right:auto}
+  .brand img{width:58px;height:58px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);background:var(--blue)}
+  .brand b{display:block;font:400 34px/1 var(--display);letter-spacing:1px}
+  .brand small{display:block;font-size:10px;font-weight:700;letter-spacing:3.4px;color:var(--muted);margin-top:4px}
+  .nav{display:flex;align-items:center;gap:28px;font-size:14px;font-weight:500;color:#cfd6e4}
+  .nav a{padding:6px 0;border-bottom:2px solid transparent}
+  .nav a:hover{color:var(--gold)}
+  .nav a.on{color:#fff;border-color:var(--gold)}
+  .wk{position:relative}
+  .wk summary{list-style:none;cursor:pointer;background:var(--gold);color:#141005;font:400 16px/1 var(--display);letter-spacing:1px;padding:10px 18px;border-radius:100px;white-space:nowrap}
+  .wk summary::-webkit-details-marker{display:none}
+  .wk summary:after{content:'';display:inline-block;width:6px;height:6px;border:solid #141005;border-width:0 2px 2px 0;transform:rotate(45deg);margin:0 0 3px 9px}
+  .wk-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:20;min-width:160px;max-height:320px;overflow:auto;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:6px;box-shadow:0 14px 40px #0009}
+  .wk-menu a{display:block;padding:9px 12px;border-radius:6px;font-weight:600;font-size:14px}
+  .wk-menu a:hover{background:#ffffff10}
+  .wk-menu a.on{color:var(--gold)}
+  .home-mini{display:none}
+
+  /* score strip */
+  .strip{border-bottom:1px solid var(--line);background:#081223}
+  .strip .wrap{display:grid;grid-template-columns:repeat(var(--games,5),minmax(150px,1fr));overflow-x:auto;scrollbar-width:none}
+  .strip .wrap::-webkit-scrollbar{display:none}
+  .sg{padding:10px 18px 12px;border-left:1px solid var(--line)}
+  .sg:first-child{border-left:0;padding-left:0}
+  .sg-status{font-size:9px;font-weight:700;letter-spacing:1.6px;color:var(--muted)}
+  .sg-row{display:flex;align-items:center;gap:9px;margin-top:6px;font-size:13px;color:#d6dcea}
+  .sg-row span:not(.av){flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sg-row b{font:400 17px/1 var(--display);letter-spacing:.3px}
+  .sg-row.win b{color:var(--gold)}
+
+  .demo{background:#2a1f05;color:var(--gold);text-align:center;font-size:12px;font-weight:700;letter-spacing:2px;padding:8px}
+
+  /* hero + pecking order */
+  .lead{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;margin-top:22px}
+  .hero{position:relative;isolation:isolate;overflow:hidden;min-height:420px;border:1px solid var(--line2);border-radius:4px;background:#07101f;display:flex;align-items:center}
+  .hero-art{position:absolute;right:0;top:0;width:66%;height:100%;object-fit:cover;object-position:62% 18%;z-index:-2;filter:saturate(1.05) brightness(.9)}
+  .hero:before{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,#07101f 34%,#07101fcc 50%,#07101f33 72%,transparent),linear-gradient(0deg,#07101fb0,transparent 40%)}
+  .hero-body{padding:34px 34px 38px;max-width:620px}
+  .hero .kicker{color:var(--gold)}
+  .hero h1{font-size:clamp(48px,7.2vw,92px);line-height:.9;margin:18px 0 16px;overflow-wrap:anywhere}
+  .hero h1.long{font-size:clamp(40px,5.4vw,70px)}
+  .hero h1 span{color:var(--gold)}
+  .hero-sub{font-size:18px;line-height:1.4;color:#e4e8f1;max-width:31ch}
+  .btn{display:inline-flex;align-items:center;gap:10px;margin-top:24px;background:var(--gold);color:#141005;font-weight:700;font-size:14px;padding:12px 20px;border-radius:3px}
+  .btn:hover{background:#ffd460}
+  .arrow{display:inline-block;width:14px;height:10px;background:currentColor;clip-path:polygon(0 42%,70% 42%,70% 10%,100% 50%,70% 90%,70% 58%,0 58%)}
+  .pecking{display:flex;flex-direction:column}
+  .pecking h2{font-size:30px;line-height:1;margin-bottom:12px}
+  .mini{width:100%;border-collapse:collapse;font-size:14px}
+  .mini th{font-size:9px;letter-spacing:1.6px;color:var(--muted);font-weight:700;text-align:left;padding:0 10px 8px}
+  .mini th:last-child,.mini td:last-child{text-align:right}
+  .mini td{padding:9px 10px;border-top:1px solid var(--line);background:var(--panel)}
+  .mini td:first-child{width:34px;color:var(--muted);font-weight:700}
+  .mini tr:first-child td:first-child{color:var(--gold)}
+  .mini .nm{display:flex;align-items:center;gap:10px;font-weight:600}
+  .mini td:last-child{font:400 17px/1 var(--display)}
+  .ghost{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:12px;border:1px solid var(--line2);padding:11px;font-size:13px;font-weight:600;border-radius:3px}
+  .ghost:hover{border-color:var(--gold);color:var(--gold)}
+
+  /* goon / cock */
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  .big{position:relative;isolation:isolate;overflow:hidden;min-height:150px;padding:18px 22px 20px;border-radius:3px}
+  .big .kicker{font-size:12px;letter-spacing:3.4px}
+  .goon{background:linear-gradient(100deg,var(--gold) 55%,#f9d060);color:#141005}
+  .cock{background:linear-gradient(100deg,var(--red) 50%,#8e1c22);color:#fff}
+  .big-main{display:flex;align-items:center;gap:16px;margin-top:12px;position:relative;z-index:1}
+  .big h3{font-size:clamp(34px,4.4vw,52px);line-height:.95;overflow-wrap:anywhere}
+  .big-pts{font:400 24px/1.1 var(--display);letter-spacing:.5px}
+  .tag{display:inline-block;margin-top:8px;font:400 15px/1 var(--display);letter-spacing:2px;padding:6px 12px}
+  .goon .tag{background:#141005;color:var(--gold)}
+  .cock .tag{background:var(--red2);color:#fff}
+  .big-note{margin-top:12px;font-size:12.5px;font-weight:600;max-width:44ch;position:relative;z-index:1;list-style:none;padding:0}
+  .goon .big-note{color:#3a2c07}
+  .cock .big-note{color:#ffd9d9}
+  .big-art{position:absolute;right:-6px;top:0;height:100%;width:44%;object-fit:cover;z-index:-1}
+  .goon .big-art{right:16px;top:50%;width:122px;height:122px;transform:translateY(-50%) rotate(6deg);border-radius:50%;border:4px solid #141005;box-shadow:0 10px 24px #0005}
+  .cock .big-art{mask-image:linear-gradient(90deg,transparent,#000 45%);-webkit-mask-image:linear-gradient(90deg,transparent,#000 45%);opacity:.95}
+  .scrawl{position:absolute;z-index:1;font-family:'Permanent Marker',cursive;font-size:15px;line-height:1.05;transform:rotate(-8deg);text-align:center}
+  .goon .scrawl{right:150px;bottom:22px;color:#3a2c07}
+  .cock .scrawl{right:18px;top:18px;color:#ffe3e3;transform:rotate(-12deg)}
+
+  /* sections */
+  .sec{margin-top:44px}
+  .sec-head{display:flex;align-items:center;gap:18px}
+  .sec-head h2{font-size:34px;line-height:1}
+  .sec-head:after{content:'';flex:1;height:1px;background:var(--line2)}
+  .sec-sub{font-size:11px;font-weight:700;letter-spacing:3px;color:#8fb0ff;margin:6px 0 16px}
+
+  /* award rows */
+  .awards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .aw{display:grid;grid-template-columns:44px minmax(0,1.1fr) minmax(0,1fr);gap:4px 14px;padding:16px 18px;background:var(--panel);border:1px solid var(--line);border-radius:3px}
+  .ico{width:36px;height:36px;color:var(--gold)}
+  .ico svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .aw h3{font-family:'Work Sans',sans-serif;font-weight:700;font-size:12px;letter-spacing:2.2px;margin-bottom:8px}
+  .aw-who{display:flex;align-items:center;gap:9px;font-weight:600;font-size:14px}
+  .aw-who>span:not(.av){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .aw-stat{margin-left:auto;padding-left:10px;text-align:left}
+  .aw-stat b{display:block;font:400 28px/1 var(--display);letter-spacing:.3px}
+  .aw-stat small{display:block;font-size:9px;font-weight:700;letter-spacing:1.4px;color:var(--muted);margin-top:4px;white-space:nowrap}
+  .aw-side{border-left:1px solid var(--line);padding-left:14px;font-size:13px;color:#d9deea;display:flex;flex-direction:column;justify-content:center}
+  .rc summary{list-style:none;cursor:pointer;margin-top:8px;align-self:flex-end;font-size:12px;font-weight:600;color:#9fbaff;text-align:right}
+  .rc summary::-webkit-details-marker{display:none}
+  .rc summary:after{content:' +';color:var(--gold);font-weight:700}
+  .rc[open] summary:after{content:' \\2212'}
+  .rc ul{list-style:none;margin:8px 0 0;padding:10px 0 0;border-top:1px dashed var(--line2);display:grid;gap:5px;font-size:12.5px;color:#c9d1e2}
+  .rc li{position:relative;padding-left:13px}
+  .rc li:before{content:'';position:absolute;left:0;top:.6em;width:5px;height:5px;border-radius:50%;background:var(--gold)}
+  .empties{display:grid;grid-template-columns:1fr 1fr;margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:3px}
+  .aw-empty{display:flex;align-items:center;gap:16px;padding:14px 18px;font-size:13px;color:#cfd6e4}
+  .aw-empty+.aw-empty{border-left:1px solid var(--line)}
+  .aw-empty .ico{width:30px;height:30px}
+  .aw-empty h3{font-family:'Work Sans',sans-serif;font-weight:700;font-size:12px;letter-spacing:2.2px;min-width:130px}
+
+  .bonus{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:16px 20px;background:var(--panel);border:1px solid var(--line);border-left:3px solid #8fb0ff;border-radius:3px}
+  .bonus .kicker{color:#8fb0ff;font-size:11px}
+  .bonus h3{font-size:22px;margin:4px 0 2px}
+  .bonus p{font-size:13px;color:var(--muted)}
   .bonus-stat{margin-left:auto;text-align:right}
-  .bonus-stat>span{font-family:Teko,Impact,sans-serif;font-size:34px;line-height:1;color:var(--blue)}
-  .bonus-stat small{font-size:10px;color:var(--muted)}
-  .hero-copy{font-size:14px;color:#a9b3c5;line-height:1.7;margin:9px 0 22px}
-  .hero-bottom{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
-  .hero-score{display:flex;align-items:baseline;gap:10px}
-  .hero-score>span{font-family:Teko,Impact,sans-serif;font-size:56px;line-height:1;color:var(--gold)}
-  small{font-size:11px;letter-spacing:1px;color:var(--muted)}
-  .prize{border-left:1px solid #756139;padding-left:24px;display:flex;flex-direction:column}
-  .prize>span{font-family:Teko,Impact,sans-serif;font-size:38px;font-weight:600;line-height:1;color:var(--gold)}
-  .prize small{color:var(--gold);font-size:10px}
-  .hero-foot{position:absolute;bottom:0;left:0;right:0;border-top:1px solid #ffffff12;display:flex;justify-content:space-between;padding:12px 28px;font-size:10px;letter-spacing:2px;color:var(--muted)}
-  .hero-foot span span{margin:0 12px;color:var(--gold)}
-  .shame{background:linear-gradient(90deg,#271b23,#141823);border:1px solid #523031;border-left:3px solid var(--red);padding:22px 24px;display:flex;gap:20px;align-items:center;margin:20px 0 38px;flex-wrap:wrap;position:relative;isolation:isolate;overflow:hidden}
-  .shame-art{position:absolute;right:-35px;top:-30px;width:200px;height:200px;object-fit:cover;z-index:-1;opacity:.35;mask-image:linear-gradient(90deg,transparent,black 45%);-webkit-mask-image:linear-gradient(90deg,transparent,black 45%)}
-  .shame-icon{font-size:36px;color:var(--red);border:1px solid #72372f;width:54px;height:54px;display:grid;place-items:center;flex:none}
-  .shame .eyebrow{color:#eb7b6d;font-size:11px;margin-bottom:7px}
-  .shame h2{font-size:27px;text-transform:uppercase;line-height:1;margin:0 0 6px}
-  .shame p:last-child{color:var(--muted);font-size:13px;margin:0}
-  .shame-score{margin-left:auto;text-align:right;display:flex;flex-direction:column}
-  .shame-score>span{font-family:Teko,Impact,sans-serif;font-size:42px;line-height:1;color:#ed877b}
-  .shame-score small{font-size:10px;margin-top:5px}
-  .section-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 20px;flex-wrap:wrap}
-  .section-heading h2{font-size:28px;letter-spacing:.4px;line-height:1;margin:0}
-  .section-heading>span{font-size:10px;letter-spacing:1.5px;color:var(--muted)}
-  .section-heading .eyebrow{font-size:10px;margin-bottom:10px}
-  .award-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:40px}
-  .award{background:var(--surface);border:1px solid var(--line);padding:20px;display:flex;flex-direction:column;position:relative;overflow:hidden}
-  .award-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-  .award-icon{width:36px;height:36px;color:#7aa8ff;background:#1b2c49;display:grid;place-items:center;font-size:20px}
-  .award-index{font-family:Teko,sans-serif;color:#45516a;font-size:22px}
-  .award h3{font-size:22px;line-height:1;margin-bottom:10px;letter-spacing:.5px}
-  .award-team{font-weight:600;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:8px}
-  .award-context{font-size:12px;color:var(--muted);line-height:1.6;min-height:36px}
-  .award-stat{border-top:1px solid var(--line);padding-top:14px;margin-top:8px;display:flex;align-items:baseline;gap:8px}
-  .award-stat strong{font-family:Teko,sans-serif;font-size:35px;font-weight:500;line-height:1}
-  .award-stat span{font-size:10px;color:var(--muted);letter-spacing:.7px}
-  .award-copy{font-size:12px;line-height:1.6;color:var(--muted);margin:12px 0 0}
-  .award-detail,.hero-detail,.shame-detail{list-style:none;padding:0;display:grid;gap:5px}
-  .award-detail{margin:2px 0 6px;font-size:12px;line-height:1.45;color:#c3cad8}
-  .award-detail li,.hero-detail li,.shame-detail li{position:relative;padding-left:13px}
-  .award-detail li:before,.hero-detail li:before,.shame-detail li:before{content:'';position:absolute;left:0;top:.62em;width:5px;height:5px;border-radius:50%;background:var(--gold)}
-  .hero-detail{margin:10px 0 22px;font-size:14px;line-height:1.5;color:#a9b3c5;max-width:46ch}
-  .shame-detail{margin:0;font-size:13px;line-height:1.45;color:var(--muted)}
-  .shame-detail li:before{background:#ed877b}
-  .panel{padding:26px;background:#0f1929;border:1px solid var(--line);margin-bottom:40px}
-  .rankings .section-heading{margin-bottom:22px}
-  .chart-row{display:grid;grid-template-columns:25px 160px 1fr 65px;align-items:center;gap:14px;min-height:38px;border-bottom:1px solid #ffffff04}
-  .rank{font-family:Teko,sans-serif;color:#63718a;font-size:21px}
-  .team-label{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .bar-track{height:12px;background:#ffffff03}
-  .bar{height:100%;background:var(--bar);width:var(--width)}
-  .chart-row:first-child .team-label,.chart-row:first-child .rank,.chart-row:first-child .chart-score{color:var(--gold)}
-  .chart-score{font-family:Teko,sans-serif;font-size:22px;text-align:right;font-variant-numeric:tabular-nums}
-  .chart-foot{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);padding-top:18px;flex-wrap:wrap;gap:8px}
-  .chart-foot i{display:inline-block;background:var(--gold);width:8px;height:8px;margin-right:8px}
-  .standings-row{display:grid;grid-template-columns:25px 1fr 80px 100px;align-items:center;gap:14px;min-height:38px;border-bottom:1px solid #ffffff04}
-  .standings-row:first-child .standings-name,.standings-row:first-child .rank{color:var(--gold)}
-  .standings-record{font-family:Teko,sans-serif;font-size:20px;text-align:center}
-  .standings-points{font-family:Teko,sans-serif;font-size:20px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
-  .scoreboard{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:40px}
-  .game{background:var(--surface);border:1px solid var(--line);padding:18px}
-  .game-header{font-size:10px;letter-spacing:1.5px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:14px}
-  .game-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0;color:var(--muted);font-size:13px}
-  .game-row strong{font-family:Teko,sans-serif;font-size:26px;line-height:1;font-weight:500}
-  .game-row.winner{color:var(--text)}
-  .game-row.winner strong{color:var(--gold)}
-  .game-foot{font-size:10px;border-top:1px solid var(--line);padding-top:12px;margin-top:14px;color:var(--muted)}
-  footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:28px 0 34px;flex-wrap:wrap;border-top:1px solid var(--line)}
-  .footer-brand{font-family:Teko,sans-serif;font-size:24px;font-weight:600;letter-spacing:1px}
-  .footer-brand span{color:var(--gold);margin-left:10px}
-  footer p{font-size:11px;color:var(--muted);line-height:1.8;margin:0}
-  footer>span{font-size:10px;letter-spacing:1.5px;color:#627088}
+  .bonus-stat b{display:block;font:400 30px/1 var(--display);color:#8fb0ff}
+  .bonus-stat small{font-size:10px;letter-spacing:1px;color:var(--muted)}
+
+  /* matchups */
+  .games{display:grid;gap:6px}
+  .game{display:grid;grid-template-columns:70px minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr);align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:3px;min-height:54px}
+  .g-status{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted);text-align:center;border-right:1px solid var(--line);align-self:stretch;display:grid;place-items:center}
+  .g-team{display:flex;align-items:center;gap:10px;padding:8px 16px;min-width:0}
+  .g-team .nm{min-width:0;font-weight:600;font-size:14px;line-height:1.2;overflow:hidden;text-overflow:ellipsis}
+  .g-team .nm small{display:block;font-size:11px;font-weight:500;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .g-team b{font:400 24px/1 var(--display);letter-spacing:.3px;margin-left:auto}
+  .g-team.win b{color:var(--gold)}
+  .g-team.lose{flex-direction:row;border-left:1px solid var(--line)}
+  .g-team.lose b{margin:0 6px 0 0;color:#e4e8f1}
+  .g-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;border-left:1px solid var(--line);font-size:12.5px;color:#cfd6e4;align-self:stretch}
+  .badge{background:var(--gold);color:#141005;font:400 12px/1 var(--display);letter-spacing:1px;padding:5px 8px}
+
+  /* tables */
+  .tables{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .tables.solo{grid-template-columns:1fr}
+  .tcard{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:18px 18px 14px}
+  .thead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px}
+  .thead h2{font-size:30px;line-height:1}
+  .thead span{font-size:10px;font-weight:700;letter-spacing:1.8px;color:var(--muted)}
+  .tbl{width:100%;border-collapse:collapse;font-size:14px}
+  .tbl th{font-size:9px;font-weight:700;letter-spacing:1.6px;color:var(--muted);text-align:left;padding:6px 10px;border-bottom:1px solid var(--line2)}
+  .tbl td{padding:6px 10px;border-bottom:1px solid #ffffff0a}
+  .tbl td:first-child,.tbl th:first-child{width:36px;text-align:center;color:var(--muted);font-weight:700}
+  .tbl .nm{display:flex;align-items:center;gap:10px;font-weight:500}
+  .tbl .r{text-align:right;font:400 16px/1 var(--display);letter-spacing:.3px}
+  .tbl th.r{font:700 9px/1 'Work Sans',sans-serif;letter-spacing:1.6px}
+  .tbl .c{text-align:center}
+  .tbl tr.hi td{background:var(--gold);color:#141005}
+  .tbl tr.lo td{background:#3a1015;color:#ff9b9b;border-bottom-color:var(--red)}
+
+  /* week nav + footer */
+  .weeknav{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;margin:40px 0 0}
+  .wn{border:1px solid var(--line2);padding:12px 18px;font:400 16px/1 var(--display);letter-spacing:1.5px;display:inline-flex;align-items:center;gap:10px;border-radius:3px;white-space:nowrap}
+  a.wn:hover{border-color:var(--gold);color:var(--gold)}
+  .wn.off{visibility:hidden}
+  .wn .arrow.back{transform:scaleX(-1)}
+  .wn-mid{display:flex;align-items:center;gap:14px;font-size:11px;font-weight:700;letter-spacing:2.4px;color:#cfd6e4;justify-content:center}
+  .wn-mid:before,.wn-mid:after{content:'';flex:1;height:1px;background:var(--line2)}
+  .wn-mid:hover{color:var(--gold)}
+  footer{margin-top:40px;border-top:1px solid var(--line);background:#060e1c}
+  footer .wrap{display:flex;align-items:center;justify-content:center;gap:28px;padding:28px 20px 36px;flex-wrap:wrap}
+  .f-brand b{display:block;font:400 34px/1 var(--display);letter-spacing:1px}
+  .f-brand small{display:block;font-size:9px;font-weight:700;letter-spacing:3.4px;color:var(--muted);margin-top:4px;text-align:center}
+  .f-note{border-left:1px solid var(--line2);padding-left:28px;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--muted);line-height:1.6}
+
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-  @media(max-width:1000px){.season{display:none}.award-grid{grid-template-columns:repeat(2,1fr)}.hero-art{right:-90px}.scoreboard{grid-template-columns:repeat(2,1fr)}}
-  @media(max-width:640px){.brand{font-size:26px}.brand img{width:40px;height:40px}nav{width:100%;gap:20px;font-size:12px}.hero{min-height:auto}.hero-art{width:340px;height:340px;right:-140px;top:10px;opacity:.5}h1{font-size:56px;margin:16px 0}.champion{font-size:26px;max-width:230px}.hero-score>span{font-size:44px}.prize{padding-left:16px}.shame-art{width:130px;height:130px;right:-15px;top:-15px}.award-grid{grid-template-columns:1fr;gap:10px}.chart-row{grid-template-columns:18px 110px 1fr 46px;gap:8px}.scoreboard{grid-template-columns:1fr}}
+  @media(max-width:1000px){
+    .nav a:not(.keep){display:none}
+    .lead{grid-template-columns:1fr}
+    .awards{grid-template-columns:1fr}
+    .tables{grid-template-columns:1fr}
+    .game{grid-template-columns:62px minmax(0,1fr) minmax(0,1fr)}
+    .g-meta{grid-column:2/-1;border-left:0;border-top:1px solid var(--line);padding:8px 16px}
+    .g-status{grid-row:span 2}
+  }
+  @media(max-width:640px){
+    body{font-size:14px}
+    .wrap{padding:0 16px}
+    .top .wrap{min-height:66px;gap:12px}
+    .brand{gap:10px}
+    .brand img{width:42px;height:42px}
+    .brand{min-width:0}
+    .brand b{font-size:24px}
+    .brand small{font-size:8px;letter-spacing:2px;white-space:nowrap}
+    .nav{gap:12px;flex:none}
+    .nav a.keep{font-size:13px}
+    .wk summary{font-size:14px;padding:9px 14px}
+    .strip .wrap{grid-template-columns:repeat(var(--games,5),minmax(168px,1fr));padding-right:0}
+    .sg{padding:9px 14px 11px}
+    .hero{min-height:470px;align-items:flex-end}
+    .hero-art{width:100%;object-position:58% 12%}
+    .hero:before{background:linear-gradient(0deg,#07101f 30%,#07101fb3 52%,#07101f1a 80%)}
+    .hero-body{padding:24px 20px 26px}
+    .hero h1{margin:14px 0 12px}
+    .hero-sub{font-size:16px}
+    .duo{grid-template-columns:1fr}
+    .big{padding:16px 18px 18px}
+    .goon .big-art{width:92px;height:92px;right:12px}
+    .scrawl{display:none}
+    .cock .big-art{width:52%}
+    .av-lg{width:54px;height:54px;font-size:28px}
+    .sec{margin-top:36px}
+    .sec-head h2{font-size:28px}
+    .aw{grid-template-columns:36px minmax(0,1fr);padding:14px}
+    .ico{width:30px;height:30px}
+    .aw-side{grid-column:1/-1;border-left:0;border-top:1px solid var(--line);padding:10px 0 0;margin-top:6px}
+    .empties{grid-template-columns:1fr}
+    .aw-empty+.aw-empty{border-left:0;border-top:1px solid var(--line)}
+    .aw-empty h3{min-width:0;flex:1}
+    .game{grid-template-columns:minmax(0,1fr)}
+    .g-status{grid-column:auto;grid-row:auto;border-right:0;padding:10px 14px 0;place-items:center start;font-size:10px}
+    .g-team{padding:6px 14px;gap:10px}
+    .g-team .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .g-team .nm small{display:inline;margin-left:6px}
+    .g-team b{font-size:22px}
+    .g-team.lose{border-left:0}
+    .g-team.lose b{order:3;margin-left:auto;margin-right:0}
+    .g-meta{grid-column:auto;padding:8px 14px 10px;margin-top:4px}
+    .tcard{padding:14px 10px 10px}
+    .thead h2{font-size:25px}
+    .tbl td,.tbl th{padding:6px 6px}
+    .weeknav{grid-template-columns:1fr 1fr;gap:10px}
+    .wn-mid{grid-column:1/-1;grid-row:1}
+    .wn{justify-content:center}
+    .f-note{border-left:0;padding-left:0;text-align:center}
+  }
+  @media(max-width:400px){.brand img{width:36px;height:36px}.brand b{font-size:21px}.brand small{display:none}.aw-stat b{font-size:24px}}
 </style>
 """
 
-# Icon, flavor-line copy, and bar-chart colors ported from the approved
-# mockup - kept as fixed strings per award category, independent of data.
-_AWARD_COPY = {
-    "blowout": ("↗", "That wasn't a matchup. That was a statement."),
-    "heartbreaker": ("♡", "One more catch. A whole different group chat."),
-    "upset": ("ϟ", "The projections have been asked to leave."),
-    "bad_beat": ("◎", "Right score. Wrong opponent. Brutal."),
-    "fraud": ("⚠", "The record says contender. The points say otherwise."),
-    "benchwarmer": ("⌛", "Best seat in the house. Wrong side of the sideline."),
-    "start_sit": ("⇄", "One lineup click away from a different week."),
-    "waiver": ("⤴", "One man's trash. Another man's starting lineup."),
-    "trade": ("⇌", "Somebody got fleeced. The receipts are right here."),
-    "injury": ("✚", "Down bad, and the trainer's room is full."),
+# Line icons for each award, drawn to a 24x24 box.
+_ICONS = {
+    "blowout": '<path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3M12 14v4M8 21h8M9 18h6"/>',
+    "heartbreaker": '<path d="M12 20s-8-4.6-8-10.2A4.3 4.3 0 0 1 12 7.5a4.3 4.3 0 0 1 8 2.3C20 15.4 12 20 12 20z"/><path d="M12 7.5l-1.5 3.5 3 2.2-2 3.3"/>',
+    "upset": '<path d="M4 20h16M6 20v-5M10 20V11M14 20V7M18 20V4"/>',
+    "bad_beat": '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>',
+    "fraud": '<path d="M4 5c5 1.5 11 1.5 16 0v6c0 5-3.6 8.5-8 9.5-4.4-1-8-4.5-8-9.5z"/><path d="M7.5 10.5c1-.8 2.2-.8 3 0M13.5 10.5c1-.8 2.2-.8 3 0M9 15.5c1.8 1 4.2 1 6 0"/>',
+    "benchwarmer": '<path d="M3 9h18M4 9V6h16v3M5 9v9M19 9v9M3 13h18M7 13v5M17 13v5"/>',
+    "start_sit": '<path d="M5 5l14 14M19 5L5 19"/>',
+    "waiver": '<path d="M14 3H6v18h8M14 3l5 5v4M14 3v5h5"/><path d="M18 15v6M15 18h6"/>',
+    "trade": '<path d="M4 8h14l-3-3M20 16H6l3 3"/>',
+    "injury": '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>',
 }
-_CHART_COLORS = ["#e7a33b", "#528ae7", "#4b7ac9", "#426bb0", "#3e5e95", "#3b527b", "#3a4867", "#374059", "#343b4c", "#323744"]
+_CROWN = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5z"/></svg>'
+_DOWN = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6l6 6 4-4 8 8M21 11v5h-5"/></svg>'
 
 
-def _award_card(idx, title, team, manager, context, value, unit, key, details=None):
-    icon, copy = _AWARD_COPY[key]
-    if team is None:
-        return f"""
-      <article class="award">
-        <div class="award-top"><span class="award-icon">{icon}</span><span class="award-index">{idx:02d}</span></div>
-        <h3>{title}</h3>
-        <p class="award-team">No qualifying team</p>
-        <div class="award-context">No award for this week.</div>
-        <p class="award-copy">Some weeks don't fit the category.</p>
-      </article>"""
-    headshot = _headshot_img(team, manager, "award-headshot")
+def _icon(key):
+    return f'<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">{_ICONS[key]}</svg></span>'
+
+
+def _detail_list(lines, css_class=None):
+    """The short 'how it happened' lines under an award (see
+    awards.award_details). Names come from Yahoo team/player data, so
+    they're escaped."""
+    if not lines:
+        return ""
+    items = "".join(f"<li>{escape(line)}</li>" for line in lines)
+    cls = f' class="{css_class}"' if css_class else ""
+    return f"<ul{cls}>{items}</ul>"
+
+
+def _receipts(lines):
+    if not lines:
+        return ""
+    return f'<details class="rc"><summary>See the receipts</summary>{_detail_list(lines)}</details>'
+
+
+def _award_row(key, title, team, manager, value, unit, context, lines):
     return f"""
-      <article class="award">
-        <div class="award-top"><span class="award-icon">{icon}</span><span class="award-index">{idx:02d}</span></div>
-        <h3>{title}</h3>
-        <p class="award-team">{headshot}{_display_name(team, manager)}</p>
-        <div class="award-context">{context}</div>{_detail_list(details)}
-        <div class="award-stat"><strong>{value}</strong><span>{unit}</span></div>
-        <p class="award-copy">{copy}</p>
+      <article class="aw">
+        {_icon(key)}
+        <div>
+          <h3>{title}</h3>
+          <div class="aw-who">{_avatar(team, manager, "gold")}<span>{_who(team, manager)}</span>
+            <div class="aw-stat"><b>{value}</b><small>{unit}</small></div></div>
+        </div>
+        <div class="aw-side"><p>{context}</p>{_receipts(lines)}</div>
       </article>"""
 
 
-def _rank_row_html(entry, idx, max_score):
-    pct = max(0.0, entry["score"] / max_score * 100) if max_score else 0
-    color = _CHART_COLORS[idx] if idx < len(_CHART_COLORS) else _CHART_COLORS[-1]
-    label = _display_name(entry["name"], entry.get("manager"))
-    return f"""
-      <div class="chart-row">
-        <span class="rank">{idx + 1:02d}</span>
-        <span class="team-label">{label}</span>
-        <div class="bar-track"><div class="bar" style="background:{color};width:{pct:.1f}%"></div></div>
-        <span class="chart-score">{entry['score']:.2f}</span>
-      </div>"""
+def _empty_row(key, title):
+    return f'<div class="aw-empty">{_icon(key)}<h3>{title}</h3><p>No qualifying team</p></div>'
 
 
-def _game_card_html(idx, m, is_sample):
-    status = "FINAL" if not is_sample else "FINAL · DEMO"
-    winner_label = _display_name(m.winner, m.winner_manager)
-    loser_label = _display_name(m.loser, m.loser_manager)
-    return f"""
-      <article class="game">
-        <div class="game-header"><span>MATCHUP 0{idx + 1}</span><span>{status}</span></div>
-        <div class="game-row winner"><span>{winner_label}</span><strong>{max(m.team_a_score, m.team_b_score):.2f}</strong></div>
-        <div class="game-row"><span>{loser_label}</span><strong>{m.loser_score:.2f}</strong></div>
-        <div class="game-foot">{m.margin:.2f}-point margin of victory</div>
-      </article>"""
+def _find(matchups, winner, loser):
+    return next(m for m in matchups if m.winner == winner and m.loser == loser)
+
+
+def _award_rows(matchups, awards, extras, details):
+    """(rows, empties): one row per award someone won, in the mockup's
+    order, and a compact 'No qualifying team' line for each category that
+    was checked but nobody earned. Categories whose data wasn't available
+    this run (e.g. rosters) are left out entirely."""
+    rows, empties = [], []
+
+    def add(key, title, award, build):
+        if award is None:
+            empties.append(_empty_row(key, title))
+        else:
+            team, manager, value, unit, context = build(award)
+            rows.append(_award_row(key, title, team, manager, value, unit, context, details.get(key)))
+
+    b, h = awards["blowout"], awards["heartbreaker"]
+    bm, hm = _find(matchups, b["winner"], b["loser"]), _find(matchups, h["winner"], h["loser"])
+    add("blowout", "BIGGEST BLOWOUT", b, lambda a: (
+        a["winner"], a.get("winner_manager"), f"{bm.margin:.2f}", "POINT MARGIN",
+        f"{_who(a['winner'], a.get('winner_manager'))} ran away from {_who(bm.loser, bm.loser_manager)}."))
+    add("heartbreaker", "HEARTBREAKER", h, lambda a: (
+        a["loser"], a.get("loser_manager"), f"{hm.margin:.2f}", "POINTS SHORT",
+        f"{_who(hm.winner, hm.winner_manager)} escaped with the win."))
+
+    def upset(a):
+        m = _find(matchups, a["winner"], a["loser"])
+        return (a["winner"], a.get("winner_manager"), f"{a['gap']:.2f}", "PROJECTED DEFICIT",
+                f"{_who(a['winner'], a.get('winner_manager'))} beat the projections. And {_who(m.loser, m.loser_manager)}.")
+    add("upset", "UPSET OF THE WEEK", awards["upset"], upset)
+    add("bad_beat", "BAD BEAT", awards["bad_beat"], lambda a: (
+        a["team"], a.get("manager"), f"{a['count']}/{len(matchups) * 2 - 1}", "TEAMS OUTSCORED",
+        f"{a['score']:.2f} points. Still took the L."))
+
+    if "fraud" in extras:
+        add("fraud", "FRAUD ALERT", extras["fraud"], lambda a: (
+            a["team"], a.get("manager"), f"+{a['luck']:.1f}", "WINS OVER EXPECTED",
+            f"{a['wins']}-{a['losses']}, but scored like a {a['expected_wins']:.1f}-win team."))
+    if "benchwarmer" in extras:
+        add("benchwarmer", "BENCHWARMER DISASTER", extras["benchwarmer"], lambda a: (
+            a["team"], a.get("manager"), f"{a['points']:.2f}", "BENCH POINTS",
+            f"{escape(a['player'])} watched from the bench."))
+    if "start_sit" in extras:
+        add("start_sit", "START/SIT DISASTER", extras["start_sit"], lambda a: (
+            a["team"], a.get("manager"), f"{a['cost']:.2f}", "POINTS LOST",
+            f"{escape(a['benched'])} sat. {escape(a['started'])} started."))
+    if "waiver" in extras:
+        add("waiver", "WAIVER-WIRE STEAL", extras["waiver"], lambda a: (
+            a["team"], a.get("manager"), f"{a['points']:.2f}", "POINTS",
+            f"{escape(a['player'])} delivered off {a['source']}."))
+    if "trade" in extras:
+        add("trade", "TRADE WINNER", extras["trade"], lambda a: (
+            a["team"], a.get("manager"), f"{a['margin']:.2f}", "POINT EDGE",
+            f"Won the trade with {escape(a['other_team'])}."))
+    if "injury" in extras:
+        add("injury", "INJURY EXCUSE", extras["injury"], lambda a: (
+            a["team"], a.get("manager"), f"{a['count']}", "INJURED STARTERS",
+            "A crowded trainer's room. A rough week."))
+    return "".join(rows), "".join(empties)
 
 
 def _bonus_note_html(note):
@@ -259,151 +456,219 @@ def _bonus_note_html(note):
     number). Returns '' when note is None, so this is always safe to call."""
     if not note:
         return ""
-    team = note.get("team")
-    manager = note.get("manager")
-    title = note.get("title", "COMMISSIONER'S NOTE")
-    detail = note.get("detail", "")
+    team, manager = note.get("team"), note.get("manager")
+    title = escape(note.get("title", "COMMISSIONER'S NOTE"))
+    avatar = _avatar(team, manager, "blue", "av-lg") if team else ""
+    label = _who(team, manager) if team else ""
     value = note.get("value")
-    unit = note.get("unit", "")
-    headshot = _headshot_img(team, manager, "bonus-headshot") if team else ""
-    label = _display_name(team, manager) if team else ""
-    stat_html = f'<div class="bonus-stat"><span>{value}</span><small>{unit}</small></div>' if value is not None else ""
+    stat = (f'<div class="bonus-stat"><b>{escape(str(value))}</b><small>{escape(note.get("unit", ""))}</small></div>'
+            if value is not None else "")
     return f"""
-  <section class="bonus" aria-label="Bonus note">
-    <span class="bonus-icon" aria-hidden="true">&#9733;</span>
-    {headshot}
-    <div><p class="eyebrow">{title}</p><h3>{label}</h3><p>{detail}</p></div>
-    {stat_html}
-  </section>"""
+    <section class="bonus" aria-label="Commissioner's note">
+      {avatar}
+      <div><p class="kicker">{title}</p><h3>{label}</h3><p>{escape(note.get("detail", ""))}</p></div>
+      {stat}
+    </section>"""
 
 
-def _detail_list(lines, css_class="award-detail"):
-    """The short 'how it happened' lines under an award (see
-    awards.award_details). Names come from Yahoo team names, which league
-    members type themselves, so they're escaped."""
-    if not lines:
-        return ""
-    items = "".join(f"<li>{escape(line)}</li>" for line in lines)
-    return f'<ul class="{css_class}">{items}</ul>'
+def _strip_game(m, status):
+    sides = sorted(
+        [(m.team_a_name, m.team_a_manager, m.team_a_score), (m.team_b_name, m.team_b_manager, m.team_b_score)],
+        key=lambda s: -s[2],
+    )
+    rows = "".join(
+        f'<div class="sg-row{" win" if i == 0 else ""}">{_avatar(t, mgr, "gold" if i == 0 else "blue")}'
+        f"<span>{_who(t, mgr)}</span><b>{score:.2f}</b></div>"
+        for i, (t, mgr, score) in enumerate(sides)
+    )
+    return f'<div class="sg"><span class="sg-status">{status}</span>{rows}</div>'
 
 
-def _extra_award_cards(extras, details=None):
-    """Cards for the roster/standings-based awards (see
-    awards.compute_extra_awards). Categories whose data wasn't available
-    this run are left out entirely rather than shown as empty."""
-    cards = []
-
-    def card(key, title, award, context, value, unit):
-        idx = 7 + len(cards)
-        if award is None:
-            cards.append(_award_card(idx, title, None, None, None, None, None, key))
-        else:
-            cards.append(_award_card(idx, title, award["team"], award.get("manager"), context(award), value(award), unit, key,
-                                     (details or {}).get(key)))
-
-    if "fraud" in extras:
-        card("fraud", "FRAUD ALERT", extras["fraud"],
-             lambda a: f"{a['wins']}-{a['losses']}, but scored like a {a['expected_wins']:.1f}-win team",
-             lambda a: f"+{a['luck']:.1f}", "WINS OVER EXPECTED")
-    if "benchwarmer" in extras:
-        card("benchwarmer", "BENCHWARMER DISASTER", extras["benchwarmer"],
-             lambda a: f"{a['player']} went off on the bench",
-             lambda a: f"{a['points']:.2f}", "BENCH POINTS")
-    if "start_sit" in extras:
-        card("start_sit", "START/SIT DISASTER", extras["start_sit"],
-             lambda a: f"Benched {a['benched']} ({a['benched_points']:.2f}) for {a['started']} ({a['started_points']:.2f})",
-             lambda a: f"{a['cost']:.2f}", "POINTS LOST")
-    if "waiver" in extras:
-        card("waiver", "WAIVER-WIRE STEAL", extras["waiver"],
-             lambda a: f"{a['player']}, picked up off {a['source']}",
-             lambda a: f"{a['points']:.2f}", "POINTS")
-    if "trade" in extras:
-        card("trade", "TRADE WINNER", extras["trade"],
-             lambda a: f"Won the trade with {a['other_team']}: {a['received_points']:.2f} to {a['gave_points']:.2f} this week",
-             lambda a: f"{a['margin']:.2f}", "POINT EDGE")
-    if "injury" in extras:
-        card("injury", "INJURY EXCUSE", extras["injury"],
-             lambda a: "Lost with a banged-up lineup",
-             lambda a: f"{a['count']}", "INJURED STARTERS")
-    return "".join(cards)
-
-
-def _standings_row_html(entry, idx):
-    record = f"{entry['wins']}-{entry['losses']}"
+def _game_row(m, status, badge):
+    badge_html = f'<span class="badge">{badge}</span>' if badge else ""
     return f"""
-      <div class="standings-row">
-        <span class="rank">{idx + 1:02d}</span>
-        <span class="team-label standings-name">{entry['id']}</span>
-        <span class="standings-record">{record}</span>
-        <span class="standings-points">{entry['points_for']:.2f} PF</span>
+      <div class="game">
+        <span class="g-status">{status}</span>
+        <div class="g-team win">{_avatar(m.winner, m.winner_manager, "gold")}<span class="nm">{_who(m.winner, m.winner_manager)}{_team_line(m.winner, m.winner_manager)}</span><b>{max(m.team_a_score, m.team_b_score):.2f}</b></div>
+        <div class="g-team lose"><b>{m.loser_score:.2f}</b>{_avatar(m.loser, m.loser_manager, "blue")}<span class="nm">{_who(m.loser, m.loser_manager)}{_team_line(m.loser, m.loser_manager)}</span></div>
+        <div class="g-meta"><span>{m.margin:.2f}-point margin</span>{badge_html}</div>
       </div>"""
 
 
-def _standings_section_html(standings, week):
-    """Season-long Power Rankings, built from every week recorded so far
-    in S3's standings.json (see lambda_function.py's _publish_page).
-    `standings` is the already-computed power_rankings() list - pass None
-    (demo mode, or before any real week has ever been published) to omit
-    the section entirely rather than show an empty table."""
-    if not standings:
-        return ""
-    rows = "".join(_standings_row_html(entry, idx) for idx, entry in enumerate(standings))
-    return f"""
-  <section id="standings" class="panel">
-    <div class="section-heading"><div><p class="eyebrow">SEASON STANDINGS</p><h2>POWER RANKINGS</h2></div><span>THROUGH WEEK {week:02d}</span></div>
-    <div role="table" aria-label="Season standings ranked by wins, then total points">{rows}</div>
-    <div class="chart-foot"><span><i></i> Current leader</span><span>Wins, then total points scored, breaks ties</span></div>
-  </section>"""
+def _team_line(team, manager):
+    """The team name under a manager's name, when they're different."""
+    return f"<small>{escape(team)}</small>" if manager and team and team != manager else ""
 
 
-def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None, extras=None, details=None):
-    details = details or {}
-    awards = compute_awards(matchups)
-    g, c, b, h = awards["goon"], awards["cock"], awards["blowout"], awards["heartbreaker"]
-
-    demo_tag = '<span class="demo">DEMO EDITION · SAMPLE SCORES</span>' if is_sample else ""
-
-    if awards["upset"]:
-        u = awards["upset"]
-        upset_card = _award_card(5, "UPSET OF THE WEEK", u["winner"], u.get("winner_manager"), f"Beat {u['loser']}", f"{u['gap']:.2f}", "PROJECTED DEFICIT", "upset", details.get("upset"))
-    else:
-        upset_card = _award_card(5, "UPSET OF THE WEEK", None, None, None, None, None, "upset")
-
-    if awards["bad_beat"]:
-        bb = awards["bad_beat"]
-        bad_beat_card = _award_card(
-            6, "BAD BEAT", bb["team"], bb.get("manager"), f"{bb['score']:.2f} points. Still took the L.",
-            f"{bb['count']}/{len(matchups) * 2 - 1}", "OTHERS OUTSCORED", "bad_beat", details.get("bad_beat"),
+def _pecking_html(standings, rankings):
+    """Top five of the season standings beside the hero; falls back to
+    this week's scores when there are no standings yet (demo mode)."""
+    if standings:
+        rows = "".join(
+            f'<tr><td>{i + 1}</td><td><span class="nm">{_avatar(e["id"], None)}{escape(e["id"])}</span></td>'
+            f'<td>{e["wins"]} - {e["losses"]}</td></tr>'
+            for i, e in enumerate(standings[:5])
         )
+        head = "<th>#</th><th>MANAGER</th><th>RECORD</th>"
     else:
-        bad_beat_card = _award_card(6, "BAD BEAT", None, None, None, None, None, "bad_beat")
+        rows = "".join(
+            f'<tr><td>{i + 1}</td><td><span class="nm">{_avatar(e["name"], e.get("manager"))}{_who(e["name"], e.get("manager"))}</span></td>'
+            f'<td>{e["score"]:.2f}</td></tr>'
+            for i, e in enumerate(rankings[:5])
+        )
+        head = "<th>#</th><th>MANAGER</th><th>PTS</th>"
+    return f"""
+    <aside class="pecking" aria-labelledby="pecking-title">
+      <h2 id="pecking-title">THE PECKING ORDER</h2>
+      <table class="mini"><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table>
+      <a class="ghost" href="#standings">Full standings <i class="arrow"></i></a>
+    </aside>"""
 
-    blowout_matchup = next(m for m in matchups if m.winner == b["winner"] and m.loser == b["loser"])
-    heartbreak_matchup = next(m for m in matchups if m.winner == h["winner"] and m.loser == h["loser"])
-    blowout_card = _award_card(3, "BIGGEST BLOWOUT", b["winner"], b.get("winner_manager"), f"Over {b['loser']}", f"{blowout_matchup.margin:.2f}", "POINT MARGIN", "blowout", details.get("blowout"))
-    heartbreak_card = _award_card(4, "HEARTBREAKER", h["loser"], h.get("loser_manager"), f"Lost to {h['winner']}", f"{heartbreak_matchup.margin:.2f}", "POINTS SHORT", "heartbreaker", details.get("heartbreaker"))
 
+def _tables_html(week, rankings, standings):
+    n = len(rankings)
+    weekly = "".join(
+        f'<tr class="{"hi" if i == 0 else "lo" if i == n - 1 and n > 1 else ""}"><td>{i + 1}</td>'
+        f'<td><span class="nm">{_avatar(e["name"], e.get("manager"), "dark" if i == 0 else "blue")}{_who(e["name"], e.get("manager"))}</span></td>'
+        f'<td class="r">{e["score"]:.2f}</td></tr>'
+        for i, e in enumerate(rankings)
+    )
+    weekly_card = f"""
+      <section class="tcard" aria-labelledby="weekly-title">
+        <div class="thead"><h2 id="weekly-title">WEEKLY SCORING</h2><span>WEEK {week:02d} ONLY</span></div>
+        <table class="tbl"><thead><tr><th>#</th><th>MANAGER</th><th class="r">PTS</th></tr></thead><tbody>{weekly}</tbody></table>
+      </section>"""
+    if not standings:
+        return f'<div class="tables solo" id="standings">{weekly_card}</div>'
+    season = "".join(
+        f'<tr class="{"hi" if i == 0 else ""}"><td>{i + 1}</td>'
+        f'<td><span class="nm">{_avatar(e["id"], None, "dark" if i == 0 else "blue")}{escape(e["id"])}</span></td>'
+        f'<td class="r c">{e["wins"]} - {e["losses"]}</td><td class="r">{e["points_for"]:.2f}</td></tr>'
+        for i, e in enumerate(standings)
+    )
+    return f"""
+    <div class="tables" id="standings">{weekly_card}
+      <section class="tcard" aria-labelledby="season-title">
+        <div class="thead"><h2 id="season-title">SEASON STANDINGS</h2><span>THROUGH WEEK {week:02d}</span></div>
+        <table class="tbl"><thead><tr><th>#</th><th>MANAGER</th><th class="r c">W - L</th><th class="r">PF</th></tr></thead><tbody>{season}</tbody></table>
+      </section>
+    </div>"""
+
+
+def _week_url(w):
+    return f"/weeks/week-{w}.html"
+
+
+def _week_links(week, weeks):
+    links = []
+    for w in sorted(set(weeks) | {week}, reverse=True):
+        current = ' class="on"' if w == week else ""
+        links.append(f'<a href="{_week_url(w)}"{current}>Week {w:02d}</a>')
+    return "".join(links)
+
+
+def _week_step(week, weeks, step):
+    """The previous/next week button. It's rendered hidden when that week
+    hasn't been published yet; the script at the bottom of the page
+    reveals it later from landing.json, so old archive pages pick up the
+    next week without being re-published."""
+    w = week + step
+    label = f"WEEK {w:02d}"
+    arrow = '<i class="arrow back"></i>' if step < 0 else '<i class="arrow"></i>'
+    inner = f"{arrow} {label}" if step < 0 else f"{label} {arrow}"
+    if w in weeks:
+        return f'<a class="wn" href="{_week_url(w)}" data-step="{step}">{inner}</a>'
+    return f'<a class="wn off" data-step="{step}" data-week="{w}" aria-hidden="true" tabindex="-1">{inner}</a>'
+
+
+# Keeps the week menu and previous/next buttons current on every page,
+# including old archived weeks, from the landing.json the Lambda rewrites
+# on each publish. Without it (or if the fetch fails) the page still works
+# with whatever weeks existed when it was published.
+_WEEK_SCRIPT = """
+<script>
+(function(){
+  var cur = __WEEK__;
+  fetch('/landing.json', {cache: 'no-cache'}).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
+    if (!d || !d.weeks || !d.weeks.length) return;
+    var have = d.weeks.map(function(w){ return w.week; });
+    if (have.indexOf(cur) < 0) have.push(cur);
+    have.sort(function(a, b){ return b - a; });
+    var menu = document.getElementById('wkMenu');
+    menu.innerHTML = '';
+    have.forEach(function(w){
+      var a = document.createElement('a');
+      a.href = '/weeks/week-' + w + '.html';
+      a.textContent = 'Week ' + (w < 10 ? '0' : '') + w;
+      if (w === cur) a.className = 'on';
+      menu.appendChild(a);
+    });
+    document.querySelectorAll('.wn[data-week]').forEach(function(el){
+      var w = Number(el.getAttribute('data-week'));
+      if (have.indexOf(w) < 0) return;
+      el.href = '/weeks/week-' + w + '.html';
+      el.classList.remove('off');
+      el.removeAttribute('aria-hidden');
+      el.removeAttribute('tabindex');
+    });
+  }).catch(function(){});
+})();
+</script>"""
+
+
+def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None, extras=None, details=None,
+                weeks=None):
+    """`weeks` is every week number published so far this season (for the
+    week menu and previous/next buttons); `standings` is power_rankings()
+    output, or None to leave the season tables out."""
+    details = details or {}
+    extras = extras or {}
+    week = int(week)
+    weeks = sorted({int(w) for w in (weeks or [])} | ({week} if not is_sample else set()))
+    awards = compute_awards(matchups)
+    g, c = awards["goon"], awards["cock"]
     rankings = rank_teams(matchups)
-    max_score = rankings[0]["score"] if rankings else 1
-    rank_rows = "".join(_rank_row_html(entry, idx, max_score) for idx, entry in enumerate(rankings))
-    game_cards = "".join(_game_card_html(idx, m, is_sample) for idx, m in enumerate(matchups))
-    extra_cards = _extra_award_cards(extras or {}, details)
+    status = "DEMO" if is_sample else "FINAL"
+    season = _season()
+
+    goon_name = _who(g["team"], g.get("manager"))
+    cock_name = _who(c["team"], c.get("manager"))
+    goon_lines = details.get("goon") or []
+    hero_sub = f"{g['score']:.2f} points. $50 richer. "
+    hero_sub += escape(goon_lines[0]) + "." if goon_lines else "Plenty to say in the group chat."
+    headline_class = ' class="long"' if len(identity(g["team"], g.get("manager"))) > 9 else ""
+
+    b, h = awards["blowout"], awards["heartbreaker"]
+    blowout_m, closest_m = _find(matchups, b["winner"], b["loser"]), _find(matchups, h["winner"], h["loser"])
+    games = "".join(
+        _game_row(m, status, "BIGGEST BLOWOUT" if m is blowout_m else "CLOSEST GAME" if m is closest_m else "")
+        for m in sorted(matchups, key=lambda m: -max(m.team_a_score, m.team_b_score))
+    )
+    award_rows, empty_rows = _award_rows(matchups, awards, extras, details)
+    empties = f'<div class="empties">{empty_rows}</div>' if empty_rows else ""
+
     # Caption shown under the peacock when the link is texted or posted.
     link_preview = escape(
-        f"Goon of the Week: {_display_name(g['team'], g.get('manager'))} ({g['score']:.2f}). "
-        f"Cock of the Week: {_display_name(c['team'], c.get('manager'))} ({c['score']:.2f}).",
+        f"Goon of the Week: {identity(g['team'], g.get('manager'))} ({g['score']:.2f}). "
+        f"Cock of the Week: {identity(c['team'], c.get('manager'))} ({c['score']:.2f}).",
         quote=True,
     )
-    bonus_html = _bonus_note_html(bonus_note)
-    standings_section = _standings_section_html(standings, week)
-    standings_nav = '<a href="#standings">Power rankings</a>' if standings else ""
+    demo_banner = '<div class="demo">DEMO EDITION &middot; SAMPLE SCORES</div>' if is_sample else ""
+    week_menu = f'<div class="wk-menu" id="wkMenu">{_week_links(week, weeks)}</div>'
+    week_nav = "" if is_sample else f"""
+  <nav class="weeknav wrap" aria-label="Other weeks">
+    {_week_step(week, weeks, -1)}
+    <a class="wn-mid" href="{HOME_URL}/#archive">{season} SEASON ARCHIVE</a>
+    {_week_step(week, weeks, 1)}
+  </nav>"""
+    script = "" if is_sample else _WEEK_SCRIPT.replace("__WEEK__", str(week))
 
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0B1220">
+<meta name="theme-color" content="#07101f">
 <meta name="description" content="Gooncocks weekly fantasy football recap. The winners, the heartbreaks, and the receipts.">
 <title>Gooncocks | Week {week} Recap</title>
 <meta property="og:type" content="website">
@@ -418,62 +683,75 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
 {STYLE_BLOCK}
 </head>
 <body>
-<header class="masthead">
-  <a class="brand" href="{HOME_URL}"><img src="{LOGO_URL}" alt="Gooncocks peacock logo"><span>GOONCOCKS<small>FANTASY FOOTBALL LEAGUE</small></span></a>
-  <nav aria-label="Recap sections"><a class="active" href="#awards">The recap</a><a href="#rankings">Weekly rankings</a>{standings_nav}<a href="#scoreboard">Scoreboard</a><a class="home-link" href="{HOME_URL}">&larr; Home</a></nav>
-  <span class="season">2026 SEASON <span>/</span> WEEK {week:02d}</span>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="{HOME_URL}"><img src="{LOGO_URL}" alt="Gooncocks peacock logo"><span><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></span></a>
+    <nav class="nav" aria-label="Recap sections">
+      <a class="on" href="#top">This Week</a><a href="#awards">Awards</a><a href="#matchups">Matchups</a><a href="#standings">Standings</a><a class="keep" href="{HOME_URL}">Home</a>
+      <details class="wk"><summary>WEEK {week:02d}</summary>{week_menu}</details>
+    </nav>
+  </div>
 </header>
-<main>
-  <div class="edition"><span>THE WEEKLY RECAP <span class="slash">/</span> VOL. {week:02d}</span>{demo_tag}</div>
+{demo_banner}
+<div class="strip" aria-label="Week {week} final scores"><div class="wrap" style="--games:{len(matchups)}">{"".join(_strip_game(m, status) for m in matchups)}</div></div>
 
-  <section class="hero" id="awards" aria-labelledby="hero-title">
-    <div class="yardlines" aria-hidden="true"></div>
-    <img class="hero-art" src="{LOGO_URL}" alt="Crowned blue peacock in a black hoodie holding a football">
-    <div class="hero-content">
-      <div class="eyebrow"><span class="crown">&#9819;</span> THE CROWN HAS A NEW HOME</div>
-      <h1 id="hero-title">GOON OF<br>THE <span>WEEK.</span></h1>
-      <div class="champion">{_headshot_img(g['team'], g.get('manager'), 'hero-headshot')}{_display_name(g['team'], g.get('manager'))}</div>
-      {_detail_list(details.get("goon"), "hero-detail") or '<p class="hero-copy">Big points. Bigger bragging rights.<br>Everyone else, take notes.</p>'}
-      <div class="hero-bottom">
-        <div class="hero-score"><span>{g['score']:.2f}</span><small>POINTS</small></div>
-        <div class="prize"><span>$50</span><small>WEEKLY WINNER</small></div>
+<main class="wrap" id="top">
+  <div class="lead">
+    <section class="hero" aria-labelledby="hero-title">
+      <img class="hero-art" src="{HERO_ART_URL}" alt="Crowned blue peacock in a Gooncocks hoodie holding a football">
+      <div class="hero-body">
+        <p class="kicker">THE WEEKLY RECAP &middot; WEEK {week:02d}</p>
+        <h1 id="hero-title"{headline_class}>{goon_name} TAKES<br>THE <span>CROWN.</span></h1>
+        <p class="hero-sub">{hero_sub}</p>
+        <a class="btn" href="#awards">This week's awards <i class="arrow"></i></a>
       </div>
+    </section>
+    {_pecking_html(standings, rankings)}
+  </div>
+
+  <div class="duo">
+    <article class="big goon" aria-labelledby="goon-title">
+      <img class="big-art" src="{LOGO_URL}" alt="" aria-hidden="true">
+      <p class="kicker">{_CROWN} GOON OF THE WEEK</p>
+      <div class="big-main">{_avatar(g['team'], g.get('manager'), "dark", "av-lg")}
+        <div><h3 id="goon-title">{goon_name}</h3><p class="big-pts">{g['score']:.2f} PTS</p><span class="tag">$50 WINNER</span></div></div>
+      {_detail_list(goon_lines[1:], "big-note")}
+      <span class="scrawl" aria-hidden="true">King of<br>Week {week:02d}</span>
+    </article>
+    <article class="big cock" aria-labelledby="cock-title">
+      <img class="big-art" src="{SHAME_ART_URL}" alt="" aria-hidden="true" onerror="this.remove()">
+      <p class="kicker">{_DOWN} COCK OF THE WEEK</p>
+      <div class="big-main">{_avatar(c['team'], c.get('manager'), "red", "av-lg")}
+        <div><h3 id="cock-title">{cock_name}</h3><p class="big-pts">{c['score']:.2f} PTS</p><span class="tag">LEAGUE LOW</span></div></div>
+      {_detail_list(details.get("cock"), "big-note")}
+      <span class="scrawl" aria-hidden="true">Tough<br>week<br>bro...</span>
+    </article>
+  </div>
+
+  <section class="sec" id="awards" aria-labelledby="awards-title">
+    <div class="sec-head"><h2 id="awards-title">AROUND THE LEAGUE</h2></div>
+    <p class="sec-sub">THE REST OF THIS WEEK'S HARDWARE</p>
+    <div class="awards">{award_rows}
     </div>
-    <div class="hero-foot"><span>01 <span>/</span> TOP OF THE PECKING ORDER</span><span>{len(rankings)} TEAMS. ONE CROWN.</span></div>
+    {empties}{_bonus_note_html(bonus_note)}
   </section>
 
-  <section class="shame" aria-labelledby="shame-title">
-    <img class="shame-art" src="{SHAME_ART_URL}" alt="" aria-hidden="true">
-    <div class="shame-icon" aria-hidden="true">&#8595;</div>
-    {_headshot_img(c['team'], c.get('manager'), 'shame-headshot')}
-    <div><p class="eyebrow" id="shame-title">COCK OF THE WEEK</p><h2>{_display_name(c['team'], c.get('manager'))}</h2>{_detail_list(details.get("cock"), "shame-detail") or "<p>The group chat would like a word.</p>"}</div>
-    <div class="shame-score"><span>{c['score']:.2f}</span><small>POINTS &middot; LEAGUE LOW</small></div>
+  <section class="sec" id="matchups" aria-labelledby="matchups-title">
+    <div class="sec-head"><h2 id="matchups-title">THE FINAL WORD</h2></div>
+    <p class="sec-sub">WEEK {week:02d} MATCHUPS</p>
+    <div class="games">{games}
+    </div>
   </section>
 
-  <div class="section-heading"><h2>THIS WEEK'S HARDWARE</h2><span>THE NUMBERS DON'T LIE.</span></div>
-  <section class="award-grid" aria-label="Weekly awards">
-    {blowout_card}
-    {heartbreak_card}
-    {upset_card}
-    {bad_beat_card}{extra_cards}
-  </section>
-{bonus_html}
-  <section id="rankings" class="panel rankings">
-    <div class="section-heading"><div><p class="eyebrow">THE PECKING ORDER</p><h2>EVERY POINT. EVERY TEAM.</h2></div><span>WEEK {week:02d} <span class="slash">/</span> TOTAL POINTS</span></div>
-    <div role="img" aria-label="All teams ranked by their weekly scores">{rank_rows}</div>
-    <div class="chart-foot"><span><i></i> Goon of the Week</span><span>Weekly scores, not season standings</span></div>
-  </section>
-{standings_section}
-  <section id="scoreboard">
-    <div class="section-heading"><div><p class="eyebrow">HEAD TO HEAD</p><h2>THE FINAL WORD</h2></div><span>{len(matchups)} MATCHUPS</span></div>
-    <div class="scoreboard">{game_cards}</div>
-  </section>
-
-  <footer>
-    <a class="footer-brand" href="{HOME_URL}">GOONCOCKS<span>&#9819;</span></a>
-    <p>Recap computed automatically from Yahoo Fantasy Sports data by an AWS Lambda function.<br>Posted to Discord and hosted at stats.gooncocks.com.</p>
-    <span>BUILT FOR THE GROUP CHAT.</span>
-  </footer>
+  <div class="sec">{_tables_html(week, rankings, standings)}</div>
 </main>
+{week_nav}
+<footer>
+  <div class="wrap">
+    <a class="f-brand" href="{HOME_URL}"><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></a>
+    <p class="f-note">POWERED BY<br>YAHOO FANTASY</p>
+  </div>
+</footer>
+{script}
 </body>
 </html>"""

@@ -453,13 +453,15 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
     s3 = boto3.client("s3")
 
     standings_ranked = extras = None
+    published_weeks = []
     is_latest = True
     if not is_sample:
         standings = _standings_with_week(s3, bucket, week, matchups)
         _save_standings(s3, bucket, standings)
         standings_ranked = power_rankings(standings)
         extras = compute_extra_awards(matchups, standings=standings, rosters=rosters, transactions=transactions)
-        latest = max(int(k) for k in standings["weeks"] if str(k).isdigit())
+        published_weeks = sorted(int(k) for k in standings["weeks"] if str(k).isdigit())
+        latest = published_weeks[-1]
         is_latest = int(week) >= latest
 
     try:
@@ -473,7 +475,7 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
 
     html = render_html(
         week, matchups, is_sample=is_sample, bonus_note=bonus_note, standings=standings_ranked, extras=extras,
-        details=details,
+        details=details, weeks=published_weeks,
     )
     website_url = os.environ.get("S3_WEBSITE_URL")
     page_url = f"{website_url.rstrip('/')}/recap.html" if website_url else f"s3://{bucket}/recap.html"
