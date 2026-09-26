@@ -276,7 +276,7 @@ STYLE_BLOCK = """
   .nr-art>*{position:relative}
   .nr-eyebrow{font-size:12px;font-weight:700;letter-spacing:4px;color:var(--gold)}
   .nr-title{margin-top:10px;font-size:clamp(46px,6vw,78px);line-height:.92;color:#fff;text-shadow:0 4px 0 #0008}
-  .nr-title span{display:block;background:linear-gradient(180deg,#fff0b0,#f6c343 55%,#dc9d22);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .nr-title span{display:block;background:linear-gradient(180deg,#fff6d2,#ffd45a 50%,#f0b030);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 0 #000c)}
   .nr-foot{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 18px;padding:16px 18px;background:#0a1530;border-top:1px solid var(--line2)}
   .nr-chip{display:inline-block;border:1px solid #3d7bff;color:#8fb0ff;font-size:10.5px;font-weight:700;letter-spacing:2.4px;padding:5px 8px}
   .nr.bad .nr-chip{border-color:#ff6b6b;color:#ff8a8a}
@@ -401,7 +401,7 @@ STYLE_BLOCK = """
   @media(max-width:400px){.aw-stat b{font-size:24px}}
   @media(max-width:440px){.nav a.home{display:none}}
   @media(max-width:900px){.bn-row{grid-template-columns:minmax(0,1fr)}}
-  @media(max-width:480px){.bn-title{font-size:24px}.bn-title:before,.bn-title:after{flex-basis:24px}.bn-foot{flex-direction:column;align-items:stretch}.bn-btn{justify-content:center}.nr-foot{grid-template-columns:minmax(0,1fr)}.nr-art{min-height:210px}}
+  @media(max-width:480px){.bn-title{font-size:24px}.bn-title:before,.bn-title:after{flex-basis:24px}.bn-foot{flex-direction:column;align-items:stretch}.bn-btn{justify-content:center}.nr-foot{grid-template-columns:minmax(0,1fr)}.nr-art{min-height:210px}.nr-art:before{background:linear-gradient(90deg,#050914f5 0,#050914d9 60%,#05091466 100%)}}
 </style>
 """
 STYLE_BLOCK = STYLE_BLOCK.replace("__RIVALRY_ART__", RIVALRY_ART_URL).replace("__RECORD_ART__", RECORD_ART_URL)
