@@ -141,6 +141,16 @@ def _name_key(value):
 
 _MANAGER_LOOKUP = {_name_key(k): v for k, v in MANAGER_NAMES.items()}
 
+# Yahoo nicknames of managers who don't belong in the league's history at
+# all (picked up from the wrong league). Their games are left out of every
+# record, for them and for their opponents.
+EXCLUDED_MANAGERS = {"Alexandra Dequarto"}
+_EXCLUDED = {_name_key(n) for n in EXCLUDED_MANAGERS}
+
+
+def _excluded(team):
+    return _name_key(team.get("manager")) in _EXCLUDED
+
 
 def _known_manager_name(team):
     """The MANAGER_NAMES name for a Yahoo team, or None if it isn't listed."""
@@ -472,7 +482,7 @@ def _refresh_rivalry(s3, bucket, yahoo, league_key, deadline, rediscover=False, 
     standings_teams = [t for season in index["seasons"].values() for t in season.get("teams", [])]
     resolve = league_history.linked(_history_name, league_history.account_names(seasons, _history_name, standings_teams))
     history = league_history.build_history(seasons, current, resolve, index["seasons"][current].get("name") or "",
-                                           standings=index["seasons"])
+                                           standings=index["seasons"], excluded=_excluded)
     _put(s3, bucket, league_history.PUBLIC_KEY, json.dumps(history, separators=(",", ":")), "application/json")
     _put(s3, bucket, RIVALRY_PAGE_KEY, _rivalry_page_html(), "text/html")
     for year in skipped:

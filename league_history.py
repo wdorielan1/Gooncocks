@@ -242,13 +242,16 @@ def linked(known_name, names):
     return lambda team: known_name(team) or names.get(team.get("manager_guid"))
 
 
-def build_history(seasons, current_season, known_name, league_name="", standings=None):
+def build_history(seasons, current_season, known_name, league_name="", standings=None, excluded=None):
     """The Rivalry Center's history file from the stored season files.
     `seasons` is {year: season file}; `standings` is {year: index season}
     with Yahoo's final ranks. People are matched across seasons by
     MANAGER_NAMES; anyone not listed is matched by their Yahoo nickname
     (or team name when Yahoo hides the nickname) and listed as a former
-    manager. Yahoo account IDs never leave this function."""
+    manager. Teams for which `excluded(team)` is true are left out
+    entirely, with every game they played. Yahoo account IDs never leave
+    this function."""
+    excluded = excluded or (lambda team: False)
     unreliable = shared_accounts(seasons)
     people = {}   # id -> {"name", "seasons": set()}
 
@@ -274,6 +277,8 @@ def build_history(seasons, current_season, known_name, league_name="", standings
         for week_key, games in sorted(seasons[year]["weeks"].items(), key=lambda kv: int(kv[0])):
             for g in games:
                 a, b = g["team_a"], g["team_b"]
+                if excluded(a) or excluded(b):
+                    continue
                 pa, pb = person(a), person(b)
                 if pa == pb:
                     continue
@@ -304,6 +309,8 @@ def build_history(seasons, current_season, known_name, league_name="", standings
             continue
         ranks = {}
         for t in season.get("teams", []):
+            if excluded({"name": t.get("team"), "manager": t.get("manager")}):
+                continue
             pid = pid_by_team.get((str(year), t.get("team")))
             if pid is None:
                 pid = person({"name": t.get("team"), "manager": t.get("manager"),
