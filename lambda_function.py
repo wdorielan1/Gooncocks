@@ -124,6 +124,7 @@ MANAGER_NAMES = {
     "Tamir": "Tamir",
     "gabriel": "Gabe",
     "brandon": "Brandon",
+    "B": "Brandon",  # Brandon's Yahoo nickname in earlier seasons
     "Jose": "Jose",
     "Samuel": "Sam",
     "Chett": "Chet",
@@ -494,6 +495,15 @@ def _action_rivalry_history(event, context=None):
         count = sum(1 for m in finals if m["season"] == int(year))
         note = "skipped, Yahoo wouldn't return scores" if s.get("skipped") else f"{count} final games"
         print(f"  {year}: {s.get('name')!r} ({s['league_key']}, {s.get('how', '')}) - {note}")
+    print("\nNicknames not linked to anyone on MANAGER_NAMES, by season:")
+    unlinked = False
+    for year in sorted(index["seasons"], key=int):
+        rows = [f"{t.get('manager')} ({t.get('team')})" for t in index["seasons"][year].get("teams", []) if not resolve(t)]
+        if rows:
+            unlinked = True
+            print(f"  {year}: {', '.join(rows)}")
+    if not unlinked:
+        print("  none - every team in every season is linked to a manager")
     former = [m["name"] for m in history["managers"] if not m["active"]]
     if former:
         print("Managers not in this season's league (add their Yahoo nickname to MANAGER_NAMES"
