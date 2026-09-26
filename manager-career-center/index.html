@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07101f">
+<title>Gooncocks Career Center</title>
+<meta name="description" content="Every Gooncocks manager's career: records, titles, awards and every season.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Work+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="https://gooncocks.com" aria-label="Gooncocks home">
+      <img src="assets/peacock.webp" alt="" width="46" height="46">
+      <span><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></span>
+    </a>
+    <nav class="nav" aria-label="Site">
+      <a href="https://stats.gooncocks.com/">This Week</a>
+      <a class="on" href="#overview" aria-current="page">Careers</a>
+      <a href="https://gooncocks.com">Home</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page" id="top">
+  <div class="viewbar">
+    <div class="tabs" role="tablist" aria-label="Career Center views">
+      <button type="button" role="tab" id="tab-overview" data-view="overview">League overview</button>
+      <button type="button" role="tab" id="tab-profile" data-view="profile">Manager profile</button>
+      <button type="button" role="tab" id="tab-compare" data-view="compare">Compare careers</button>
+    </div>
+    <label class="ctl ctl-season" for="seasonSel"><span class="ctl-k">Season</span><select id="seasonSel"></select></label>
+  </div>
+
+  <!-- ===================== LEAGUE OVERVIEW ===================== -->
+  <section class="view" id="view-overview" role="tabpanel" aria-labelledby="tab-overview">
+    <div class="hero">
+      <div class="rig rig-l" aria-hidden="true"></div><div class="rig rig-r" aria-hidden="true"></div>
+      <p class="eyebrow">The league keeps score</p>
+      <h1>Manager Career Center</h1>
+      <p class="lede">Every manager. Every season. Every receipt.</p>
+      <div class="hero-row">
+        <label class="ctl ctl-search" for="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg><input id="search" type="search" placeholder="Search managers" autocomplete="off"></label>
+        <p class="source" id="sourceBadge"></p>
+      </div>
+      <p class="scope" id="scopeOverview"></p>
+    </div>
+
+    <div class="leaders" id="leaders"></div>
+
+    <div class="board">
+      <section class="panel" aria-labelledby="boardTitle">
+        <div class="ph"><h2 id="boardTitle">Career leaderboard</h2></div>
+        <div class="scroll"><table class="lb" id="leaderboard"></table></div>
+        <p class="fine" id="boardNote"></p>
+      </section>
+      <aside class="panel preview" id="preview" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <!-- ===================== MANAGER PROFILE ===================== -->
+  <section class="view" id="view-profile" role="tabpanel" aria-labelledby="tab-profile" hidden>
+    <div class="pbar">
+      <button type="button" class="back" id="backBtn">&larr; Back to all managers</button>
+      <label class="ctl" for="profileSel"><span class="ctl-k">Manager</span><select id="profileSel"></select></label>
+      <button type="button" class="share" id="shareBtn">Share profile
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16L16 8M9 8h7v7"/></svg></button>
+    </div>
+    <div class="banner" id="banner"></div>
+    <div class="two">
+      <section class="panel" aria-labelledby="trophyTitle">
+        <div class="ph"><h2 id="trophyTitle">Trophy case</h2></div>
+        <div id="trophies"></div>
+      </section>
+      <section class="panel" aria-labelledby="bestsTitle">
+        <div class="ph"><h2 id="bestsTitle">Personal bests</h2></div>
+        <p class="scope" id="scopeBests"></p>
+        <ul class="bests" id="bests"></ul>
+      </section>
+    </div>
+    <section class="panel" aria-labelledby="seasonsTitle">
+      <div class="ph"><h2 id="seasonsTitle">Season by season</h2></div>
+      <p class="fine">Select a season to open its details.</p>
+      <div class="scroll"><table class="st" id="seasonTable"></table></div>
+    </section>
+    <section class="panel" aria-labelledby="msTitle">
+      <div class="ph"><h2 id="msTitle">Career milestones</h2></div>
+      <p class="scope">Whole career</p>
+      <ol class="timeline" id="milestones"></ol>
+    </section>
+  </section>
+
+  <!-- ===================== COMPARE CAREERS ===================== -->
+  <section class="view" id="view-compare" role="tabpanel" aria-labelledby="tab-compare" hidden>
+    <div class="cmp-controls">
+      <label class="ctl" for="cmpA"><span class="ctl-k">Manager</span><select id="cmpA"></select></label>
+      <button type="button" class="swap" id="swapBtn" aria-label="Swap the two managers" title="Swap">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h14l-3-3M20 16H6l3 3"/></svg></button>
+      <label class="ctl" for="cmpB"><span class="ctl-k">Versus</span><select id="cmpB"></select></label>
+    </div>
+    <div class="cmp-head" id="cmpHead"></div>
+    <p class="scope" id="scopeCompare"></p>
+    <ul class="cmp" id="cmpRows"></ul>
+    <p class="fine">A gold dot marks the stronger number. Ties get none, and Cock of the Week is shown without judging it.</p>
+  </section>
+
+  <p class="fine foot-note" id="footNote"></p>
+</main>
+
+<footer class="foot">
+  <div class="foot-in">
+    <span class="foot-brand"><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></span>
+    <p>Every season counts.</p>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="copy-fallback" id="copyFallback" role="dialog" aria-labelledby="copyTitle" hidden>
+  <p id="copyTitle">Copy this career summary</p>
+  <textarea id="copyText" rows="8" readonly></textarea>
+  <button type="button" id="copyClose">Done</button>
+</div>
+
+<!-- DATA: the league history (a snapshot of the real Yahoo history) and the
+     payout rules. To read a live history file instead, set the URL below. -->
+<script src="data/payouts.js"></script>
+<script src="data/league-history.js"></script>
+<script>
+  // window.GOONCOCKS_HISTORY_URL = '/rivalry-history.json';
+</script>
+<!-- /DATA -->
+<script src="js/data.js"></script>
+<script src="js/career.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
