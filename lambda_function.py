@@ -72,6 +72,9 @@ Drive it with the "Test" button in the Lambda console, using a test event
   webpage, uploads to S3, posts to Discord if configured. This is also
   the default if you omit "action":
     {"action": "publish"}
+  Re-publish an old week quietly (no Discord post), e.g. after a page
+  design change:
+    {"action": "publish", "week": 2, "discord": false}
 """
 import base64
 import datetime
@@ -496,6 +499,7 @@ def _action_rivalry_history(event, context=None):
         print("Managers not in this season's league (add their Yahoo nickname to MANAGER_NAMES"
               f" if any of them is a current manager on an old account): {', '.join(former)}")
 
+    _put(s3, bucket, "landing.html", _landing_page_html(), "text/html")  # picks up nav changes right away
     champs = league_history.champions(index, lambda t: resolve(t) or t.get("manager"))
     if champs:
         _put(s3, bucket, "history.json", json.dumps(champs), "application/json")
@@ -661,7 +665,7 @@ def _save_standings(s3, bucket, standings):
     )
 
 
-def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, transactions=None):
+def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, transactions=None, notify=True):
     """Renders the webpage, uploads it to S3, and posts a Discord teaser
     if DISCORD_WEBHOOK_URL is set. Returns the page's public URL.
 
@@ -731,7 +735,7 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
             print("Skipped updating the landing page this run - see the error above.")
 
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
-    if webhook_url and is_latest:
+    if webhook_url and is_latest and notify:
         teaser = build_teaser(week, compute_awards(matchups), page_url=page_url)
         post_message(webhook_url, teaser)
         print("Posted teaser to Discord.")
@@ -748,7 +752,7 @@ def _action_publish(event, context=None):
     week, matchups, rosters, transactions = _fetch_real_matchups(event)
     page_url, archive_url = _publish_page(
         week, matchups, is_sample=False, bonus_note=event.get("bonus_note"),
-        rosters=rosters, transactions=transactions,
+        rosters=rosters, transactions=transactions, notify=event.get("discord", True),
     )
     try:
         _update_rivalry_week(event.get("league_key") or _require_env("LEAGUE_KEY"), context)

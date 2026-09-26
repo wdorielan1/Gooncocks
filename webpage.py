@@ -347,7 +347,8 @@ STYLE_BLOCK = """
     .wn{justify-content:center}
     .f-note{border-left:0;padding-left:0;text-align:center}
   }
-  @media(max-width:400px){.brand img{width:36px;height:36px}.brand b{font-size:21px}.brand small{display:none}.aw-stat b{font-size:24px}}
+  @media(max-width:470px){.brand span{display:none}.brand img{width:38px;height:38px}.nav{gap:14px}}
+  @media(max-width:400px){.aw-stat b{font-size:24px}}
 </style>
 """
 
@@ -729,7 +730,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
   <div class="wrap">
     <a class="brand" href="{HOME_URL}"><img src="{LOGO_URL}" alt="Gooncocks peacock logo"><span><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></span></a>
     <nav class="nav" aria-label="Recap sections">
-      <a class="on" href="#top">This Week</a><a href="#awards">Awards</a><a href="#matchups">Matchups</a><a href="#standings">Standings</a><a href="{SITE_URL}/rivalries.html">Rivalries</a><a class="keep" href="{HOME_URL}">Home</a>
+      <a class="on" href="#top">This Week</a><a href="#awards">Awards</a><a href="#matchups">Matchups</a><a href="#standings">Standings</a><a class="keep" href="{SITE_URL}/rivalries.html">Rivalries</a><a class="keep" href="{HOME_URL}">Home</a>
       <details class="wk"><summary>WEEK {week:02d}</summary>{week_menu}</details>
     </nav>
   </div>
