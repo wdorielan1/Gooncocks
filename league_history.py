@@ -245,7 +245,8 @@ def build_history(seasons, current_season, known_name, league_name=""):
             by_guid[account] = pid
             nickname = team.get("manager")
             name = nickname if nickname and nickname != "--hidden--" else (team.get("name") or "Former manager")
-        people.setdefault(pid, {"name": name, "seasons": set()})
+        entry = people.setdefault(pid, {"name": name, "seasons": set()})
+        entry["name"] = name  # seasons run oldest to newest, so the latest nickname wins
         return pid
 
     teams, matchups = {}, []
