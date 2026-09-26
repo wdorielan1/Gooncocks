@@ -202,10 +202,6 @@
     if (state.consolation && state.type !== 'regular') scope += ' · Incl. consolation';
     $('fxScope').textContent = scope;
 
-    $('rvA').textContent = name(s.a);
-    $('rvB').textContent = name(s.b);
-    $('rvBanner').setAttribute('aria-label', name(s.a) + ' versus ' + name(s.b));
-    $('rvBanner').classList.toggle('long', Math.max(name(s.a).length, name(s.b).length) > 8);
     $('fxNameA').textContent = name(s.a);
     $('fxNameB').textContent = name(s.b);
     $('fxTeamA').textContent = teamName(s.a);

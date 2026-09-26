@@ -90,25 +90,19 @@ h1 { font: 400 clamp(44px, 7.4vw, 86px)/.95 var(--display); text-transform: uppe
 .share:hover { background: #fff; color: var(--bg); }
 
 /* ---------- featured head-to-head ---------- */
-/* the boxing peacocks banner over the head-to-head */
-.rv-banner { position: relative; isolation: isolate; margin-top: 16px; aspect-ratio: 21 / 7; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: end; padding: 0 24px 18px; border: 1px solid var(--line-2); border-radius: 4px; overflow: hidden;
-  background: url(https://stats.gooncocks.com/rivalry-art.webp) center 35% / cover, linear-gradient(100deg, #1f5bd8 0, #0d2a6e 45%, #6e1219 55%, #b3262d 100%); }
-.rv-banner::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, transparent 40%, #050a18d9); }
-.rv-name { font: 400 clamp(38px, 7vw, 96px)/.9 var(--score); text-transform: uppercase; color: #fff; text-shadow: 0 4px 0 #000a, 0 0 24px #000; min-width: 0; overflow-wrap: anywhere; }
-.rv-banner.long .rv-name { font-size: clamp(30px, 5vw, 70px); }
-.rv-name.b { text-align: right; }
-.rv-vs { font: 400 clamp(24px, 3.4vw, 44px)/1 var(--score); color: var(--gold); padding: 0 12px 8px; text-shadow: 0 3px 0 #000a; }
-.rv-banner + .feature { margin-top: 10px; }
-@media (max-width: 640px) { .rv-banner { aspect-ratio: 16 / 9; padding: 0 14px 14px; } }
 .feature { position: relative; isolation: isolate; overflow: hidden; margin-top: 16px; border: 1px solid var(--line-2); border-radius: 4px;
   padding: 26px 30px 0;
+  /* the boxing peacocks behind the head-to-head, darkened so the names and numbers read */
   background:
+    linear-gradient(180deg, #07101f8c 0, #07101fc7 45%, #07101ff2 100%),
+    linear-gradient(90deg, #0b235866, transparent 30%, transparent 70%, #3d0e1966),
+    url(https://stats.gooncocks.com/rivalry-art.webp) center 30% / cover,
     radial-gradient(55% 85% at 6% -8%, #2c6bffb3, transparent 62%),
     radial-gradient(55% 85% at 94% -8%, #e0303ca6, transparent 62%),
     radial-gradient(70% 60% at 50% 120%, #ffffff10, transparent 70%),
     linear-gradient(90deg, #0b2358, #0a1631 42%, #0a1631 58%, #3d0e19); }
 /* Stadium light rigs: rows of bulbs across the top corners, with a haze under them. */
+.feature .rig { display: none; }
 .rig { position: absolute; top: 14px; width: 34%; height: 44px; z-index: -1; opacity: .9;
   background-image: radial-gradient(circle, #ffffff 0 1.3px, #d6e4ff99 2.2px, transparent 4px);
   background-size: 13px 11px;
