@@ -14,6 +14,14 @@
 * { box-sizing: border-box; }
 html { background: var(--bg); scroll-behavior: smooth; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--body); overflow-x: hidden; }
+/* The trophy room behind the whole page, fixed while the page scrolls
+   (a fixed layer rather than background-attachment, which phones ignore)
+   and darkened so every panel and line of text stays readable. */
+body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(90deg, #07101fe6 0, #07101fb3 45%, #07101f66 80%, #07101f59 100%),
+    linear-gradient(180deg, #07101f80 0, #07101f33 35%, #07101fb3 75%, #07101ff0 100%),
+    url(https://stats.gooncocks.com/record-art.webp) 78% 30% / cover no-repeat, var(--bg); }
+body { background: transparent; }
 [hidden] { display: none !important; }
 img { max-width: 100%; }
 a { color: inherit; text-decoration: none; }
@@ -52,13 +60,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 
 /* hero with stadium lights */
 .hero { position: relative; isolation: isolate; overflow: hidden; border: 1px solid var(--line-2); border-radius: 4px; padding: 26px 28px 20px;
-  /* the trophy room art on the right, darkened on the left so the title reads */
-  background: linear-gradient(180deg, transparent 45%, #07101fe6 100%),
-    linear-gradient(90deg, #07101ff5 0, #07101fd9 38%, #07101f59 72%, #07101f33 100%),
-    url(https://stats.gooncocks.com/record-art.webp) right 30% / cover,
-    radial-gradient(60% 110% at 0% -20%, #2c6bff8c, transparent 60%), radial-gradient(60% 110% at 100% -20%, #2c6bff66, transparent 60%),
-    linear-gradient(180deg, #0b1d45, #081226 70%); }
-@media (max-width: 640px) { .hero { background-position: 0 0, 0 0, 70% 30%, 0 0, 0 0, 0 0; } }
+  /* see-through, so the page's trophy room shows behind the title */
+  background: radial-gradient(60% 110% at 0% -20%, #2c6bff59, transparent 60%), linear-gradient(90deg, #07101fb3 0, #07101f80 45%, transparent 80%); }
+@media (max-width: 640px) { body::before { background-position: 0 0, 0 0, 72% 30%, 0 0; } }
 .lights { position: absolute; inset: 0; z-index: -1; }
 .rig { position: absolute; top: 10px; width: 22%; height: 60px; opacity: .8;
   background-image: radial-gradient(circle, #fff 0 1.4px, #d6e4ffaa 2.4px, transparent 4.2px); background-size: 14px 12px;
