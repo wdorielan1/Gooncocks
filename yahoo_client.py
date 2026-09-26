@@ -325,6 +325,8 @@ def parse_matchups(scoreboard_json):
     """Turn a raw scoreboard JSON blob into [{'team_a': {...}, 'team_b': {...}}, ...]
     where each team dict has 'name', 'score', and 'projected' (or None)."""
     league = scoreboard_json["fantasy_content"]["league"]
+    if len(league) < 2 or not isinstance(league[1], dict) or "scoreboard" not in league[1]:
+        raise RuntimeError("Yahoo's response has no scoreboard in it")
     scoreboard = league[1]["scoreboard"]
     matchups_container = scoreboard["0"]["matchups"]
 

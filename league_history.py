@@ -6,9 +6,12 @@ rivalry-center/README.md).
 
 Finding old seasons: Yahoo only links seasons together when the league was
 "renewed", which this league wasn't every year. So besides following that
-chain, this looks at every NFL league on the commissioner's Yahoo account
-and keeps, for each season, the one that shares the most managers with
-this season's league (at least MIN_SHARED_MANAGERS).
+chain (which always wins for the years it covers), this looks at every NFL
+league on the commissioner's Yahoo account, for the years the chain
+doesn't reach. A league counts when at least MIN_SHARED_ACCOUNTS of this
+season's managers played in it on the same Yahoo accounts, or, for old
+accounts, at least MIN_SHARED_NAMES of them by MANAGER_NAMES nickname.
+Each person counts once.
 
 Everything is saved to S3 as it goes (rivalry/index.json and one
 rivalry/seasons/<year>.json per season), so a run that hits the Lambda
@@ -22,10 +25,12 @@ import hashlib
 import re
 import time
 
+INDEX_VERSION = 2  # bump when discovery rules change, so saved indexes are rebuilt
 INDEX_KEY = "rivalry/index.json"
 SEASON_KEY = "rivalry/seasons/{}.json"
 PUBLIC_KEY = "rivalry-history.json"
-MIN_SHARED_MANAGERS = 4
+MIN_SHARED_ACCOUNTS = 4
+MIN_SHARED_NAMES = 7
 PHOTO_BASE_URL = "https://stats.gooncocks.com/photos/"
 
 
@@ -42,11 +47,21 @@ class Store:
 
 # ---------------------------------------------------------------- discovery
 
-def _shared_managers(season, current_guids, known_name):
-    return sum(
-        1 for t in season["teams"]
-        if (t.get("manager_guid") and t["manager_guid"] in current_guids) or known_name(t)
-    )
+def _overlap(season, current_guids, known_name):
+    """(accounts, names): how many different current managers are in this
+    league on the same Yahoo account, and how many different MANAGER_NAMES
+    people show up by nickname."""
+    accounts = {t.get("manager_guid") for t in season["teams"]} & current_guids
+    names = {known_name(t) for t in season["teams"]} - {None}
+    return len(accounts), len(names)
+
+
+_NAME_WORDS = re.compile(r"[a-z]+")
+
+
+def _name_likeness(a, b):
+    words = lambda s: set(_NAME_WORDS.findall(str(s or "").lower())) - {"fantasy", "football", "league", "the", "of"}
+    return len(words(a) & words(b))
 
 
 def discover_seasons(yahoo, league_key, known_name, include=(), exclude=(), log=print):
@@ -56,7 +71,7 @@ def discover_seasons(yahoo, league_key, known_name, include=(), exclude=(), log=
     MANAGER_NAMES name for a Yahoo team, or None."""
     current = yahoo.league_season(league_key)
     current_guids = {t["manager_guid"] for t in current["teams"] if t.get("manager_guid")}
-    found = {str(current["season"]): dict(current, league_key=league_key, how="current league")}
+    found = {str(current["season"]): dict(current, league_key=league_key, how="current league", fixed=True)}
     exclude = set(exclude)
 
     def consider(key, how, forced=False):
@@ -68,15 +83,20 @@ def discover_seasons(yahoo, league_key, known_name, include=(), exclude=(), log=
             log(f"  skipped {key}: {exc}")
             return
         year = str(season["season"])
-        shared = _shared_managers(season, current_guids, known_name)
-        if not forced and shared < MIN_SHARED_MANAGERS:
-            log(f"  {year} {season['name']!r} ({key}): only {shared} shared managers, not this league")
+        accounts, names = _overlap(season, current_guids, known_name)
+        label = f"{year} {season['name']!r} ({key})"
+        shared = f"{accounts} same Yahoo accounts, {names} known nicknames"
+        if not forced and accounts < MIN_SHARED_ACCOUNTS and names < MIN_SHARED_NAMES:
+            log(f"  {label}: not this league ({shared})")
             return
         prior = found.get(year)
-        if prior and not forced and prior.get("shared", 99) >= shared:
+        score = (accounts, names, _name_likeness(season["name"], current["name"]))
+        by_hand = how == "added by hand"
+        if prior and not by_hand and (prior.get("fixed") or (not forced and prior.get("score", (0, 0, 0)) >= score)):
+            log(f"  {label}: not used, {year} is already {prior['name']!r} ({shared})")
             return
-        found[year] = dict(season, league_key=key, how=how, shared=shared)
-        log(f"  {year} {season['name']!r} ({key}): {how}, {shared} shared managers")
+        found[year] = dict(season, league_key=key, how=how, score=score, fixed=forced)
+        log(f"  {label}: {how} ({shared})")
 
     # 1. Yahoo's renewal chain.
     renew = current.get("renew")
@@ -254,7 +274,7 @@ def champions(index, name_of):
     out = []
     for year, season in sorted(index.get("seasons", {}).items(), key=lambda kv: kv[0], reverse=True):
         ranked = {t["rank"]: t for t in season.get("teams", []) if t.get("rank")}
-        if not season.get("is_finished") or 1 not in ranked:
+        if not season.get("is_finished") or season.get("skipped") or 1 not in ranked:
             continue
         champ, runner = ranked[1], ranked.get(2)
         out.append({

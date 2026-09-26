@@ -421,18 +421,23 @@ def _refresh_rivalry(s3, bucket, yahoo, league_key, deadline, rediscover=False, 
     and rivalries.html. Returns a summary for the action's output."""
     store = _rivalry_store(s3, bucket)
     index = store.load(league_history.INDEX_KEY, None)
-    if index is None or rediscover or include or exclude or index.get("league_key") != league_key:
+    if (index is None or rediscover or include or exclude or index.get("league_key") != league_key
+            or index.get("version") != league_history.INDEX_VERSION):
         print("Looking for every season of this league on Yahoo...")
         found = league_history.discover_seasons(yahoo, league_key, _history_name, include=include, exclude=exclude)
-        index = {"league_key": league_key, "current_season": max(found, key=int), "seasons": found}
+        index = {"version": league_history.INDEX_VERSION, "league_key": league_key,
+                 "current_season": max(found, key=int), "seasons": found}
         store.save(league_history.INDEX_KEY, index)
 
     current = index["current_season"]
     order = [current] + sorted((y for y in index["seasons"] if y != current), key=int, reverse=True)
-    seasons, pending = {}, []
+    seasons, pending, skipped = {}, [], []
     for year in order:
         key = league_history.SEASON_KEY.format(year)
+        league = index["seasons"][year]["league_key"]
         saved = store.load(key, None)
+        if saved and saved.get("league_key") != league:
+            saved = None  # saved from a different league than the one now picked for this year
         if saved and saved.get("complete") and year != current:
             seasons[year] = saved
             continue
@@ -441,7 +446,12 @@ def _refresh_rivalry(s3, bucket, yahoo, league_key, deadline, rediscover=False, 
             if saved:
                 seasons[year] = saved
             continue
-        info = league_history.fetch_season(yahoo, index["seasons"][year]["league_key"], saved, deadline, year == current)
+        try:
+            info = league_history.fetch_season(yahoo, league, saved, deadline, year == current)
+        except Exception as exc:
+            print(f"  {year}: skipped - Yahoo wouldn't return this league's scores ({exc})")
+            skipped.append(year)
+            continue
         store.save(key, info)
         seasons[year] = info
         if not info.get("complete") and year != current:
@@ -452,6 +462,8 @@ def _refresh_rivalry(s3, bucket, yahoo, league_key, deadline, rediscover=False, 
     history = league_history.build_history(seasons, current, _history_name, index["seasons"][current].get("name") or "")
     _put(s3, bucket, league_history.PUBLIC_KEY, json.dumps(history, separators=(",", ":")), "application/json")
     _put(s3, bucket, RIVALRY_PAGE_KEY, _rivalry_page_html(), "text/html")
+    for year in skipped:
+        index["seasons"][year]["skipped"] = True
     return index, history, pending
 
 
@@ -471,7 +483,8 @@ def _action_rivalry_history(event, context=None):
     for year in sorted(index["seasons"], key=int):
         s = index["seasons"][year]
         count = sum(1 for m in finals if m["season"] == int(year))
-        print(f"  {year}: {s.get('name')!r} ({s['league_key']}, {s.get('how', '')}) - {count} final games")
+        note = "skipped, Yahoo wouldn't return scores" if s.get("skipped") else f"{count} final games"
+        print(f"  {year}: {s.get('name')!r} ({s['league_key']}, {s.get('how', '')}) - {note}")
     former = [m["name"] for m in history["managers"] if not m["active"]]
     if former:
         print("Managers not in this season's league (add their Yahoo nickname to MANAGER_NAMES"
