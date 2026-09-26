@@ -741,7 +741,7 @@ def _landing_data(week, matchups, standings, champions, previous):
 # every publish: the peacock banner (landing hero + recap headline) and
 # the Goon / Cock of the Week card art.
 ART_FILES = ("landing-hero.webp", "goon-art.webp", "cock-art.webp", "rivalry-art.webp", "record-art.webp",
-             "careers-art.webp")
+             "careers-art.webp", "rivalry-bg.webp")
 
 
 def _upload_art(s3, bucket):

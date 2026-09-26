@@ -25,6 +25,13 @@
 * { box-sizing: border-box; }
 html { background: var(--bg); scroll-behavior: smooth; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--body); overflow-x: hidden; }
+/* The stadium at night behind the whole page, fixed while the page scrolls
+   (a fixed layer rather than background-attachment, which phones ignore)
+   and darkened so every panel and line of text stays readable. */
+body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(180deg, #07101fb8 0, #07101f99 30%, #07101fcc 65%, #07101ff0 100%),
+    url(https://stats.gooncocks.com/rivalry-bg.webp) 62% 60% / cover no-repeat, var(--bg); }
+body { background: transparent; }
 [hidden] { display: none !important; }
 img { max-width: 100%; }
 a { color: inherit; text-decoration: none; }
