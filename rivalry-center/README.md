@@ -1,8 +1,18 @@
-# Gooncocks Rivalry Center (standalone preview)
+# Gooncocks Rivalry Center
 
-A self-contained head-to-head page for the league. It is **not deployed** and
-nothing else in the repo uses it. The Lambda deploy only ships files from the
-repo root, so this folder never reaches AWS or gooncocks.com.
+Live at **https://stats.gooncocks.com/rivalries.html**. The Lambda builds
+that page from this folder: it inlines the CSS, scripts and logo, and swaps
+the demo data for the real Yahoo history in `rivalry-history.json`.
+
+- Run `{"action": "rivalry_history"}` once in the Lambda console. It finds
+  every season of the league on Yahoo and saves all the scores. If it
+  ends with "Run this again to continue", run it again.
+- After that, each weekly `publish` adds the newest week on its own.
+- The deploy ships `index.html`, `css/`, `js/` and `assets/` with the
+  Lambda code. `data/` and `tools/` stay local.
+
+Opened straight from this folder, the page still runs on the demo data,
+which is handy for trying out design changes.
 
 ## Open it
 
@@ -89,13 +99,13 @@ Then either:
    the `GOONCOCKS_HISTORY_URL` line in `index.html`. JSON loading needs the
    page served over http (see above), not opened as a file.
 
-The export should be built on the server side. The existing Lambda already
-has the Yahoo refresh token and a `history` action that follows the league's
-past seasons. A future action could walk each season's scoreboard, map each
-team to its manager's Yahoo GUID, pick an ID, and mark games as playoff or
-consolation using Yahoo's `is_playoffs` and `is_consolation` flags. It would
-then write this JSON to S3. **Never put Yahoo keys, secrets or tokens in these
-browser files.**
+The live file is built by `league_history.py` in the Lambda. People are
+matched across seasons through `MANAGER_NAMES` in `lambda_function.py`, by
+Yahoo nickname or account ID. Anyone not listed there shows up under
+"Former managers". Games are marked playoff or consolation from Yahoo's
+`is_playoffs` and `is_consolation` flags, and round names come from the week
+order. Yahoo account IDs are hashed before anything is saved. **Never put
+Yahoo keys, secrets or tokens in these browser files.**
 
 Rows that don't match the shape (an unknown manager, missing scores on a
 final game, and so on) are skipped with a console warning, so the page still

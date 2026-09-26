@@ -54,6 +54,17 @@ Drive it with the "Test" button in the Lambda console, using a test event
   page's Champion Wall:
     {"action": "history"}
 
+  Build the Rivalry Center's history (stats.gooncocks.com/rivalries.html):
+  finds every Yahoo season of this league - through Yahoo's renewal
+  chain and by matching managers across every NFL league on this Yahoo
+  account - and pulls every week's scores. Saves progress as it goes, so
+  if the run ends with "run again to continue", just run it again. After
+  that, each weekly publish keeps it current on its own. It also refreshes
+  the Champion Wall from each finished season's final standings.
+    {"action": "rivalry_history"}
+  Options: "rediscover": true searches for seasons again; "include":
+  ["423.l.12345"] adds a league by hand; "exclude": [...] drops one.
+
   The actual recap, printed only:
     {"action": "recap"}
 
@@ -62,10 +73,13 @@ Drive it with the "Test" button in the Lambda console, using a test event
   the default if you omit "action":
     {"action": "publish"}
 """
+import base64
 import datetime
+import hashlib
 import json
 import os
 import re
+import time
 import traceback
 
 import boto3
@@ -73,6 +87,7 @@ import boto3
 from awards import (
     Matchup, award_details, compute_awards, compute_extra_awards, generate_recap, identity, power_rankings, week_records,
 )
+import league_history
 from discord_client import build_teaser, post_message
 from sample_data import SAMPLE_MATCHUPS
 from webpage import render_html
@@ -84,9 +99,11 @@ from yahoo_client import (
     get_scoreboard,
     get_team_roster,
     get_transactions,
+    get_league_season,
     get_user_leagues,
     parse_matchups,
     refresh_access_token,
+    scoreboard_meta,
     scoreboard_week,
 )
 
@@ -117,9 +134,14 @@ def _name_key(value):
 _MANAGER_LOOKUP = {_name_key(k): v for k, v in MANAGER_NAMES.items()}
 
 
-def _manager_name(team):
+def _known_manager_name(team):
+    """The MANAGER_NAMES name for a Yahoo team, or None if it isn't listed."""
     guid, nickname = team.get("manager_guid"), team.get("manager")
-    return _MANAGER_LOOKUP.get(_name_key(guid)) or _MANAGER_LOOKUP.get(_name_key(nickname)) or nickname
+    return _MANAGER_LOOKUP.get(_name_key(guid)) or _MANAGER_LOOKUP.get(_name_key(nickname))
+
+
+def _manager_name(team):
+    return _known_manager_name(team) or team.get("manager")
 
 
 def _require_env(name):
@@ -315,6 +337,179 @@ def _action_history(event):
             _put(s3, bucket, "landing.json", json.dumps(landing), "application/json")
         print("Saved to history.json - the landing page's Champion Wall now uses it.")
     return {"champions": champions}
+
+
+# ---------------------------------------------------------------- Rivalry Center
+
+RIVALRY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rivalry-center")
+RIVALRY_PAGE_KEY = "rivalries.html"
+
+
+class _YahooHistory:
+    """What league_history needs from Yahoo. Each team's MANAGER_NAMES name
+    is resolved here, and its Yahoo account ID replaced with a one-way hash,
+    before anything is saved (the history files live in the public bucket)."""
+
+    def __init__(self, access_token):
+        self.token = access_token
+
+    def _clean(self, team):
+        team = dict(team)
+        team["known"] = _known_manager_name(team)
+        guid = team.get("manager_guid")
+        team["manager_guid"] = hashlib.sha1(guid.encode("utf-8")).hexdigest()[:16] if guid else None
+        team.pop("projected", None)
+        return team
+
+    def league_season(self, key):
+        season = get_league_season(self.token, key)
+        season["teams"] = [self._clean(t) for t in season["teams"]]
+        return season
+
+    def all_leagues(self):
+        return get_user_leagues(self.token, all_seasons=True)
+
+    def scoreboard(self, key, week):
+        return get_scoreboard(self.token, key, week=week)
+
+    def meta(self, scoreboard_json):
+        return scoreboard_meta(scoreboard_json)
+
+    def week_of(self, scoreboard_json):
+        return scoreboard_week(scoreboard_json)
+
+    def matchups(self, scoreboard_json):
+        return [dict(m, team_a=self._clean(m["team_a"]), team_b=self._clean(m["team_b"]))
+                for m in parse_matchups(scoreboard_json)]
+
+
+def _history_name(team):
+    return team.get("known") or _known_manager_name(team)
+
+
+def _deadline(context, reserve=15):
+    """When to stop starting new Yahoo calls, leaving time to save."""
+    remaining = context.get_remaining_time_in_millis() / 1000 if context else 600
+    return time.time() + max(5, remaining - reserve)
+
+
+def _rivalry_page_html():
+    """rivalries.html: the rivalry-center/ page as one file (styles, scripts
+    and logo inlined), reading the live history file instead of demo data."""
+    def read(path, mode="r"):
+        with open(os.path.join(RIVALRY_DIR, path), mode, **({} if "b" in mode else {"encoding": "utf-8"})) as f:
+            return f.read()
+    page = read("index.html")
+    page = page.replace('<link rel="stylesheet" href="css/styles.css">', "<style>\n" + read("css/styles.css") + "\n</style>")
+    start, end = page.index("<!-- DATA -->"), page.index("<!-- /DATA -->") + len("<!-- /DATA -->")
+    page = page[:start] + "<script>window.GOONCOCKS_HISTORY_URL = '/" + league_history.PUBLIC_KEY + "';</script>" + page[end:]
+    page = re.sub(r'<script src="(js/[\w.-]+)"></script>', lambda m: "<script>\n" + read(m.group(1)) + "\n</script>", page)
+    logo = "data:image/webp;base64," + base64.b64encode(read("assets/peacock.webp", "rb")).decode("ascii")
+    return page.replace('src="assets/peacock.webp"', f'src="{logo}"')
+
+
+def _rivalry_store(s3, bucket):
+    return league_history.Store(
+        lambda key, default: _load_json(s3, bucket, key, default),
+        lambda key, obj: _put(s3, bucket, key, json.dumps(obj, separators=(",", ":")), "application/json"),
+    )
+
+
+def _refresh_rivalry(s3, bucket, yahoo, league_key, deadline, rediscover=False, include=(), exclude=()):
+    """Finds the league's seasons (first run, a new season, or when asked),
+    fetches whatever weeks are missing, and republishes the history file
+    and rivalries.html. Returns a summary for the action's output."""
+    store = _rivalry_store(s3, bucket)
+    index = store.load(league_history.INDEX_KEY, None)
+    if index is None or rediscover or include or exclude or index.get("league_key") != league_key:
+        print("Looking for every season of this league on Yahoo...")
+        found = league_history.discover_seasons(yahoo, league_key, _history_name, include=include, exclude=exclude)
+        index = {"league_key": league_key, "current_season": max(found, key=int), "seasons": found}
+        store.save(league_history.INDEX_KEY, index)
+
+    current = index["current_season"]
+    order = [current] + sorted((y for y in index["seasons"] if y != current), key=int, reverse=True)
+    seasons, pending = {}, []
+    for year in order:
+        key = league_history.SEASON_KEY.format(year)
+        saved = store.load(key, None)
+        if saved and saved.get("complete") and year != current:
+            seasons[year] = saved
+            continue
+        if time.time() > deadline:
+            pending.append(year)
+            if saved:
+                seasons[year] = saved
+            continue
+        info = league_history.fetch_season(yahoo, index["seasons"][year]["league_key"], saved, deadline, year == current)
+        store.save(key, info)
+        seasons[year] = info
+        if not info.get("complete") and year != current:
+            pending.append(year)
+        print(f"  {year}: {sum(len(g) for g in info['weeks'].values())} matchups saved"
+              + ("" if info.get("complete") or year == current else " so far"))
+
+    history = league_history.build_history(seasons, current, _history_name, index["seasons"][current].get("name") or "")
+    _put(s3, bucket, league_history.PUBLIC_KEY, json.dumps(history, separators=(",", ":")), "application/json")
+    _put(s3, bucket, RIVALRY_PAGE_KEY, _rivalry_page_html(), "text/html")
+    return index, history, pending
+
+
+def _action_rivalry_history(event, context=None):
+    bucket = _require_env("S3_BUCKET")
+    league_key = event.get("league_key") or _require_env("LEAGUE_KEY")
+    s3 = boto3.client("s3")
+    yahoo = _YahooHistory(_get_access_token())
+    index, history, pending = _refresh_rivalry(
+        s3, bucket, yahoo, league_key, _deadline(context), rediscover=bool(event.get("rediscover")),
+        include=event.get("include") or [], exclude=event.get("exclude") or [],
+    )
+
+    finals = [m for m in history["matchups"] if m["status"] == "final"]
+    years = sorted({m["season"] for m in finals})
+    print(f"\nSeasons found: {', '.join(sorted(index['seasons'], key=int))}")
+    for year in sorted(index["seasons"], key=int):
+        s = index["seasons"][year]
+        count = sum(1 for m in finals if m["season"] == int(year))
+        print(f"  {year}: {s.get('name')!r} ({s['league_key']}, {s.get('how', '')}) - {count} final games")
+    former = [m["name"] for m in history["managers"] if not m["active"]]
+    if former:
+        print("Managers not in this season's league (add their Yahoo nickname to MANAGER_NAMES"
+              f" if any of them is a current manager on an old account): {', '.join(former)}")
+
+    champs = league_history.champions(index, lambda t: _history_name(t) or t.get("manager"))
+    if champs:
+        _put(s3, bucket, "history.json", json.dumps(champs), "application/json")
+        landing = _load_json(s3, bucket, "landing.json", None)
+        if landing is not None:
+            landing["champions"] = champs
+            _put(s3, bucket, "landing.json", json.dumps(landing), "application/json")
+        for c in champs:
+            print(f"  Champion {c['season']}: {c['champion']} (runner-up {c['runner_up']})")
+
+    if pending:
+        print(f"\nNot finished - still missing weeks from {', '.join(pending)}. Run this again to continue.")
+    else:
+        print(f"\nDone. {len(finals)} games from {years[0] if years else '-'} to {years[-1] if years else '-'} are live at"
+              f" https://stats.gooncocks.com/{RIVALRY_PAGE_KEY}")
+    return {
+        "seasons": sorted(index["seasons"], key=int), "final_games": len(finals),
+        "still_missing": pending, "former_managers": former, "champions": champs,
+        "page": f"https://stats.gooncocks.com/{RIVALRY_PAGE_KEY}",
+    }
+
+
+def _update_rivalry_week(league_key, context):
+    """After a weekly publish: pull this season's newly finished weeks into
+    the Rivalry Center (usually one or two Yahoo calls). Does nothing until
+    rivalry_history has been run once."""
+    bucket = _require_env("S3_BUCKET")
+    s3 = boto3.client("s3")
+    if _load_json(s3, bucket, league_history.INDEX_KEY, None) is None:
+        print('Rivalry Center not set up yet - run {"action": "rivalry_history"} once to turn it on.')
+        return
+    _index, _history, pending = _refresh_rivalry(s3, bucket, _YahooHistory(_get_access_token()), league_key, _deadline(context, 10))
+    print("Updated the Rivalry Center." + (f" Older seasons still missing: {', '.join(pending)}." if pending else ""))
 
 
 def _action_recap(event):
@@ -530,12 +725,17 @@ def _action_publish_demo():
     return {"page_url": page_url}
 
 
-def _action_publish(event):
+def _action_publish(event, context=None):
     week, matchups, rosters, transactions = _fetch_real_matchups(event)
     page_url, archive_url = _publish_page(
         week, matchups, is_sample=False, bonus_note=event.get("bonus_note"),
         rosters=rosters, transactions=transactions,
     )
+    try:
+        _update_rivalry_week(event.get("league_key") or _require_env("LEAGUE_KEY"), context)
+    except Exception:
+        traceback.print_exc()
+        print("Skipped updating the Rivalry Center this run - see the error above.")
     return {"page_url": page_url, "archive_url": archive_url}
 
 
@@ -613,8 +813,10 @@ def lambda_handler(event, context):
         return _action_managers(event)
     if action == "history":
         return _action_history(event)
+    if action == "rivalry_history":
+        return _action_rivalry_history(event, context)
     if action == "recap":
         return _action_recap(event)
     if action == "publish":
-        return _action_publish(event)
+        return _action_publish(event, context)
     raise RuntimeError(f"Unknown action: {action!r}")

@@ -11,7 +11,7 @@
                'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
 
   var $ = function (id) { return document.getElementById(id); };
-  var data, ids, byId, seasons;
+  var data, ids, byId, seasons; // ids: current managers (grid + spotlights)
   var state = { a: 'will', b: 'gabe', season: 'all', type: 'all', consolation: false };
   var showAll = false;
   var hoverPair = null;
@@ -93,7 +93,12 @@
 
   // ---------- controls ----------
   function buildControls() {
-    var opts = data.managers.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('');
+    function option(m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }
+    var current = data.managers.filter(function (m) { return m.active; });
+    var former = data.managers.filter(function (m) { return !m.active; });
+    // People who have left the league stay pickable, grouped after everyone else.
+    var opts = current.map(option).join('') +
+      (former.length ? '<optgroup label="Former managers">' + former.map(option).join('') + '</optgroup>' : '');
     $('managerA').innerHTML = opts;
     $('managerB').innerHTML = opts;
     $('seasonSel').innerHTML = '<option value="all">All seasons</option>' +
@@ -433,7 +438,8 @@
 
   function start(loaded) {
     data = loaded;
-    ids = data.managers.map(function (m) { return m.id; });
+    ids = data.managers.filter(function (m) { return m.active; }).map(function (m) { return m.id; });
+    if (ids.length < 2) ids = data.managers.map(function (m) { return m.id; });
     byId = {};
     data.managers.forEach(function (m) { byId[m.id] = m; });
     seasons = data.matchups.filter(function (g) { return g.status === 'final'; })

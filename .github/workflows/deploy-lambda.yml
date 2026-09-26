@@ -7,6 +7,7 @@ on:
       - "*.py"
       - "landing.html"
       - "*.webp"
+      - "rivalry-center/**"
   workflow_dispatch:
 
 permissions:
@@ -20,7 +21,7 @@ concurrency:
 env:
   AWS_REGION: us-east-2
   FUNCTION_NAME: gooncockfantasy
-  LAMBDA_FILES: lambda_function.py awards.py webpage.py yahoo_client.py discord_client.py sample_data.py
+  LAMBDA_FILES: lambda_function.py awards.py webpage.py yahoo_client.py discord_client.py sample_data.py league_history.py
 
 jobs:
   deploy:
@@ -47,6 +48,7 @@ jobs:
       - name: Upload the code to Lambda
         run: |
           zip -j lambda.zip $LAMBDA_FILES landing.html *.webp
+          zip -r lambda.zip rivalry-center/index.html rivalry-center/css rivalry-center/js rivalry-center/assets
           aws lambda update-function-code --function-name "$FUNCTION_NAME" --zip-file fileb://lambda.zip > /dev/null
           aws lambda wait function-updated --function-name "$FUNCTION_NAME"
           echo "Deployed $(date -u) from commit $GITHUB_SHA"

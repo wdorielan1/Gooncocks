@@ -107,10 +107,13 @@ def _merge_record(arr):
     return merged
 
 
-def get_user_leagues(access_token, game_key="nfl"):
+def get_user_leagues(access_token, game_key="nfl", all_seasons=False):
     """Return [{'league_key', 'name', 'season', 'num_teams'}] for the
-    logged-in user's leagues in the given game (nfl by default)."""
-    url = f"{FANTASY_BASE}/users;use_login=1/games;game_keys={game_key}/leagues?format=json"
+    logged-in user's leagues in the given game (nfl by default). With
+    all_seasons, every past season's leagues come back too (Yahoo keeps
+    one "game" per NFL season; game_codes matches all of them)."""
+    games = f"game_codes={game_key}" if all_seasons else f"game_keys={game_key}"
+    url = f"{FANTASY_BASE}/users;use_login=1/games;{games}/leagues?format=json"
     data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
 
     leagues = []
@@ -148,6 +151,13 @@ def get_scoreboard(access_token, league_key, week=None):
     week_part = f";week={week}" if week else ""
     url = f"{FANTASY_BASE}/league/{league_key}/scoreboard{week_part}?format=json"
     return _request(url, headers={"Authorization": f"Bearer {access_token}"})
+
+
+def scoreboard_meta(scoreboard_json):
+    """The league's own fields from a scoreboard response: season, name,
+    start_week, end_week, current_week, is_finished, renew, ..."""
+    league = scoreboard_json["fantasy_content"]["league"]
+    return league[0] if isinstance(league[0], dict) else _merge_record(league[0])
 
 
 def scoreboard_week(scoreboard_json):
@@ -244,6 +254,7 @@ def get_league_season(access_token, league_key):
         "season": meta.get("season"), "name": meta.get("name"),
         "is_finished": str(meta.get("is_finished") or "0") == "1",
         "renew": meta.get("renew") or None, "teams": teams,
+        "end_week": int(meta["end_week"]) if str(meta.get("end_week") or "").isdigit() else None,
     }
 
 
@@ -344,5 +355,10 @@ def parse_matchups(scoreboard_json):
                 }
             )
         if len(teams) == 2:
-            results.append({"team_a": teams[0], "team_b": teams[1], "status": matchup.get("status")})
+            results.append({
+                "team_a": teams[0], "team_b": teams[1], "status": matchup.get("status"),
+                "week": int(matchup["week"]) if str(matchup.get("week") or "").isdigit() else None,
+                "is_playoffs": str(matchup.get("is_playoffs") or "0") == "1",
+                "is_consolation": str(matchup.get("is_consolation") or "0") == "1",
+            })
     return results

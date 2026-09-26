@@ -20,7 +20,7 @@
     }
     var managers = raw.managers
       .filter(function (m) { return m && typeof m.id === 'string' && m.id; })
-      .map(function (m) { return { id: m.id, name: String(m.name || m.id) }; });
+      .map(function (m) { return { id: m.id, name: String(m.name || m.id), active: m.active !== false }; });
     var known = {};
     managers.forEach(function (m) { known[m.id] = true; });
 
