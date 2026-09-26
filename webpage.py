@@ -29,9 +29,10 @@ LOGO_URL = f"{SITE_URL}/gooncocks-logo.png"
 # bucket root on every publish (it's the landing page's hero too).
 HERO_ART_URL = f"{SITE_URL}/landing-hero.webp"
 
-# Sad/losing peacock artwork on the Cock of the Week card. Expected at the
-# bucket root alongside the logo.
-SHAME_ART_URL = f"{SITE_URL}/cock-of-the-week.png"
+# Goon / Cock of the Week card art (a partying king peacock, and a sad
+# one on the locker-room bench). Uploaded alongside the hero art.
+GOON_ART_URL = f"{SITE_URL}/goon-art.webp"
+COCK_ART_URL = f"{SITE_URL}/cock-art.webp"
 
 # Per-manager headshots, if uploaded. Convention: a manager named "Chet"
 # maps to photos/chet.jpg - lowercased, apostrophes dropped, everything
@@ -71,7 +72,7 @@ def _season(today=None):
 STYLE_BLOCK = """
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Permanent+Marker&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{color-scheme:dark;--bg:#07101f;--panel:#0b1629;--panel2:#0e1b33;--line:#1d2c4a;--line2:#2a3d63;--text:#f2f4f9;--muted:#9aa6bd;--dim:#6c7a95;--gold:#f6c343;--gold2:#e2a92a;--blue:#1f5bd8;--red:#b3262d;--red2:#7c161b;--display:Anton,Impact,'Arial Narrow',sans-serif}
   *{box-sizing:border-box}
@@ -158,25 +159,28 @@ STYLE_BLOCK = """
 
   /* goon / cock */
   .duo{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
-  .big{position:relative;isolation:isolate;overflow:hidden;min-height:150px;padding:18px 22px 20px;border-radius:3px}
-  .big .kicker{font-size:12px;letter-spacing:3.4px}
-  .goon{background:linear-gradient(100deg,var(--gold) 55%,#f9d060);color:#141005}
-  .cock{background:linear-gradient(100deg,var(--red) 50%,#8e1c22);color:#fff}
-  .big-main{display:flex;align-items:center;gap:16px;margin-top:12px;position:relative;z-index:1}
-  .big h3{font-size:clamp(34px,4.4vw,52px);line-height:.95;overflow-wrap:anywhere}
-  .big-pts{font:400 24px/1.1 var(--display);letter-spacing:.5px}
-  .tag{display:inline-block;margin-top:8px;font:400 15px/1 var(--display);letter-spacing:2px;padding:6px 12px}
-  .goon .tag{background:#141005;color:var(--gold)}
-  .cock .tag{background:var(--red2);color:#fff}
-  .big-note{margin-top:12px;font-size:12.5px;font-weight:600;max-width:44ch;position:relative;z-index:1;list-style:none;padding:0}
-  .goon .big-note{color:#3a2c07}
-  .cock .big-note{color:#ffd9d9}
-  .big-art{position:absolute;right:-6px;top:0;height:100%;width:44%;object-fit:cover;z-index:-1}
-  .goon .big-art{right:16px;top:50%;width:122px;height:122px;transform:translateY(-50%) rotate(6deg);border-radius:50%;border:4px solid #141005;box-shadow:0 10px 24px #0005}
-  .cock .big-art{mask-image:linear-gradient(90deg,transparent,#000 45%);-webkit-mask-image:linear-gradient(90deg,transparent,#000 45%);opacity:.95}
-  .scrawl{position:absolute;z-index:1;font-family:'Permanent Marker',cursive;font-size:15px;line-height:1.05;transform:rotate(-8deg);text-align:center}
-  .goon .scrawl{right:150px;bottom:22px;color:#3a2c07}
-  .cock .scrawl{right:18px;top:18px;color:#ffe3e3;transform:rotate(-12deg)}
+  .big{position:relative;isolation:isolate;overflow:hidden;min-height:330px;display:flex;align-items:center;border:1px solid var(--line2);border-radius:4px;background:#0a1426}
+  .goon{background:radial-gradient(ellipse at 78% 35%,#6b4c0f,#241a08 45%,#0a1426 75%)}
+  .cock{background:radial-gradient(ellipse at 20% 85%,#4a1116,#0a1426 55%)}
+  .big-art{position:absolute;right:0;top:0;width:68%;height:100%;object-fit:cover;object-position:75% 30%;z-index:-2;mask-image:linear-gradient(90deg,transparent,#000 24%);-webkit-mask-image:linear-gradient(90deg,transparent,#000 24%)}
+  .big:before{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,#0a1426e6 26%,#0a142680 44%,transparent 62%)}
+  .big-text{position:relative;padding:24px 26px;max-width:60%}
+  .big-word,.big-of{display:block;font-family:var(--display);font-weight:400;line-height:.86;text-transform:uppercase}
+  .big-word{font-size:clamp(70px,8vw,96px);letter-spacing:1px}
+  .big-of{font-size:clamp(32px,3.8vw,46px);margin-top:4px}
+  .goon .big-word,.goon .big-of{background:linear-gradient(180deg,#ffe07a,#f0b631 55%,#c98a17);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 0 #0006)}
+  .cock .big-word,.cock .big-of{color:#ece5d3;text-shadow:0 3px 0 #0007}
+  .big-name{font:400 clamp(38px,4.6vw,56px)/1 'Archivo Black',var(--display);text-transform:uppercase;color:#f3f3f3;margin-top:14px;overflow-wrap:anywhere;text-shadow:0 3px 0 #0007}
+  .big-name.n-md{font-size:clamp(32px,3.7vw,44px)}
+  .big-name.n-lg{font-size:clamp(25px,2.8vw,34px)}
+  .big-pts{font:400 clamp(20px,2.3vw,28px)/1.1 'Archivo Black',var(--display);margin-top:6px}
+  .goon .big-pts{color:var(--gold)}
+  .cock .big-pts{color:#ec2f3b}
+  .big-tag{margin-top:8px;font-size:15px}
+  .goon .big-tag{font-weight:700;letter-spacing:1px;text-transform:uppercase}
+  .cock .big-tag{font-weight:500;font-size:16px}
+  .big .rc summary{text-align:left;margin-top:10px}
+  .big .rc ul{max-width:36ch}
 
   /* sections */
   .sec{margin-top:44px}
@@ -269,6 +273,8 @@ STYLE_BLOCK = """
   @media(max-width:1000px){
     .nav a:not(.keep){display:none}
     .lead{grid-template-columns:1fr}
+    .duo{grid-template-columns:1fr}
+    .big-art{width:58%;object-position:100% 30%}
     .awards{grid-template-columns:1fr}
     .tables{grid-template-columns:1fr}
     .game{grid-template-columns:62px minmax(0,1fr) minmax(0,1fr)}
@@ -296,10 +302,19 @@ STYLE_BLOCK = """
     .hero h1{margin:14px 0 12px}
     .hero-sub{font-size:16px}
     .duo{grid-template-columns:1fr}
-    .big{padding:16px 18px 18px}
-    .goon .big-art{width:92px;height:92px;right:12px}
-    .scrawl{display:none}
-    .cock .big-art{width:52%}
+    .big{min-height:300px}
+    .big-art{width:78%;mask-image:linear-gradient(90deg,transparent,#000 30%);-webkit-mask-image:linear-gradient(90deg,transparent,#000 30%)}
+    .goon .big-art{object-position:30% 30%}
+    .cock .big-art{object-position:22% 40%}
+    .big:before{background:linear-gradient(90deg,#0a1426f2 30%,#0a1426a6 50%,#0a142620 72%)}
+    .big-text{padding:20px 18px;max-width:64%}
+    .big-word{font-size:66px}
+    .big-of{font-size:31px}
+    .big-name{font-size:36px;margin-top:12px}
+    .big-name.n-md{font-size:29px}
+    .big-name.n-lg{font-size:23px}
+    .big-pts{font-size:19px}
+    .big-tag,.cock .big-tag{font-size:12.5px}
     .av-lg{width:54px;height:54px;font-size:28px}
     .sec{margin-top:36px}
     .sec-head h2{font-size:28px}
@@ -343,8 +358,6 @@ _ICONS = {
     "trade": '<path d="M4 8h14l-3-3M20 16H6l3 3"/>',
     "injury": '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>',
 }
-_CROWN = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5z"/></svg>'
-_DOWN = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6l6 6 4-4 8 8M21 11v5h-5"/></svg>'
 
 
 def _icon(key):
@@ -555,6 +568,13 @@ def _tables_html(week, rankings, standings):
     </div>"""
 
 
+def _name_size(award):
+    """Steps the Goon/Cock name down a size for longer names so it stays
+    beside the art instead of running under it."""
+    n = len(identity(award["team"], award.get("manager")) or "")
+    return "" if n <= 5 else " n-md" if n <= 8 else " n-lg"
+
+
 def _week_url(w):
     return f"/weeks/week-{w}.html"
 
@@ -711,20 +731,24 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
 
   <div class="duo">
     <article class="big goon" aria-labelledby="goon-title">
-      <img class="big-art" src="{LOGO_URL}" alt="" aria-hidden="true">
-      <p class="kicker">{_CROWN} GOON OF THE WEEK</p>
-      <div class="big-main">{_avatar(g['team'], g.get('manager'), "dark", "av-lg")}
-        <div><h3 id="goon-title">{goon_name}</h3><p class="big-pts">{g['score']:.2f} PTS</p><span class="tag">$50 WINNER</span></div></div>
-      {_detail_list(goon_lines[1:], "big-note")}
-      <span class="scrawl" aria-hidden="true">King of<br>Week {week:02d}</span>
+      <img class="big-art" src="{GOON_ART_URL}" alt="Crowned peacock in a royal robe and sunglasses, holding a gold trophy">
+      <div class="big-text">
+        <h3 id="goon-title"><span class="big-word">GOON</span><span class="big-of">OF THE WEEK</span></h3>
+        <p class="big-name{_name_size(g)}">{goon_name}</p>
+        <p class="big-pts">{g['score']:.2f} POINTS</p>
+        <p class="big-tag">$50 and bragging rights</p>
+        {_receipts(goon_lines[1:])}
+      </div>
     </article>
     <article class="big cock" aria-labelledby="cock-title">
-      <img class="big-art" src="{SHAME_ART_URL}" alt="" aria-hidden="true" onerror="this.remove()">
-      <p class="kicker">{_DOWN} COCK OF THE WEEK</p>
-      <div class="big-main">{_avatar(c['team'], c.get('manager'), "red", "av-lg")}
-        <div><h3 id="cock-title">{cock_name}</h3><p class="big-pts">{c['score']:.2f} PTS</p><span class="tag">LEAGUE LOW</span></div></div>
-      {_detail_list(details.get("cock"), "big-note")}
-      <span class="scrawl" aria-hidden="true">Tough<br>week<br>bro...</span>
+      <img class="big-art" src="{COCK_ART_URL}" alt="Dejected peacock slumped on a locker-room bench next to a Cock of the Week trophy">
+      <div class="big-text">
+        <h3 id="cock-title"><span class="big-word">COCK</span><span class="big-of">OF THE WEEK</span></h3>
+        <p class="big-name{_name_size(c)}">{cock_name}</p>
+        <p class="big-pts">{c['score']:.2f} POINTS</p>
+        <p class="big-tag">Mute the chat. It won't help.</p>
+        {_receipts(details.get("cock"))}
+      </div>
     </article>
   </div>
 

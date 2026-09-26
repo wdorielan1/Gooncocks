@@ -404,14 +404,25 @@ def _landing_data(week, matchups, standings, champions, previous):
     }
 
 
+# Artwork shipped inside the Lambda zip and copied to the bucket root on
+# every publish: the peacock banner (landing hero + recap headline) and
+# the Goon / Cock of the Week card art.
+ART_FILES = ("landing-hero.webp", "goon-art.webp", "cock-art.webp")
+
+
+def _upload_art(s3, bucket):
+    here = os.path.dirname(os.path.abspath(__file__))
+    for name in ART_FILES:
+        with open(os.path.join(here, name), "rb") as f:
+            _put(s3, bucket, name, f.read(), "image/webp")
+
+
 def _publish_landing(s3, bucket, week, matchups, standings):
     previous = _load_json(s3, bucket, "landing.json", {})
     champions = _load_json(s3, bucket, "history.json", [])
     data = _landing_data(week, matchups, standings, champions, previous)
     _put(s3, bucket, "landing.json", json.dumps(data), "application/json")
     _put(s3, bucket, "landing.html", _landing_page_html(), "text/html")
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "landing-hero.webp"), "rb") as f:
-        _put(s3, bucket, "landing-hero.webp", f.read(), "image/webp")
     print("Updated the landing page (landing.html + landing.json).")
 
 
@@ -472,6 +483,12 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
         traceback.print_exc()
         print("Skipped the award detail lines this run - see the error above.")
         details = {}
+
+    try:
+        _upload_art(s3, bucket)
+    except Exception:
+        traceback.print_exc()
+        print("Skipped uploading the page artwork this run - see the error above.")
 
     html = render_html(
         week, matchups, is_sample=is_sample, bonus_note=bonus_note, standings=standings_ranked, extras=extras,

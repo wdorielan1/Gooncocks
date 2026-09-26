@@ -6,7 +6,7 @@ on:
     paths:
       - "*.py"
       - "landing.html"
-      - "landing-hero.webp"
+      - "*.webp"
   workflow_dispatch:
 
 permissions:
@@ -46,7 +46,7 @@ jobs:
 
       - name: Upload the code to Lambda
         run: |
-          zip -j lambda.zip $LAMBDA_FILES landing.html landing-hero.webp
+          zip -j lambda.zip $LAMBDA_FILES landing.html *.webp
           aws lambda update-function-code --function-name "$FUNCTION_NAME" --zip-file fileb://lambda.zip > /dev/null
           aws lambda wait function-updated --function-name "$FUNCTION_NAME"
           echo "Deployed $(date -u) from commit $GITHUB_SHA"
