@@ -435,7 +435,14 @@
     if (era && era.high) items.push('<li>' + g.season + ' was a high-scoring season, so scores run higher than usual.</li>');
     if (g.gameType === 'playoff') items.push('<li>Playoff game' + (g.round ? ' · ' + esc(g.round) : '') + '.</li>');
     if (items.length) html += '<ul class="m-list">' + items.join('') + '</ul>';
+    html += '<h3 class="m-sub">Box score</h3><div id="matchBox"></div>';
     $('matchBody').innerHTML = html;
+    if (window.BoxScore) {
+      BoxScore.fill($('matchBox'), { id: g.id, season: g.season, week: g.week,
+        a: { id: sides[0].id, name: name(sides[0].id), score: sides[0].score }, b: { id: sides[1].id, name: name(sides[1].id), score: sides[1].score } });
+    } else {
+      $('matchBox').innerHTML = '<p class="fine">Lineups aren’t available on this page.</p>';
+    }
     $('matchModal').hidden = false;
     $('matchClose').focus();
   }

@@ -118,6 +118,10 @@
     $('controls').addEventListener('submit', function (e) { e.preventDefault(); });
     $('shareBtn').addEventListener('click', share);
     $('moreBtn').addEventListener('click', function () { showAll = !showAll; renderReceipts(currentSeries()); });
+    $('receipts').addEventListener('click', function (e) {
+      var li = e.target.closest('[data-box]');
+      if (li) openBox(li.getAttribute('data-box'));
+    });
     $('copyClose').addEventListener('click', function () { $('copyFallback').hidden = true; $('shareBtn').focus(); });
   }
 
@@ -370,6 +374,16 @@
     });
   }
 
+  // Any game opens its box score (both lineups) in a pop-up.
+  function openBox(id) {
+    var g = data.matchups.filter(function (x) { return x.id === id; })[0];
+    if (!g || !window.BoxScore) return;
+    function team(m) { return ((data.teams || {})[g.season] || {})[m] || ''; }
+    BoxScore.open({ id: g.id, season: g.season, week: g.week, label: gameLabel(g),
+                    a: { id: g.managerA, name: name(g.managerA), team: team(g.managerA), score: g.scoreA },
+                    b: { id: g.managerB, name: name(g.managerB), team: team(g.managerB), score: g.scoreB } });
+  }
+
   // ---------- receipts ----------
   function renderReceipts(s) {
     $('receiptsSub').textContent = name(s.a) + ' vs ' + name(s.b) + ' · ' + (showAll ? 'All meetings' : 'Recent meetings');
@@ -392,7 +406,8 @@
         return '<div class="rc-side' + (win === id ? ' won' : '') + '">' + avatar(id, cls) +
           '<div><span class="nm">' + esc(name(id)) + '</span><b>' + pts(score) + '</b></div></div>';
       }
-      return '<li class="rc"><div class="rc-when"><span>' + g.season + ' · ' + esc(gameLabel(g)) + '</span>' + chip + '</div>' +
+      return '<li class="rc" data-box="' + esc(g.id) + '"><div class="rc-when"><span>' + g.season + ' · ' + esc(gameLabel(g)) + '</span>' + chip +
+        '<button type="button" class="rc-box">Box score <span aria-hidden="true">&rarr;</span></button></div>' +
         '<div class="rc-body">' + sideHtml(s.a, A.mine, win === s.a ? 'av-gold' : 'av-blue') + sideHtml(s.b, A.theirs, win === s.b ? 'av-gold' : 'av-blue') +
         '<div class="rc-result"><span>' + (win ? esc(name(win)) + ' by ' + pts(margin) : 'Tie game') + '</span>' + tags.join('') + '</div></div></li>';
     }).join('');

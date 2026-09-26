@@ -189,8 +189,9 @@ def _sub_resource(collection_owner, key):
 
 
 def get_team_roster(access_token, team_key, week):
-    """[{'player_key', 'name', 'slot', 'eligible', 'status'}] for a team's
-    lineup that week. slot is the lineup spot ("BN" = bench, "IR")."""
+    """[{'player_key', 'name', 'slot', 'eligible', 'status', 'position',
+    'nfl_team'}] for a team's lineup that week. slot is the lineup spot
+    ("BN" = bench, "IR"); position is the player's own (e.g. "WR")."""
     url = f"{FANTASY_BASE}/team/{team_key}/roster;week={week}?format=json"
     data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
     roster = _sub_resource(data["fantasy_content"]["team"], "roster")
@@ -209,6 +210,8 @@ def get_team_roster(access_token, team_key, week):
                 "slot": selected.get("position"),
                 "eligible": [e.get("position") for e in eligible if isinstance(e, dict)],
                 "status": p.get("status") or "",
+                "position": p.get("display_position") or "",
+                "nfl_team": (p.get("editorial_team_abbr") or "").upper(),
             }
         )
     return players

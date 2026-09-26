@@ -259,12 +259,30 @@
       '</ul>';
   }
 
+  // Any game opens its box score (both lineups) in a pop-up.
+  function boxLink(me, x, html) {
+    return '<button type="button" class="bx-link" data-bx="' + x.season + '|' + x.week + '|' + esc(me) + '|' + esc(x.opp) + '">' + html + '</button>';
+  }
+  function openBox(key) {
+    var k = key.split('|'), season = Number(k[0]), week = Number(k[1]);
+    var g = data.matchups.filter(function (x) {
+      return x.season === season && x.week === week && x.status === 'final' &&
+        ((x.managerA === k[2] && x.managerB === k[3]) || (x.managerA === k[3] && x.managerB === k[2]));
+    })[0];
+    if (!g || !window.BoxScore) return;
+    function team(m) { return ((data.teams || {})[g.season] || {})[m] || ''; }
+    var label = g.gameType === 'regular' ? 'Week ' + g.week : (g.round || (g.gameType === 'consolation' ? 'Consolation' : 'Playoffs')) + ' · Week ' + g.week;
+    BoxScore.open({ id: g.id, season: g.season, week: g.week, label: label,
+                    a: { id: g.managerA, name: name(g.managerA), team: team(g.managerA), score: g.scoreA },
+                    b: { id: g.managerB, name: name(g.managerB), team: team(g.managerB), score: g.scoreB } });
+  }
+
   function renderBests(c) {
-    var b = c.bests;
+    var b = c.bests, me = state.profile;
     function item(k, v, d) {
       return '<li><span class="k">' + k + '</span><span class="v">' + (v == null ? '<span class="na">—</span>' : v) + '</span><span class="d">' + (d || '') + '</span></li>';
     }
-    function vs(x) { return 'vs ' + esc(name(x.opp)) + ' · ' + when(x) + ' · ' + esc(x.type); }
+    function vs(x) { return boxLink(me, x, 'vs ' + esc(name(x.opp)) + ' · ' + when(x) + ' · ' + esc(x.type)); }
     $('scopeBests').textContent = scopeLabel();
     $('bests').innerHTML =
       item('Highest week', b.highWeek && pts(b.highWeek.score), b.highWeek && vs(b.highWeek)) +
@@ -278,8 +296,9 @@
 
   function seasonDetail(id, ln) {
     var path = ln.playoffGames.length ? '<ul>' + ln.playoffGames.map(function (p) {
-      return '<li>' + (p.side.result === 'W' ? 'Beat ' : p.side.result === 'L' ? 'Lost to ' : 'Tied ') + esc(name(p.side.opp)) + ' ' +
-        pts(p.side.mine) + '–' + pts(p.side.theirs) + ' · ' + esc(p.game.round || 'Playoffs') + '</li>';
+      return '<li>' + boxLink(id, { season: p.game.season, week: p.game.week, opp: p.side.opp },
+        (p.side.result === 'W' ? 'Beat ' : p.side.result === 'L' ? 'Lost to ' : 'Tied ') + esc(name(p.side.opp)) + ' ' +
+        pts(p.side.mine) + '–' + pts(p.side.theirs) + ' · ' + esc(p.game.round || 'Playoffs')) + '</li>';
     }).join('') + '</ul>' : (ln.finished ? 'Didn’t make the playoffs' : 'Season in progress');
     var weeks = ln.weeks.slice().sort(function (a, b) { return a.week - b.week; });
     var hi = weeks.reduce(function (m, w) { return !m || w.score > m.score ? w : m; }, null);
@@ -293,13 +312,16 @@
     if (ln.cock.length) awards.push('Cock: Week ' + ln.cock.map(function (a) { return a.week; }).join(', '));
     return '<tr class="detail"><td colspan="8"><dl class="detail-grid">' +
       '<div><dt>Playoff path</dt>' + path + '</div>' +
-      '<div><dt>Best / worst week</dt>' + (hi ? pts(hi.score) + ' (Wk ' + hi.week + ', vs ' + esc(name(hi.opp)) + ')<br>' + pts(lo.score) + ' (Wk ' + lo.week + ', vs ' + esc(name(lo.opp)) + ')' : '—') + '</div>' +
+      '<div><dt>Best / worst week</dt>' + (hi ? boxLink(id, { season: ln.season, week: hi.week, opp: hi.opp }, pts(hi.score) + ' (Wk ' + hi.week + ', vs ' + esc(name(hi.opp)) + ')') + '<br>' +
+        boxLink(id, { season: ln.season, week: lo.week, opp: lo.opp }, pts(lo.score) + ' (Wk ' + lo.week + ', vs ' + esc(name(lo.opp)) + ')') : '—') + '</div>' +
       '<div><dt>Points against · awards</dt>' + pts(ln.reg.pa) + ' against' + (awards.length ? '<br>' + awards.join('<br>') : '') + '</div>' +
       '<div><dt>Winnings</dt>' + cash + '</div>' +
       '</dl>' +
-      (weeks.length ? '<div class="weeks" aria-hidden="true">' + weeks.map(function (x) {
-        return '<i class="' + (x.result === 'W' ? 'w' : x.result === 'T' ? 't' : '') + '" style="height:' + Math.max(8, Math.round(x.score / top * 100)) + '%" title="Week ' + x.week + ': ' + pts(x.score) + '"></i>';
-      }).join('') + '</div><p class="weeks-cap">Regular-season scores, week by week · gold = win, blue = loss</p>' : '') +
+      (weeks.length ? '<div class="weeks">' + weeks.map(function (x) {
+        var label = 'Week ' + x.week + ': ' + pts(x.score) + ', ' + (x.result === 'W' ? 'beat ' : x.result === 'T' ? 'tied ' : 'lost to ') + name(x.opp);
+        return '<button type="button" class="bar' + (x.result === 'W' ? ' w' : x.result === 'T' ? ' t' : '') + '" style="height:' + Math.max(8, Math.round(x.score / top * 100)) + '%"' +
+          ' data-bx="' + ln.season + '|' + x.week + '|' + esc(id) + '|' + esc(x.opp) + '" title="' + esc(label) + '" aria-label="' + esc(label) + ' (open box score)"></button>';
+      }).join('') + '</div><p class="weeks-cap">Regular-season scores, week by week · gold = win, blue = loss · select a bar for its box score</p>' : '') +
       '</td></tr>';
   }
 
@@ -501,6 +523,10 @@
     });
     $('backBtn').addEventListener('click', function () { state.selected = state.profile; setView('overview', { top: true }); });
     $('profileSel').addEventListener('change', function (e) { state.profile = e.target.value; state.selected = e.target.value; openSeasons = {}; render(); });
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-bx]');
+      if (b) openBox(b.getAttribute('data-bx'));
+    });
     $('seasonTable').addEventListener('click', function (e) {
       var row = e.target.closest('tr.row');
       if (!row) return;

@@ -1,4 +1,4 @@
-# Gooncocks Record Room (standalone preview)
+# Gooncocks Record Room
 
 Every league record in one place:
 - featured cards
@@ -8,9 +8,10 @@ Every league record in one place:
 - the records nobody wants
 - a banner for every champion
 
-It runs on the league's real Yahoo history (2015, 2017–2026). It is **not
-deployed**, and nothing on the live site links to it. The Lambda deploy doesn't
-package this folder, so none of it reaches AWS.
+It runs on the league's real Yahoo history (2015, 2017–2026). It's live at
+https://stats.gooncocks.com/records.html. The Lambda bundles this folder
+into that one file, reading the live `rivalry-history.json` in place of the
+snapshot. Opened from this folder, it uses the snapshot in `data/`.
 
 ## Open it
 
@@ -40,7 +41,7 @@ python3 -m http.server 8082   # then open http://localhost:8082
 - **Spotlight:**
   - Shows the holder, the mark, when it happened, the details (game, season,
     streak or award list), the previous holder and the exact scope.
-  - Games in any list open the matchup.
+  - Games in any list open the matchup, with both lineups (the box score).
   - **Share this record** copies a summary.
 - **Challengers:** the top five, plus anyone tied with fifth. Select a row to
   view that performance, then use **Back to the record**.
@@ -114,21 +115,19 @@ python3 -m http.server 8082   # then open http://localhost:8082
 | `js/data.js` | **Data layer.** Loads and checks the history. It's the only file that knows where data comes from. |
 | `js/records.js` | **Record math.** All 18 records, defined once. No page code. |
 | `js/app.js` | Cards, record book, spotlight, challengers, banners, sharing, saved state |
+| `../shared/boxscore.js` | Box score pop-up shared by every page (lineups load when a game is opened) |
 | `data/league-history.js` | Snapshot of the real Yahoo history (same format as the Rivalry and Career Centers) |
 | `tools/snapshot_history.py` | Refreshes the snapshot from the Lambda's saved season files |
 | `assets/gooncocks-logo.webp` | The original Gooncocks badge |
 
-## Going live later
+## Box scores
 
-The page reads the same `rivalry-history.json` the Lambda already publishes. To
-serve it from the site:
-1. Set `window.GOONCOCKS_HISTORY_URL = '/rivalry-history.json'` in the DATA
-   block of `index.html`, or bundle it the same way the Lambda bundles
-   `careers.html`.
-2. Add a Record Room link to the other pages' navigation.
+Every matchup pop-up shows both lineups player by player. They come from
+`boxscores/<season>.json`, which the Lambda collects from Yahoo. The shared
+pop-up script is `../shared/boxscore.js`, used by every page.
 
-Neither step has been done. Yahoo credentials stay with the Lambda and never
-belong in this page.
+Opened straight from this folder, the pop-up says lineups load on the live
+site. Yahoo credentials stay with the Lambda and never belong in this page.
 
-The Career Center and Rivalry Center links point at their existing live pages:
+The Career Center and Rivalry Center links point at their live pages:
 `stats.gooncocks.com/careers.html` and `stats.gooncocks.com/rivalries.html`.

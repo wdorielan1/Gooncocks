@@ -242,7 +242,7 @@ def linked(known_name, names):
     return lambda team: known_name(team) or names.get(team.get("manager_guid"))
 
 
-def build_history(seasons, current_season, known_name, league_name="", standings=None, excluded=None):
+def build_history(seasons, current_season, known_name, league_name="", standings=None, excluded=None, game_keys=None):
     """The Rivalry Center's history file from the stored season files.
     `seasons` is {year: season file}; `standings` is {year: index season}
     with Yahoo's final ranks. People are matched across seasons by
@@ -250,7 +250,8 @@ def build_history(seasons, current_season, known_name, league_name="", standings
     (or team name when Yahoo hides the nickname) and listed as a former
     manager. Teams for which `excluded(team)` is true are left out
     entirely, with every game they played. Yahoo account IDs never leave
-    this function."""
+    this function. Pass a dict as `game_keys` to get each game's
+    {id: (season, week, team_a key, team_b key)} for the box scores."""
     excluded = excluded or (lambda team: False)
     unreliable = shared_accounts(seasons)
     people = {}   # id -> {"name", "seasons": set()}
@@ -288,8 +289,11 @@ def build_history(seasons, current_season, known_name, league_name="", standings
                     pid_by_team[(str(year), t.get("name"))] = pid
                 final = g.get("status") == "postevent" and a.get("score") is not None and b.get("score") is not None
                 week = g.get("week") or int(week_key)
+                gid = f"{year}-w{int(week):02d}-{pa}-{pb}"
+                if game_keys is not None:
+                    game_keys[gid] = (int(year), int(week), a.get("team_key"), b.get("team_key"))
                 rows.append({
-                    "id": f"{year}-w{int(week):02d}-{pa}-{pb}",
+                    "id": gid,
                     "season": int(year), "week": int(week),
                     "gameType": "consolation" if g.get("is_consolation") else "playoff" if g.get("is_playoffs") else "regular",
                     "round": None,
@@ -356,3 +360,77 @@ def champions(index, name_of):
             "runner_up_team": runner.get("team") if runner else None,
         })
     return out
+
+
+# ------------------------------------------------------------ box scores
+#
+# Every team's lineup, with each player's points, for every finished week.
+# The working file (by Yahoo team key) is kept privately; the public file
+# for each season is keyed by the same game IDs as the history file, so a
+# page can show any game's box score when someone opens it.
+
+BOX_KEY = "rivalry/boxscores/{}.json"
+BOX_PUBLIC_KEY = "boxscores/{}.json"
+
+
+def box_weeks(season_file):
+    """{week: [team keys]} for each week whose games are all final."""
+    out = {}
+    for week, games in (season_file.get("weeks") or {}).items():
+        if not games or not _week_done(games):
+            continue
+        keys = [t.get("team_key") for g in games for t in (g["team_a"], g["team_b"])]
+        if all(keys):
+            out[str(week)] = keys
+    return out
+
+
+def _temporary(exc):
+    """Rate limits, an expired login, Yahoo server errors and network
+    trouble are worth retrying on a later run; anything else (a 400/404,
+    or a reply without a roster in it) means Yahoo doesn't have that week."""
+    if re.search(r"HTTP (999|429|401|5\d\d)\b", str(exc)):
+        return True
+    return isinstance(exc, OSError)
+
+
+def fetch_boxscores(yahoo, season_file, saved, deadline, log=print):
+    """Fills in `saved` (this season's box score file, or None) with every
+    finished week not already stored, one Yahoo week at a time, stopping at
+    `deadline`. A week Yahoo won't return is marked unavailable so it isn't
+    asked for again; being rate limited just stops this run.
+    Returns (info, changed)."""
+    league_key = season_file["league_key"]
+    info = saved if saved and saved.get("league_key") == league_key else {"league_key": league_key, "weeks": {}}
+    changed = False
+    todo = sorted(box_weeks(season_file).items(), key=lambda kv: int(kv[0]))
+    for week, keys in todo:
+        if week in info["weeks"]:
+            continue
+        if time.time() > deadline:
+            break
+        try:
+            info["weeks"][week] = {"teams": yahoo.box_week(league_key, int(week), keys)}
+        except Exception as exc:
+            if _temporary(exc):
+                log(f"    Yahoo didn't answer for week {week} ({str(exc)[:120]}); stopping here for this run.")
+                break
+            info["weeks"][week] = {"unavailable": str(exc)[:200]}
+        changed = True
+    info["complete"] = bool(season_file.get("complete")) and all(w in info["weeks"] for w, _ in todo)
+    return info, changed
+
+
+def public_boxscores(year, box, game_keys):
+    """The public box score file for one season: {"season", "games": {game
+    id: {"a": lineup, "b": lineup}}}, where a lineup is [[slot, name,
+    position, NFL team, points], ...] in Yahoo's lineup order and "a" is
+    the history file's managerA."""
+    games = {}
+    for gid, (season, week, key_a, key_b) in game_keys.items():
+        if str(season) != str(year):
+            continue
+        teams = (box.get("weeks", {}).get(str(week)) or {}).get("teams") or {}
+        if key_a in teams and key_b in teams:
+            games[gid] = {"a": teams[key_a], "b": teams[key_b]}
+    return {"season": int(year), "games": games}

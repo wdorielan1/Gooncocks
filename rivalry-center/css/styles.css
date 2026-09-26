@@ -202,7 +202,10 @@ h1 { font: 400 clamp(44px, 7.4vw, 86px)/.95 var(--display); text-transform: uppe
 
 /* ---------- receipts ---------- */
 .rc-list { list-style: none; padding: 0; display: grid; gap: 8px; margin-top: 14px; }
-.rc { border: 1px solid var(--line-2); border-radius: 3px; background: var(--panel); padding: 10px 14px 12px; }
+.rc { border: 1px solid var(--line-2); border-radius: 3px; background: var(--panel); padding: 10px 14px 12px; cursor: pointer; }
+.rc:hover { border-color: #ffffff59; }
+.rc-box { margin-left: auto; padding: 4px 0; border: 0; background: none; color: var(--gold); font: 700 12px/1 var(--label); letter-spacing: 1.6px; text-transform: uppercase; cursor: pointer; }
+.rc-box:hover { text-decoration: underline; }
 .rc-when { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font: 700 13px/1 var(--label); letter-spacing: 1.8px; text-transform: uppercase; color: #dfe5f2; }
 .chip { font: 700 11px/1 var(--label); letter-spacing: 1.4px; padding: 4px 7px; border-radius: 2px; background: #ffffff14; color: var(--muted); }
 .chip.po { background: #f6c34326; color: var(--gold); }
@@ -305,4 +308,9 @@ h1 { font: 400 clamp(44px, 7.4vw, 86px)/.95 var(--display); text-transform: uppe
 }
 @media (max-width: 470px) {
   .brand span { display: none; }
+}
+
+/* Small phones: the logo already links home, so the menu keeps the three history pages. */
+@media (max-width: 440px) {
+  .nav a[href="https://stats.gooncocks.com/"], .nav a[href="https://gooncocks.com"] { display: none; }
 }

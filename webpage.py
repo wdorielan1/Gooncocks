@@ -16,7 +16,9 @@ images) ready to upload somewhere public - see lambda_function.py's
 _publish_page for the AWS side of that.
 """
 import datetime
+import json
 import math
+import os
 import re
 from html import escape
 
@@ -241,6 +243,9 @@ STYLE_BLOCK = """
   .g-team.lose b{margin:0 6px 0 0;color:#e4e8f1}
   .g-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;border-left:1px solid var(--line);font-size:12.5px;color:#cfd6e4;align-self:stretch}
   .badge{background:var(--gold);color:#141005;font:400 12px/1 var(--display);letter-spacing:1px;padding:5px 8px}
+  .game[data-box]{cursor:pointer}.game[data-box]:hover{border-color:var(--line2)}
+  .g-box{margin-left:auto;padding:4px 0;border:0;background:none;color:var(--gold);font:400 12px/1 var(--display);letter-spacing:1px;cursor:pointer}
+  .g-box:hover{text-decoration:underline}
 
   /* tables */
   .tables{display:grid;grid-template-columns:1fr 1fr;gap:18px}
@@ -350,6 +355,7 @@ STYLE_BLOCK = """
   @media(max-width:470px){.brand span{display:none}.brand img{width:38px;height:38px}.nav{gap:14px}}
   @media(max-width:400px){.top .wrap{gap:8px}.brand img{width:34px;height:34px}.nav{gap:10px}.nav a{font-size:12.5px}.wk summary{font-size:13px;padding:8px 11px}.wk summary:after{margin-left:6px}}
   @media(max-width:400px){.aw-stat b{font-size:24px}}
+  @media(max-width:440px){.nav a.home{display:none}}
 </style>
 """
 
@@ -521,14 +527,28 @@ def _strip_game(m):
     return f'<div class="sg">{rows}</div>'
 
 
-def _game_row(m, status, badge):
+def _box_data(m, season, week):
+    """What the box score pop-up needs for a game, or None when a manager
+    isn't known (the box score files are keyed by manager)."""
+    if not (season and m.team_a_manager and m.team_b_manager):
+        return None
+    def side(team, manager, score):
+        return {"id": re.sub(r"[^a-z0-9]+", "", manager.lower()), "name": manager,
+                "team": team if team != manager else "", "score": round(score, 2)}
+    return {"season": season, "week": week, "a": side(m.team_a_name, m.team_a_manager, m.team_a_score),
+            "b": side(m.team_b_name, m.team_b_manager, m.team_b_score)}
+
+
+def _game_row(m, status, badge, box=None):
     badge_html = f'<span class="badge">{badge}</span>' if badge else ""
+    box_attr = f' data-box="{escape(json.dumps(box), quote=True)}"' if box else ""
+    box_btn = '<button type="button" class="g-box">BOX SCORE &rarr;</button>' if box else ""
     return f"""
-      <div class="game">
+      <div class="game"{box_attr}>
         <span class="g-status">{status}</span>
         <div class="g-team win">{_avatar(m.winner, m.winner_manager, "gold")}<span class="nm">{_who(m.winner, m.winner_manager)}{_team_line(m.winner, m.winner_manager)}</span><b>{max(m.team_a_score, m.team_b_score):.2f}</b></div>
         <div class="g-team lose"><b>{m.loser_score:.2f}</b>{_avatar(m.loser, m.loser_manager, "blue")}<span class="nm">{_who(m.loser, m.loser_manager)}{_team_line(m.loser, m.loser_manager)}</span></div>
-        <div class="g-meta"><span>{m.margin:.2f}-point margin</span>{badge_html}</div>
+        <div class="g-meta"><span>{m.margin:.2f}-point margin</span>{badge_html}{box_btn}</div>
       </div>"""
 
 
@@ -629,6 +649,26 @@ def _week_step(week, weeks, step):
 # including old archived weeks, from the landing.json the Lambda rewrites
 # on each publish. Without it (or if the fetch fails) the page still works
 # with whatever weeks existed when it was published.
+# Clicking a game opens its box score (both lineups), from the
+# boxscores/<season>.json files the Lambda publishes.
+_BOX_JS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shared", "boxscore.js")
+_BOX_CLICK = """
+<script>
+document.addEventListener('click', function(e){
+  var g = e.target.closest('.game[data-box]');
+  if (g && window.BoxScore) BoxScore.open(JSON.parse(g.getAttribute('data-box')));
+});
+</script>"""
+
+
+def _box_script():
+    try:
+        with open(_BOX_JS, encoding="utf-8") as f:
+            return "<script>\n" + f.read() + "\n</script>" + _BOX_CLICK
+    except OSError:
+        return ""
+
+
 _WEEK_SCRIPT = """
 <script>
 (function(){
@@ -685,7 +725,8 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     b, h = awards["blowout"], awards["heartbreaker"]
     blowout_m, closest_m = _find(matchups, b["winner"], b["loser"]), _find(matchups, h["winner"], h["loser"])
     games = "".join(
-        _game_row(m, status, "BIGGEST BLOWOUT" if m is blowout_m else "CLOSEST GAME" if m is closest_m else "")
+        _game_row(m, status, "BIGGEST BLOWOUT" if m is blowout_m else "CLOSEST GAME" if m is closest_m else "",
+                  None if is_sample else _box_data(m, season, week))
         for m in sorted(matchups, key=lambda m: -max(m.team_a_score, m.team_b_score))
     )
     award_rows, empty_rows = _award_rows(matchups, awards, extras, details)
@@ -705,7 +746,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     <a class="wn-mid" href="{HOME_URL}/#archive">{season} SEASON ARCHIVE</a>
     {_week_step(week, weeks, 1)}
   </nav>"""
-    script = "" if is_sample else _WEEK_SCRIPT.replace("__WEEK__", str(week))
+    script = "" if is_sample else _WEEK_SCRIPT.replace("__WEEK__", str(week)) + _box_script()
 
     return f"""<!doctype html>
 <html lang="en">
@@ -731,7 +772,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
   <div class="wrap">
     <a class="brand" href="{HOME_URL}"><img src="{LOGO_URL}" alt="Gooncocks peacock logo"><span><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></span></a>
     <nav class="nav" aria-label="Recap sections">
-      <a class="on" href="#top">This Week</a><a href="#awards">Awards</a><a href="#matchups">Matchups</a><a href="#standings">Standings</a><a class="keep" href="{SITE_URL}/rivalries.html">Rivalries</a><a class="keep" href="{SITE_URL}/careers.html">Careers</a><a class="keep" href="{HOME_URL}">Home</a>
+      <a class="on" href="#top">This Week</a><a href="#awards">Awards</a><a href="#matchups">Matchups</a><a href="#standings">Standings</a><a class="keep" href="{SITE_URL}/rivalries.html">Rivalries</a><a class="keep" href="{SITE_URL}/careers.html">Careers</a><a class="keep" href="{SITE_URL}/records.html">Records</a><a class="keep home" href="{HOME_URL}">Home</a>
       <details class="wk"><summary>WEEK {week:02d}</summary>{week_menu}</details>
     </nav>
   </div>

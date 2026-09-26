@@ -60,7 +60,10 @@ Drive it with the "Test" button in the Lambda console, using a test event
   account - and pulls every week's scores. Saves progress as it goes, so
   if the run ends with "run again to continue", just run it again. After
   that, each weekly publish keeps it current on its own. It also refreshes
-  the Champion Wall from each finished season's final standings.
+  the Champion Wall from each finished season's final standings, publishes
+  the Career Center (careers.html) and Record Room (records.html), and
+  collects every game's lineups (box scores) with whatever time is left -
+  keep running it until it says "Done".
     {"action": "rivalry_history"}
   Options: "rediscover": true searches for seasons again; "include":
   ["423.l.12345"] adds a league by hand; "exclude": [...] drops one.
@@ -84,6 +87,7 @@ import os
 import re
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 
 import boto3
 
@@ -363,6 +367,8 @@ RIVALRY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rivalry-
 RIVALRY_PAGE_KEY = "rivalries.html"
 CAREER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "manager-career-center")
 CAREER_PAGE_KEY = "careers.html"
+RECORD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "record-room")
+RECORD_PAGE_KEY = "records.html"
 
 
 class _YahooHistory:
@@ -404,6 +410,23 @@ class _YahooHistory:
         return [dict(m, team_a=self._clean(m["team_a"]), team_b=self._clean(m["team_b"]))
                 for m in parse_matchups(scoreboard_json)]
 
+    def box_week(self, league_key, week, team_keys):
+        """{team key: [[slot, name, position, NFL team, points], ...]} for
+        every team that played that week: one roster call per team plus
+        one points call per 25 players, a few at a time."""
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            rosters = dict(zip(team_keys, pool.map(lambda k: get_team_roster(self.token, k, week), team_keys)))
+            keys = sorted({p["player_key"] for r in rosters.values() for p in r if p.get("player_key")})
+            points = {}
+            for part in pool.map(lambda batch: get_player_points(self.token, league_key, batch, week),
+                                 [keys[i:i + 25] for i in range(0, len(keys), 25)]):
+                points.update(part)
+        return {
+            key: [[p.get("slot") or "", p.get("name") or "", p.get("position") or "", p.get("nfl_team") or "",
+                   points.get(p.get("player_key"))] for p in roster]
+            for key, roster in rosters.items()
+        }
+
 
 def _history_name(team):
     return team.get("known") or _known_manager_name(team)
@@ -428,7 +451,7 @@ def _bundle_page(folder, logo, data_files=()):
     start, end = page.index("<!-- DATA"), page.index("<!-- /DATA -->") + len("<!-- /DATA -->")
     data = "".join("<script>\n" + read(f) + "\n</script>\n" for f in data_files)
     page = page[:start] + data + "<script>window.GOONCOCKS_HISTORY_URL = '/" + league_history.PUBLIC_KEY + "';</script>" + page[end:]
-    page = re.sub(r'<script src="(js/[\w.-]+)"></script>', lambda m: "<script>\n" + read(m.group(1)) + "\n</script>", page)
+    page = re.sub(r'<script src="((?:js|\.\./shared)/[\w.-]+)"></script>', lambda m: "<script>\n" + read(m.group(1)) + "\n</script>", page)
     image = "data:image/webp;base64," + base64.b64encode(read(logo, "rb")).decode("ascii")
     return page.replace(f'src="{logo}"', f'src="{image}"')
 
@@ -441,6 +464,37 @@ def _rivalry_page_html():
 def _career_page_html():
     """careers.html, built from manager-career-center/ (with its payout rules)."""
     return _bundle_page(CAREER_DIR, "assets/gooncocks-logo.webp", data_files=("data/payouts.js",))
+
+
+def _record_page_html():
+    """records.html, built from record-room/."""
+    return _bundle_page(RECORD_DIR, "assets/gooncocks-logo.webp")
+
+
+def _refresh_boxscores(s3, bucket, yahoo, seasons, game_keys, current, deadline):
+    """Collects lineups for finished weeks (newest seasons first) until
+    `deadline`, and republishes each season's public box score file that
+    changed. Returns the seasons still missing weeks."""
+    store = _rivalry_store(s3, bucket)
+    pending = []
+    for year in sorted(seasons, key=int, reverse=True):
+        saved = store.load(league_history.BOX_KEY.format(year), None)
+        if (saved and saved.get("complete") and saved.get("league_key") == seasons[year]["league_key"]
+                and year != current):
+            box, changed = saved, False
+        else:
+            box, changed = league_history.fetch_boxscores(yahoo, seasons[year], saved, deadline)
+        if changed or saved is None:
+            store.save(league_history.BOX_KEY.format(year), box)
+            got = sum(1 for w in box["weeks"].values() if "teams" in w)
+            print(f"  {year} box scores: {got} weeks saved" + ("" if box["complete"] or year == current else " so far"))
+        # Rewritten every run so the game IDs always match the history file.
+        _put(s3, bucket, league_history.BOX_PUBLIC_KEY.format(year),
+             json.dumps(league_history.public_boxscores(year, box, game_keys), separators=(",", ":")),
+             "application/json")
+        if not box["complete"] and year != current:
+            pending.append(year)
+    return pending
 
 
 def _rivalry_store(s3, bucket):
@@ -496,14 +550,17 @@ def _refresh_rivalry(s3, bucket, yahoo, league_key, deadline, rediscover=False, 
 
     standings_teams = [t for season in index["seasons"].values() for t in season.get("teams", [])]
     resolve = league_history.linked(_history_name, league_history.account_names(seasons, _history_name, standings_teams))
+    game_keys = {}
     history = league_history.build_history(seasons, current, resolve, index["seasons"][current].get("name") or "",
-                                           standings=index["seasons"], excluded=_excluded)
+                                           standings=index["seasons"], excluded=_excluded, game_keys=game_keys)
     _put(s3, bucket, league_history.PUBLIC_KEY, json.dumps(history, separators=(",", ":")), "application/json")
     _put(s3, bucket, RIVALRY_PAGE_KEY, _rivalry_page_html(), "text/html")
     _put(s3, bucket, CAREER_PAGE_KEY, _career_page_html(), "text/html")
+    _put(s3, bucket, RECORD_PAGE_KEY, _record_page_html(), "text/html")
     for year in skipped:
         index["seasons"][year]["skipped"] = True
-    return index, history, pending, resolve
+    box_pending = _refresh_boxscores(s3, bucket, yahoo, seasons, game_keys, current, deadline)
+    return index, history, pending + [y for y in box_pending if y not in pending], resolve
 
 
 def _action_rivalry_history(event, context=None):
@@ -550,15 +607,18 @@ def _action_rivalry_history(event, context=None):
             print(f"  Champion {c['season']}: {c['champion']} (runner-up {c['runner_up']})")
 
     if pending:
-        print(f"\nNot finished - still missing weeks from {', '.join(pending)}. Run this again to continue.")
+        print(f"\nNot finished - still missing scores or lineups from {', '.join(sorted(pending))}."
+              " Run this again to continue (each run picks up where the last one stopped).")
     else:
-        print(f"\nDone. {len(finals)} games from {years[0] if years else '-'} to {years[-1] if years else '-'} are live at"
-              f" https://stats.gooncocks.com/{RIVALRY_PAGE_KEY} and https://stats.gooncocks.com/{CAREER_PAGE_KEY}")
+        print(f"\nDone. {len(finals)} games from {years[0] if years else '-'} to {years[-1] if years else '-'}, with"
+              f" lineups, are live at https://stats.gooncocks.com/{RIVALRY_PAGE_KEY},"
+              f" https://stats.gooncocks.com/{CAREER_PAGE_KEY} and https://stats.gooncocks.com/{RECORD_PAGE_KEY}")
     return {
         "seasons": sorted(index["seasons"], key=int), "final_games": len(finals),
         "still_missing": pending, "former_managers": former, "champions": champs,
         "page": f"https://stats.gooncocks.com/{RIVALRY_PAGE_KEY}",
         "careers_page": f"https://stats.gooncocks.com/{CAREER_PAGE_KEY}",
+        "records_page": f"https://stats.gooncocks.com/{RECORD_PAGE_KEY}",
     }
 
 
