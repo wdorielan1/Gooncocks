@@ -3,7 +3,7 @@ Renders the shareable recap webpage as an HTML string, using the exact same
 award data as awards.generate_recap() (via compute_awards()/rank_teams())
 so the text recap and the webpage never disagree.
 
-Layout follows the "sports network" mockup Will picked: a score strip
+Layout follows the "sports network" mockup Will picked: a score ticker
 across the top, a "<Goon> takes the crown" hero next to the season's
 pecking order, gold Goon / red Cock of the Week cards, the rest of the
 awards as rows with expandable receipts, every matchup, and weekly
@@ -16,6 +16,7 @@ images) ready to upload somewhere public - see lambda_function.py's
 _publish_page for the AWS side of that.
 """
 import datetime
+import math
 import re
 from html import escape
 
@@ -116,17 +117,22 @@ STYLE_BLOCK = """
   .wk-menu a.on{color:var(--gold)}
   .home-mini{display:none}
 
-  /* score strip */
-  .strip{border-bottom:1px solid var(--line);background:#081223}
-  .strip .wrap{display:grid;grid-template-columns:repeat(var(--games,5),minmax(150px,1fr));overflow-x:auto;scrollbar-width:none}
-  .strip .wrap::-webkit-scrollbar{display:none}
-  .sg{padding:10px 18px 12px;border-left:1px solid var(--line)}
-  .sg:first-child{border-left:0;padding-left:0}
-  .sg-status{font-size:9px;font-weight:700;letter-spacing:1.6px;color:var(--muted)}
-  .sg-row{display:flex;align-items:center;gap:9px;margin-top:6px;font-size:13px;color:#d6dcea}
+  /* score ticker */
+  .strip{display:flex;border-bottom:1px solid var(--line);background:#081223;overflow:hidden}
+  .strip-tag{flex:none;display:flex;flex-direction:column;justify-content:center;padding:0 18px;background:var(--gold);color:#141005;font:400 19px/1 var(--display);letter-spacing:1px;white-space:nowrap}
+  .strip-tag small{font:700 9px/1 'Work Sans',sans-serif;letter-spacing:1.8px;margin-top:5px}
+  .strip-view{flex:1;min-width:0;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent)}
+  .strip-track{display:flex;width:max-content;animation:ticker var(--dur,35s) linear infinite}
+  .strip:hover .strip-track,.strip:focus-within .strip-track{animation-play-state:paused}
+  .strip-set,.strip-more{display:flex}
+  @keyframes ticker{to{transform:translateX(-50%)}}
+  .sg{flex:none;width:210px;padding:11px 18px 12px;border-left:1px solid var(--line)}
+  .sg-row{display:flex;align-items:center;gap:9px;font-size:13px;color:#d6dcea}
+  .sg-row+.sg-row{margin-top:6px}
   .sg-row span:not(.av){flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .sg-row b{font:400 17px/1 var(--display);letter-spacing:.3px}
   .sg-row.win b{color:var(--gold)}
+  @media(prefers-reduced-motion:reduce){.strip-track{animation:none}.strip-view{overflow-x:auto;scrollbar-width:none;-webkit-mask-image:none;mask-image:none}.strip-more,.strip-set[aria-hidden]{display:none}}
 
   .demo{background:#2a1f05;color:var(--gold);text-align:center;font-size:12px;font-weight:700;letter-spacing:2px;padding:8px}
 
@@ -293,8 +299,8 @@ STYLE_BLOCK = """
     .nav{gap:12px;flex:none}
     .nav a.keep{font-size:13px}
     .wk summary{font-size:14px;padding:9px 14px}
-    .strip .wrap{grid-template-columns:repeat(var(--games,5),minmax(168px,1fr));padding-right:0}
-    .sg{padding:9px 14px 11px}
+    .strip-tag{padding:0 12px;font-size:16px}
+    .sg{width:186px;padding:10px 14px 11px}
     .hero{min-height:470px;align-items:flex-end}
     .hero-art{width:100%;object-position:58% 12%}
     .hero:before{background:linear-gradient(0deg,#07101f 30%,#07101fb3 52%,#07101f1a 80%)}
@@ -484,7 +490,23 @@ def _bonus_note_html(note):
     </section>"""
 
 
-def _strip_game(m, status):
+def _ticker_html(matchups, week, status):
+    """The scrolling score ticker under the header. The games repeat enough
+    to fill a wide screen, then the whole run is doubled so the scroll can
+    loop seamlessly (the copies are hidden from screen readers)."""
+    games = "".join(_strip_game(m) for m in matchups)
+    repeats = max(1, math.ceil(2000 / (max(len(matchups), 1) * 200)))
+    extra = f'<div class="strip-more" aria-hidden="true">{games * (repeats - 1)}</div>' if repeats > 1 else ""
+    duration = len(matchups) * repeats * 6
+    return f"""<div class="strip" role="region" aria-label="Week {week} final scores">
+  <span class="strip-tag">WEEK {week:02d}<small>{status}</small></span>
+  <div class="strip-view"><div class="strip-track" style="--dur:{duration}s">
+    <div class="strip-set">{games}{extra}</div><div class="strip-set" aria-hidden="true">{games * repeats}</div>
+  </div></div>
+</div>"""
+
+
+def _strip_game(m):
     sides = sorted(
         [(m.team_a_name, m.team_a_manager, m.team_a_score), (m.team_b_name, m.team_b_manager, m.team_b_score)],
         key=lambda s: -s[2],
@@ -494,7 +516,7 @@ def _strip_game(m, status):
         f"<span>{_who(t, mgr)}</span><b>{score:.2f}</b></div>"
         for i, (t, mgr, score) in enumerate(sides)
     )
-    return f'<div class="sg"><span class="sg-status">{status}</span>{rows}</div>'
+    return f'<div class="sg">{rows}</div>'
 
 
 def _game_row(m, status, badge):
@@ -713,7 +735,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
   </div>
 </header>
 {demo_banner}
-<div class="strip" aria-label="Week {week} final scores"><div class="wrap" style="--games:{len(matchups)}">{"".join(_strip_game(m, status) for m in matchups)}</div></div>
+{_ticker_html(matchups, week, status)}
 
 <main class="wrap" id="top">
   <div class="lead">
