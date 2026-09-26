@@ -67,7 +67,13 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 /* stadium lights */
 .hero, .banner { position: relative; isolation: isolate; overflow: hidden; border: 1px solid var(--line-2); border-radius: 4px; margin-top: 14px; }
 .hero { padding: 30px 30px 24px;
-  background: radial-gradient(55% 90% at 8% -10%, #2c6bff99, transparent 60%), radial-gradient(55% 90% at 92% -10%, #f6c34355, transparent 60%), linear-gradient(90deg, #0b2358, #0a1631 50%, #1d1a2e); }
+  /* the Saint Peter's campus at sunset, darkened on the left so the title reads */
+  background: linear-gradient(180deg, transparent 40%, #07101fe0 100%),
+    linear-gradient(90deg, #07101ff2 0, #07101fcc 40%, #07101f40 75%, #07101f26 100%),
+    url(https://stats.gooncocks.com/careers-art.webp) right 40% / cover,
+    radial-gradient(55% 90% at 8% -10%, #2c6bff99, transparent 60%), radial-gradient(55% 90% at 92% -10%, #f6c34355, transparent 60%), linear-gradient(90deg, #0b2358, #0a1631 50%, #1d1a2e); }
+.hero .rig { display: none; }
+@media (max-width: 640px) { .hero { background-position: 0 0, 0 0, 65% 40%, 0 0, 0 0, 0 0; } }
 .rig { position: absolute; top: 12px; width: 30%; height: 40px; z-index: -1; opacity: .75;
   background-image: radial-gradient(circle, #fff 0 1.3px, #d6e4ff99 2.2px, transparent 4px); background-size: 13px 11px;
   -webkit-mask-image: radial-gradient(70% 90% at 50% 40%, #000 30%, transparent 75%); mask-image: radial-gradient(70% 90% at 50% 40%, #000 30%, transparent 75%); }

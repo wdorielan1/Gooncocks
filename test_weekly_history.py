@@ -116,9 +116,18 @@ check("next week's games come from the history, consolation left out", sorted(pa
 nxt = lambda_function._next_rivalry(upcoming, 8, None)
 check("next week's pick", nxt and nxt["week"] == 9 and nxt["a"]["id"] == "cy", nxt)
 check("no next week, banner hidden", lambda_function._next_rivalry(upcoming, 9, None) is None)
+real_proj = lambda_function._week_projections
+lambda_function._week_projections = lambda key, week: {"cy": 131.4, "di": 118.25} if week == 9 else {}
+withproj = lambda_function._next_rivalry(upcoming, 8, "400.l.1")
+check("next week's projections added", withproj["proj_a"] == 131.4 and withproj["proj_b"] == 118.25, withproj)
+lambda_function._week_projections = lambda key, week: (_ for _ in ()).throw(RuntimeError("Yahoo down"))
+check("projections failing still shows the banner", lambda_function._next_rivalry(upcoming, 8, "400.l.1")["a"]["id"] == "cy")
+lambda_function._week_projections = real_proj
 check("no history, banner hidden", lambda_function._next_rivalry(None, 8, None) is None)
 json.dumps(nxt)  # must be JSON for landing.json
 landing = open("landing.html", encoding="utf-8").read()
+check("landing page has The Pot above Rivalry Watch", "<h2>The Pot</h2>" in landing and
+      landing.index('id="money"') < landing.index('id="rivalryWatch"') < landing.index('id="archive"'))
 check("landing page hides the banner until it has a pick", 'id="rivalryWatch" class="rwh-sec" hidden' in landing
       and "renderRivalry(d.next_rivalry)" in landing)
 

@@ -173,16 +173,18 @@
   .rwh-name{font-family:'Anton','Arial Narrow',Impact,sans-serif; font-size:clamp(40px,7vw,92px); line-height:.9; text-transform:uppercase; color:#fff; text-shadow:0 4px 0 #000a,0 0 24px #000; overflow-wrap:anywhere}
   .rwh-name.b{text-align:right}
   .rwh-vs{font-family:'Anton',sans-serif; font-size:clamp(26px,3.4vw,44px); color:var(--gold); padding:0 12px 8px; text-shadow:0 3px 0 #000a}
-  .rwh-stats{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); text-align:center; padding:18px 10px 6px}
+  .rwh-stats{display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); text-align:center; padding:18px 10px 6px}
   .rwh-stats div + div{border-left:1px solid var(--hairline)}
-  .rwh-stats b{display:block; font-family:'Anton',sans-serif; font-weight:400; font-size:clamp(24px,3.2vw,40px); line-height:1}
+  .rwh-stats b{display:block; font-family:'Anton',sans-serif; font-weight:400; font-size:clamp(22px,2.5vw,34px); line-height:1; text-transform:uppercase}
+  @media (max-width:980px){ .rwh-stats{grid-template-columns:repeat(3,minmax(0,1fr)); row-gap:16px} .rwh-stats div:nth-child(4){border-left:0} }
   .rwh-stats small{display:block; margin-top:6px; font-size:11px; font-weight:700; letter-spacing:1.8px; text-transform:uppercase; color:var(--fog)}
   .rwh-foot{display:flex; align-items:center; justify-content:space-between; gap:14px; margin:12px 18px 18px; padding-top:14px; border-top:1px solid var(--hairline); font-size:14px; color:#d7dce8}
   .rwh-btn{flex:none; background:var(--gold); color:var(--ink); font-weight:700; padding:10px 16px; border-radius:4px; font-size:14px}
   @media (max-width:640px){
     .rwh-art{aspect-ratio:16/10; padding:0 14px 14px}
     .rwh-stats{grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:16px}
-    .rwh-stats div:nth-child(3){border-left:0}
+    .rwh-stats div:nth-child(4){border-left:1px solid var(--hairline)}
+    .rwh-stats div:nth-child(odd){border-left:0}
     .rwh-foot{flex-direction:column; align-items:stretch; text-align:left}
     .rwh-btn{text-align:center}
   }
@@ -334,7 +336,7 @@
     </a>
     <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">☰</button>
     <nav class="links" id="navLinks">
-      <a href="#money">The Money</a>
+      <a href="#money">The Pot</a>
       <a href="#archive">Past Weeks</a>
       <a href="#awards">Award Categories</a>
       <a href="#champions">Champions</a>
@@ -377,6 +379,19 @@
 
 <main class="wrap">
 
+  <section id="money">
+    <div class="sec-head">
+      <div><p class="eyebrow" style="margin-bottom:8px">Where The $2,250 Goes</p><h2>The Pot</h2></div>
+      <span class="tag">10 Managers × $225</span>
+    </div>
+    <div class="ledger">
+      <div><div class="amt num">$225</div><div class="what">Buy-in</div><div class="how">Per manager, due before Week 1.</div></div>
+      <div><div class="amt gold num">$1,200</div><div class="what">League Champion</div><div class="how">Win the playoffs, get your name on the wall.</div></div>
+      <div><div class="amt num">$400</div><div class="what">Runner-up</div><div class="how">Lose the final, still leave with something.</div></div>
+      <div><div class="amt gold num">$50</div><div class="what">Goon of the Week</div><div class="how">Top score every week, paid every week.</div></div>
+    </div>
+  </section>
+
   <section id="rivalryWatch" class="rwh-sec" hidden aria-labelledby="rwhTitle">
     <div class="sec-head">
       <div><p class="eyebrow" style="margin-bottom:8px" id="rwhEyebrow">Next Week</p><h2 id="rwhTitle">Rivalry Watch</h2></div>
@@ -391,22 +406,11 @@
         <div><b class="num" id="rwhMeetings"></b><small>Meetings</small></div>
         <div><b class="num" id="rwhMargin"></b><small>Avg. margin</small></div>
         <div><b class="num" id="rwhLast"></b><small id="rwhLastLbl">Last meeting</small></div>
+        <div><b id="rwhWinner"></b><small>Won last</small></div>
+        <div><b class="num" id="rwhProj"></b><small id="rwhProjLbl">Projected</small></div>
       </div>
       <div class="rwh-foot"><span id="rwhNote"></span><span class="rwh-btn">View rivalry →</span></div>
     </a>
-  </section>
-
-  <section id="money">
-    <div class="sec-head">
-      <div><p class="eyebrow" style="margin-bottom:8px">Where The $2,250 Goes</p><h2>The Money</h2></div>
-      <span class="tag">10 Managers × $225</span>
-    </div>
-    <div class="ledger">
-      <div><div class="amt num">$225</div><div class="what">Buy-in</div><div class="how">Per manager, due before Week 1.</div></div>
-      <div><div class="amt gold num">$1,200</div><div class="what">League Champion</div><div class="how">Win the playoffs, get your name on the wall.</div></div>
-      <div><div class="amt num">$400</div><div class="what">Runner-up</div><div class="how">Lose the final, still leave with something.</div></div>
-      <div><div class="amt gold num">$50</div><div class="what">Goon of the Week</div><div class="how">Top score every week, paid every week.</div></div>
-    </div>
   </section>
 
   <section id="archive">
@@ -672,7 +676,13 @@
     if (r.last) {
       set('rwhLast', r.last.score_a.toFixed(2) + '–' + r.last.score_b.toFixed(2));
       set('rwhLastLbl', 'Last met · ' + r.last.season + ' Wk ' + r.last.week);
+      set('rwhWinner', r.last.score_a > r.last.score_b ? r.a.name : r.last.score_b > r.last.score_a ? r.b.name : 'Tie');
+    } else {
+      set('rwhLast', '—'); set('rwhWinner', 'First meeting');
     }
+    var hasProj = typeof r.proj_a === 'number' && typeof r.proj_b === 'number';
+    set('rwhProj', hasProj ? r.proj_a.toFixed(1) + '–' + r.proj_b.toFixed(1) : '—');
+    set('rwhProjLbl', 'Week ' + r.week + ' projection');
     set('rwhNote', (r.leader ? r.leader + ' leads the series' : 'The series is dead even') +
       '. The closest rivalry on the Week ' + r.week + ' slate.');
     document.getElementById('rwhCard').href = 'https://stats.gooncocks.com/rivalries.html#' + r.a.id + '-vs-' + r.b.id;

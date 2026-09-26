@@ -740,7 +740,8 @@ def _landing_data(week, matchups, standings, champions, previous):
 # Artwork shipped inside the Lambda zip and copied to the bucket root on
 # every publish: the peacock banner (landing hero + recap headline) and
 # the Goon / Cock of the Week card art.
-ART_FILES = ("landing-hero.webp", "goon-art.webp", "cock-art.webp", "rivalry-art.webp", "record-art.webp")
+ART_FILES = ("landing-hero.webp", "goon-art.webp", "cock-art.webp", "rivalry-art.webp", "record-art.webp",
+             "careers-art.webp")
 
 
 def _upload_art(s3, bucket):
@@ -804,7 +805,25 @@ def _next_rivalry(history, week, league_key):
     ranked = weekly_history.pick_rivalry(history, _next_week_pairs(history, week, league_key))
     if not ranked:
         return None
-    return weekly_history.rivalry_card(history, ranked[0], week + 1)
+    card = weekly_history.rivalry_card(history, ranked[0], week + 1)
+    if league_key:
+        try:
+            proj = _week_projections(league_key, week + 1)
+            card["proj_a"], card["proj_b"] = proj.get(card["a"]["id"]), proj.get(card["b"]["id"])
+        except Exception:
+            traceback.print_exc()
+            print("Skipped next week's projections - see the error above.")
+    return card
+
+
+def _week_projections(league_key, week):
+    """{manager id: Yahoo's projected points} for a week's games."""
+    out = {}
+    for m in parse_matchups(get_scoreboard(_get_access_token(), league_key, week=week)):
+        for team in (m["team_a"], m["team_b"]):
+            if team.get("projected") is not None:
+                out[league_history._slug(_manager_name(team))] = round(float(team["projected"]), 2)
+    return out
 
 
 def _standings_with_week(s3, bucket, week, matchups):
