@@ -259,6 +259,8 @@ STYLE_BLOCK = """
   .rw-name{font:400 clamp(40px,5.6vw,68px)/.9 var(--display);color:#fff;text-transform:uppercase;text-shadow:0 4px 0 #000a,0 0 24px #000;min-width:0;overflow-wrap:anywhere}
   .rw-art.long .rw-name{font-size:clamp(30px,4.2vw,50px)}
   .rw-name.b{text-align:right}
+  .rw-name.win{color:var(--gold)}
+  .bn-stats .win,.bn-foot .gold{color:var(--gold)}
   .rw-vs{font:400 34px/1 var(--display);color:var(--gold);padding:0 10px 6px;text-shadow:0 3px 0 #000a}
   .rw-tag{position:absolute;top:12px;right:12px;background:#0a1530e6;border:1px solid var(--gold);color:var(--gold);font:700 11px/1 'Work Sans',sans-serif;letter-spacing:2px;padding:6px 9px}
   .bn-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));text-align:center;padding:14px 10px 10px}
@@ -615,7 +617,8 @@ def _rivalry_banner(week, season, matchups, history):
     m = games[frozenset((a["id"], b["id"]))]
     sa, sb = (m.team_a_score, m.team_b_score) if _mid(m.team_a_manager) == a["id"] else (m.team_b_score, m.team_a_score)
     won = a["name"] if sa > sb else b["name"] if sb > sa else None
-    result = (f"<b>{escape(won)}</b> won {_pts(max(sa, sb))}–{_pts(min(sa, sb))} this week" if won
+    win_a, win_b = (" win" if sa > sb else ""), (" win" if sb > sa else "")
+    result = (f'<b class="gold">{escape(won)}</b> won <b class="gold">{_pts(max(sa, sb))}</b>–{_pts(min(sa, sb))} this week' if won
               else f"A {_pts(sa)} tie this week")
     lead = (f"{escape(card['leader'])} leads the series." if card["leader"] else "The series is dead even.")
     box = _box_data(m, season, week)
@@ -628,10 +631,10 @@ def _rivalry_banner(week, season, matchups, history):
       <h2 class="bn-title" id="rw-title"><span class="bn-crown" aria-hidden="true"></span>RIVALRY WATCH<span class="bn-crown" aria-hidden="true"></span></h2>
       <div class="rw-art{size}">
         <span class="rw-tag">GAME OF THE WEEK</span>
-        <span class="rw-name a">{escape(a["name"])}</span><span class="rw-vs">VS</span><span class="rw-name b">{escape(b["name"])}</span>
+        <span class="rw-name a{win_a}">{escape(a["name"])}</span><span class="rw-vs">VS</span><span class="rw-name b{win_b}">{escape(b["name"])}</span>
       </div>
       <div class="bn-stats">
-        <div><b>{card["wins_a"]}–{card["wins_b"]}{f"–{card['ties']}" if card["ties"] else ""}</b><small>ALL-TIME SERIES</small></div>
+        <div><b><span class="{win_a.strip()}">{card["wins_a"]}</span>–<span class="{win_b.strip()}">{card["wins_b"]}</span>{f"–{card['ties']}" if card["ties"] else ""}</b><small>ALL-TIME SERIES</small></div>
         <div><b>{card["meetings"]}</b><small>MEETINGS</small></div>
         <div><b>{_pts(card["avg_margin"])}</b><small>AVG. MARGIN</small></div>
       </div>
