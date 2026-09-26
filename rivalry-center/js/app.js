@@ -180,6 +180,17 @@
       (sub ? '<small>' + sub + '</small>' : '') + '</dd></div>';
   }
 
+  // Long names (PATRICK, BRANDON) shrink to stay on one line instead of wrapping.
+  function fitName(el) {
+    el.style.fontSize = '';
+    var size = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > el.clientWidth + 1 && size > 18) {
+      size -= 2;
+      el.style.fontSize = size + 'px';
+    }
+  }
+  function fitNames() { fitName($('fxNameA')); fitName($('fxNameB')); }
+
   function renderFeature(s) {
     var scope = state.season === 'all' ? 'All-time series' : state.season + ' season series';
     if (state.type === 'regular') scope += ' · Regular season';
@@ -189,6 +200,7 @@
 
     $('fxNameA').textContent = name(s.a);
     $('fxNameB').textContent = name(s.b);
+    fitNames();
     $('fxTeamA').textContent = teamName(s.a);
     $('fxTeamB').textContent = teamName(s.b);
     setAvatar($('fxAvA'), s.a);
@@ -456,6 +468,9 @@
     $('footNote').textContent = live ? 'Records from Yahoo Fantasy league history.' : 'Illustrative stats. Yahoo history not loaded.';
 
     restore();
+    var resizeTimer = null;
+    window.addEventListener('resize', function () { clearTimeout(resizeTimer); resizeTimer = setTimeout(fitNames, 120); });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitNames);
     buildControls();
     wireGrid();
     render();

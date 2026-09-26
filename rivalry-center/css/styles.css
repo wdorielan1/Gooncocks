@@ -109,7 +109,8 @@ h1 { font: 400 clamp(44px, 7.4vw, 86px)/.95 var(--display); text-transform: uppe
 .duel { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 24px; margin-top: 12px; }
 .fighter { display: flex; align-items: center; gap: 18px; min-width: 0; }
 .fighter-b { justify-content: flex-end; text-align: right; }
-.fighter h2 { font: 400 clamp(40px, 5.6vw, 70px)/.95 var(--display); text-transform: uppercase; overflow-wrap: anywhere; text-shadow: 0 4px 0 #0007; }
+.fighter > div { min-width: 0; max-width: 100%; }
+.fighter h2 { font: 400 clamp(40px, 5.6vw, 70px)/.95 var(--display); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-shadow: 0 4px 0 #0007; }
 .team { font: 700 14px/1.2 var(--label); letter-spacing: 2.6px; text-transform: uppercase; color: #e6ebf5; margin-top: 8px; }
 .tally { text-align: center; }
 .big { display: flex; align-items: center; justify-content: center; gap: 18px; font: 400 clamp(76px, 10vw, 128px)/.9 var(--score); font-variant-numeric: tabular-nums; }
@@ -246,6 +247,11 @@ h1 { font: 400 clamp(44px, 7.4vw, 86px)/.95 var(--display); text-transform: uppe
   .stat:nth-child(4) { border-left: 0; }
   .stat:nth-child(n+4) { border-top: 1px solid #ffffff1a; }
   .lower { grid-template-columns: minmax(0, 1fr); }
+  .duel { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 16px; }
+  .tally { grid-column: 1 / -1; grid-row: 2; }
+  .fighter { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .fighter-b { flex-direction: column-reverse; align-items: flex-end; }
+  .fighter > div { width: 100%; }
 }
 
 /* ---------- phone ---------- */
@@ -274,6 +280,7 @@ h1 { font: 400 clamp(44px, 7.4vw, 86px)/.95 var(--display); text-transform: uppe
   .duel { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 10px; }
   .tally { grid-column: 1 / -1; grid-row: 2; }
   .fighter { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .fighter > div { width: 100%; }
   .fighter-b { flex-direction: column-reverse; align-items: flex-end; }
   .av-xl { width: 68px; height: 68px; font-size: 34px; border-width: 3px; }
   .fighter h2 { font-size: clamp(28px, 9vw, 40px); }
