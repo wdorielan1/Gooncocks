@@ -112,8 +112,9 @@ STYLE_BLOCK = """
   .brand img{width:58px;height:58px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);background:var(--blue)}
   .brand b{display:block;font:400 34px/1 var(--display);letter-spacing:1px}
   .brand small{display:block;font-size:10px;font-weight:700;letter-spacing:3.4px;color:var(--muted);margin-top:4px}
-  .nav{display:flex;align-items:center;gap:28px;font-size:14px;font-weight:500;color:#cfd6e4}
-  .nav a{padding:6px 0;border-bottom:2px solid transparent}
+  .nav{display:flex;align-items:center;gap:22px;font-size:14px;font-weight:500;color:#cfd6e4}
+  .nav a{padding:6px 0;border-bottom:2px solid transparent;white-space:nowrap}
+  .nav-links{display:flex;align-items:center;gap:inherit}
   .nav a:hover{color:var(--gold)}
   .nav a.on{color:#fff;border-color:var(--gold)}
   .wk{position:relative}
@@ -380,7 +381,12 @@ STYLE_BLOCK = """
     .brand{min-width:0}
     .brand b{font-size:24px}
     .brand small{font-size:8px;letter-spacing:2px;white-space:nowrap}
-    .nav{gap:12px;flex:none}
+    .brand{flex:none}
+    .nav{gap:12px;flex:0 1 auto;min-width:0}
+    .nav-links{min-width:0;overflow-x:auto;scrollbar-width:none}
+    .nav-links::-webkit-scrollbar{display:none}
+    .nav a{flex:none;white-space:nowrap}
+    .wk{flex:none}
     .nav a.keep{font-size:13px}
     .wk summary{font-size:14px;padding:9px 14px}
     .strip-tag{padding:0 12px;font-size:16px}
@@ -974,7 +980,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
   <div class="wrap">
     <a class="brand" href="{HOME_URL}"><img src="{LOGO_URL}" alt="Gooncocks peacock logo"><span><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></span></a>
     <nav class="nav" aria-label="Recap sections">
-      <a class="on" href="#top">This Week</a><a href="#awards">Awards</a><a href="#matchups">Matchups</a><a href="#standings">Standings</a><a class="keep" href="{SITE_URL}/rivalries.html">Rivalries</a><a class="keep" href="{SITE_URL}/careers.html">Careers</a><a class="keep" href="{SITE_URL}/records.html">Records</a><a class="keep home" href="{HOME_URL}">Home</a>
+      <span class="nav-links"><a class="on" href="#top">This Week</a><a href="#awards">Awards</a><a href="#matchups">Matchups</a><a href="#standings">Standings</a><a class="keep" href="{SITE_URL}/rivalries.html">Rivalries</a><a class="keep" href="{SITE_URL}/careers.html">Careers</a><a class="keep" href="{SITE_URL}/records.html">Records</a><a class="keep" href="{SITE_URL}/trade-lab.html">Trade Lab</a><a class="keep home" href="{HOME_URL}">Home</a></span>
       <details class="wk"><summary>WEEK {week:02d}</summary>{week_menu}</details>
     </nav>
   </div>

@@ -56,20 +56,21 @@
     display:flex; align-items:center; justify-content:space-between; gap:20px;
   }
   .brand{display:flex; align-items:center; gap:11px; text-decoration:none}
+  @media (min-width:1241px){ .brand{flex:none} .brand-text small{white-space:nowrap} }
   .crest{position:relative; width:40px; height:40px; flex:none; border-radius:50%; overflow:hidden; background:var(--slate); border:1.5px solid var(--gold)}
   .crest img, .crest svg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
   .brand-text{font-family:'Anton','Arial Narrow',sans-serif; font-size:20px; letter-spacing:1px; line-height:1}
   .brand-text small{display:block; font-family:'Work Sans',sans-serif; font-size:8.5px; letter-spacing:2px; color:var(--fog); font-weight:600; margin-top:5px}
   nav.links{display:flex; align-items:center; gap:2px; font-size:13px; font-weight:600}
   nav.links a{
-    text-decoration:none; color:var(--fog); white-space:nowrap; padding:9px 13px;
+    text-decoration:none; color:var(--fog); white-space:nowrap; padding:9px 10px;
     border-radius:100px; transition:color .15s, background .15s;
   }
   nav.links a:hover{color:var(--paper); background:var(--slate)}
   nav.links a.stats-link{color:var(--ink); background:var(--gold); margin-left:8px}
   nav.links a.stats-link:hover{background:#f0b458}
   .nav-toggle{display:none}
-  @media (max-width:1100px){
+  @media (max-width:1240px){
     nav.links{
       position:fixed; inset:64px 0 auto 0; background:var(--slate);
       border-bottom:1px solid var(--hairline); flex-direction:column;
@@ -343,6 +344,7 @@
       <a href="https://stats.gooncocks.com/rivalries.html">Rivalries</a>
       <a href="https://stats.gooncocks.com/careers.html">Careers</a>
       <a href="https://stats.gooncocks.com/records.html">Records</a>
+      <a href="https://stats.gooncocks.com/trade-lab.html">Trade Lab</a>
       <a class="stats-link" href="https://stats.gooncocks.com/">This Week →</a>
     </nav>
   </div>

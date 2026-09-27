@@ -335,9 +335,16 @@ tr.open .caret { transform: rotate(45deg); }
   .foot-in { justify-content: center; text-align: center; }
 }
 @media (max-width: 440px) { .brand span { display: none; } }
+@media (max-width: 380px) {
+  .top-in { padding: 10px 12px; gap: 10px; }
+  .nav { gap: 10px; font-size: 12px; }
+}
 
 /* Small phones: the logo already links home and the title says where you are,
    so the menu drops Home and this page's own link and keeps every other page. */
 @media (max-width: 560px) {
   .nav a.on, .nav a[href="https://gooncocks.com"] { display: none; }
+  .brand { flex: none; }
+  .nav { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .nav::-webkit-scrollbar { display: none; }
 }
