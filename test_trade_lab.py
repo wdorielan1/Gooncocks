@@ -324,6 +324,112 @@ check("unknown endpoints 404", app.handle(event("GET", "/nope"))["statusCode"] =
 r = app.handle(event("PUT", "/listings", cookies=sam, body=None, headers={"x-csrf-token": sam_csrf}))
 check("responses never cache personal data", r["headers"]["Cache-Control"] == "no-store")
 
+# ---------------------------------------------------------------- text alerts
+class FakeSms:
+    def __init__(self):
+        self.sent, self.fail = [], set()
+
+    def send(self, phone, text):
+        if phone in self.fail:
+            raise RuntimeError("Twilio HTTP 400, error 21610")
+        self.sent.append((phone, text))
+
+
+recips, bad = trade_lab.parse_recipients("Will=201-555-0123, Sam=(973) 555-0142; Chet=12345,  \nBo=+1 732 555 0199")
+check("the commissioner's number list is read, bad entries are named (not shown)",
+      recips == [("Will", "+12015550123"), ("Sam", "+19735550142"), ("Bo", "+17325550199")] and bad == ["Chet"], (recips, bad))
+check("numbers must be real US numbers", trade_lab.normalize_phone("055-555-0123") is None
+      and trade_lab.normalize_phone("201-155-0123") is None and trade_lab.normalize_phone("+1 (201) 555-0123") == "+12015550123")
+
+clock = Clock()
+sms = FakeSms()
+aapp = TradeLab(MemoryStore(clock), FakeYahoo(), ENV, clock, sms=sms, recipients=recips)
+will, will_csrf, _ = sign_in(aapp, "code-will")
+sam, sam_csrf, _ = sign_in(aapp, "code-sam")
+log = io.StringIO()
+with contextlib.redirect_stdout(log):
+    r = save(aapp, sam, sam_csrf, [{"player_key": "470.p.3", "status": "available", "wants": ["WR"]},
+                                   {"player_key": "470.p.4", "status": "listening", "wants": []}])
+check("new listings text everyone on the list except the manager who listed",
+      r["statusCode"] == 200 and sorted(p for p, _ in sms.sent) == ["+12015550123", "+17325550199"], sms.sent)
+check("one text per save, naming the manager and players",
+      len(sms.sent) == 2 and sms.sent[0][1].startswith("Gooncocks Trade Lab: Sam put 2 players on the block - Breece Hall (RB), Tee Higgins (WR).")
+      and "https://stats.gooncocks.com/trade-lab.html" in sms.sent[0][1] and sms.sent[0][1].endswith("Reply STOP to opt out."), sms.sent)
+check("alert logs never contain phone numbers", "555" not in log.getvalue() and "texted 2" in log.getvalue(), log.getvalue())
+sms.sent.clear()
+cur = [l for l in body(aapp.handle(event("GET", "/listings")))["listings"] if l["player_key"] == "470.p.3"][0]
+save(aapp, sam, sam_csrf, [{"player_key": "470.p.3", "status": "listening", "wants": ["WR"], "version": cur["version"]}])
+check("editing a listing doesn't text anyone", sms.sent == [])
+sms.fail = {"+12015550123"}
+with contextlib.redirect_stdout(io.StringIO()) as out:
+    r = save(aapp, will, will_csrf, [{"player_key": "470.p.1", "status": "available", "wants": []}])
+check("a failed text (e.g. someone replied STOP) never breaks the save", r["statusCode"] == 200)
+check("...and the other texts still go out", [p for p, _ in sms.sent] == ["+19735550142", "+17325550199"], sms.sent)
+check("...and the failure is logged by name and code only", "Will" not in out.getvalue() or "555" not in out.getvalue())
+sms.fail = set()
+off = TradeLab(MemoryStore(clock), FakeYahoo(), ENV, clock, recipients=recips)
+o_sam, o_csrf, _ = sign_in(off, "code-sam")
+check("with no sender configured, saving works and nothing is texted",
+      save(off, o_sam, o_csrf, [{"player_key": "470.p.3", "status": "available", "wants": []}])["statusCode"] == 200)
+sms.sent.clear()
+st = aapp.admin({"action": "alerts_status"})
+check("admin status lists names only, never numbers, and flags names that match no manager",
+      st == {"alerts_on": True, "managers": ["Will", "Sam", "Bo"], "not_matching_a_league_manager": ["Bo"]}
+      and "555" not in json.dumps(st))
+r = aapp.admin({"action": "alerts_test", "to": "bo"})
+check("admin test texts just that manager", r == {"sent": 1, "failed": []} and [p for p, _ in sms.sent] == ["+17325550199"])
+check("admin test with an unknown name explains who is listed", "On the list: Will, Sam, Bo" in aapp.admin({"action": "alerts_test", "to": "Zed"})["error"])
+sms.sent.clear()
+r = aapp.admin({"action": "alerts_welcome"})
+check("welcome text goes to everyone and says how to opt out", r == {"sent": 3, "failed": []}
+      and all(t == trade_lab.WELCOME for _, t in sms.sent) and "Reply STOP" in trade_lab.WELCOME)
+check("admin actions aren't reachable from the website",
+      aapp.handle(event("POST", "/admin", cookies=will, headers={"x-csrf-token": will_csrf}))["statusCode"] == 404)
+
+
+class FakeResp:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return b"{}"
+
+
+seen = {}
+
+
+def fake_open(req, timeout=None):
+    seen["url"], seen["body"], seen["auth"] = req.full_url, req.data.decode(), req.headers.get("Authorization")
+    return FakeResp()
+
+
+tw = trade_lab.TwilioSender("AC123", "tok", "+18885550100", opener=fake_open)
+tw.send("+12015550123", "hello")
+check("Twilio request: right account URL, from/to/body, basic auth",
+      seen["url"] == "https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json"
+      and urllib.parse.parse_qs(seen["body"]) == {"To": ["+12015550123"], "From": ["+18885550100"], "Body": ["hello"]}
+      and seen["auth"] == "Basic " + __import__("base64").b64encode(b"AC123:tok").decode())
+
+
+def failing_open(req, timeout=None):
+    import urllib.error
+    raise urllib.error.HTTPError(req.full_url, 400, "Bad", {}, io.BytesIO(
+        b'{"code": 21211, "message": "The To number +12015550123 is not a valid phone number."}'))
+
+
+try:
+    trade_lab.TwilioSender("AC123", "tok", "+18885550100", opener=failing_open).send("+12015550123", "x")
+    msg = ""
+except RuntimeError as exc:
+    msg = str(exc)
+check("Twilio errors keep the code but drop the number", msg == "Twilio HTTP 400, error 21211", msg)
+check("alerts stay off unless all three Twilio settings are set",
+      trade_lab.TwilioSender.from_env({"TWILIO_ACCOUNT_SID": "AC1", "TWILIO_AUTH_TOKEN": "t"}) is None
+      and trade_lab.TwilioSender.from_env({"TWILIO_ACCOUNT_SID": "AC1", "TWILIO_AUTH_TOKEN": "t", "TWILIO_FROM": "+18885550100"}) is not None)
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed: {', '.join(failures)}")

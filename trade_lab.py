@@ -44,7 +44,9 @@ import re
 import secrets
 import time
 import traceback
+import urllib.error
 import urllib.parse
+import urllib.request
 
 import yahoo_client
 from trade_lab_store import Conflict, DynamoStore
@@ -156,6 +158,74 @@ def _failure_reason(step, exc):
     return re.sub(r"[^a-z_]", "", f"{step}_{what}".lower())[:40]
 
 
+WELCOME = ("Gooncocks Trade Lab: you're signed up for trading block alerts. We'll text you when someone puts "
+           "a player on the block. Reply STOP to opt out.")
+
+
+def alert_text(manager, fresh, url):
+    players = [f"{d['name']} ({d['position']})" for d in fresh]
+    shown = ", ".join(players[:3]) + (f" +{len(players) - 3} more" if len(players) > 3 else "")
+    what = "a player" if len(fresh) == 1 else f"{len(fresh)} players"
+    return f"Gooncocks Trade Lab: {manager} put {what} on the block - {shown}. {url} Reply STOP to opt out."
+
+
+def normalize_phone(raw):
+    """A US mobile number as +1XXXXXXXXXX, or None."""
+    digits = re.sub(r"\D", "", str(raw or ""))
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) != 10 or digits[0] in "01" or digits[3] in "01":
+        return None
+    return "+1" + digits
+
+
+def parse_recipients(raw):
+    """TRADE_LAB_ALERT_NUMBERS, e.g. "Will=201-555-0123, Sam=(973) 555-0142",
+    into ([(name, +1...)], [names that couldn't be read])."""
+    good, bad = [], []
+    for entry in re.split(r"[,;\n]+", raw or ""):
+        if not entry.strip():
+            continue
+        name, _, number = entry.partition("=")
+        name, phone = name.strip(), normalize_phone(number)
+        if name and phone:
+            good.append((name, phone))
+        else:
+            bad.append(name or "(no name)")
+    return good, bad
+
+
+class TwilioSender:
+    """Sends one text through Twilio's REST API (no extra libraries)."""
+
+    def __init__(self, account_sid, auth_token, from_number, opener=None):
+        self.sid, self.token, self.from_number = account_sid, auth_token, from_number
+        self.opener = opener or urllib.request.urlopen
+
+    @classmethod
+    def from_env(cls, env):
+        sid, token, frm = env.get("TWILIO_ACCOUNT_SID"), env.get("TWILIO_AUTH_TOKEN"), env.get("TWILIO_FROM")
+        return cls(sid, token, frm) if sid and token and frm else None
+
+    def send(self, to, text):
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{self.sid}/Messages.json"
+        body = urllib.parse.urlencode({"To": to, "From": self.from_number, "Body": text}).encode("utf-8")
+        auth = base64.b64encode(f"{self.sid}:{self.token}".encode("utf-8")).decode("ascii")
+        req = urllib.request.Request(url, data=body, method="POST", headers={
+            "Authorization": f"Basic {auth}", "Content-Type": "application/x-www-form-urlencoded"})
+        try:
+            with self.opener(req, timeout=10) as resp:
+                resp.read()
+        except urllib.error.HTTPError as exc:
+            # Twilio's error text can include the phone number, so only the
+            # numeric code goes into the exception (and the logs).
+            try:
+                code = json.loads(exc.read().decode("utf-8")).get("code")
+            except Exception:
+                code = None
+            raise RuntimeError(f"Twilio HTTP {exc.code}" + (f", error {code}" if code else "")) from None
+
+
 def _hash(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -180,8 +250,11 @@ def primary_position(player):
 
 
 class TradeLab:
-    def __init__(self, store, yahoo, env=os.environ, clock=time.time):
+    def __init__(self, store, yahoo, env=os.environ, clock=time.time, sms=None, recipients=()):
         self.store, self.yahoo, self.env, self.now = store, yahoo, env, clock
+        # Text alerts: a sender (None = off) and the league's opted-in numbers
+        # as [(manager name, +1XXXXXXXXXX)], set by the commissioner.
+        self.sms, self.recipients = sms, list(recipients)
         self.league = env["LEAGUE_KEY"]
         self.game = self.league.split(".")[0]
         self.origin = env.get("SITE_ORIGIN", "https://stats.gooncocks.com").rstrip("/")
@@ -476,9 +549,10 @@ class TradeLab:
             raise HttpError(403, "not_on_roster", "Only players on your current Yahoo roster can be listed.",
                             {"players": foreign})
         names = self.team_names()
-        results, saved = [], []
+        results, saved, fresh = [], [], []
         for c in clean:
             p = on_roster[c["player_key"]]
+            is_new = False
             existing = self.store.get(self._lk(), c["player_key"])
             if existing and existing["data"]["team_key"] == sess["team_key"] and existing["data"]["status"] in STATUSES:
                 expect = existing["version"]
@@ -491,6 +565,7 @@ class TradeLab:
                 # New, archived, or left over from the player's previous team
                 # (Yahoo just confirmed he's on yours now).
                 expect, created = (existing["version"] if existing else 0), self.now()
+                is_new = True
             data = {"team_key": sess["team_key"], "manager": names.get(sess["team_key"]) or sess.get("manager"),
                     "name": p["name"], "position": p["position"], "nfl_team": p.get("nfl_team", ""),
                     "headshot": p.get("headshot", ""), "status": c["status"], "wants": c["wants"], "note": c["note"],
@@ -505,6 +580,10 @@ class TradeLab:
                 continue
             saved.append(self._public(item, names))
             results.append({"player_key": c["player_key"], "ok": True})
+            if is_new:
+                fresh.append(data)
+        if fresh:
+            self.alert_new(names.get(sess["team_key"]) or sess.get("manager") or "A manager", fresh)
         status = 200 if all(r["ok"] for r in results) else 409
         return _json(status, {"results": results, "listings": saved})
 
@@ -525,6 +604,67 @@ class TradeLab:
         except Conflict:
             raise HttpError(409, "conflict", "That listing changed since you loaded it. Reload and try again.")
         return _json(200, {"removed": player_key})
+
+    # ---------------- text alerts
+    def _text_all(self, text, skip=None):
+        """Texts every opted-in manager except `skip` (a manager name).
+        Returns (sent, [names that failed]). Numbers are never logged."""
+        sent, failed = 0, []
+        for name, phone in self.recipients:
+            if skip and name.casefold() == skip.casefold():
+                continue
+            try:
+                self.sms.send(phone, text)
+                sent += 1
+            except Exception as exc:
+                failed.append(name)
+                print(f"Trade Lab alerts: text to {name} failed ({exc})")
+        return sent, failed
+
+    def alert_new(self, manager, fresh):
+        """After new listings are saved: tell the rest of the league.
+        Never fails the save that triggered it."""
+        if not self.sms or not self.recipients:
+            return
+        try:
+            text = alert_text(manager, fresh, self.origin + self.page)
+            sent, failed = self._text_all(text, skip=manager)
+            print(f"Trade Lab alerts: {manager} listed {len(fresh)}; texted {sent}" + (f", failed {len(failed)}" if failed else ""))
+        except Exception:
+            traceback.print_exc()
+
+    def admin(self, event):
+        """Commissioner actions, run as a Lambda test event (not reachable
+        from the website):
+          {"action": "alerts_status"}                 who's on the list
+          {"action": "alerts_test", "to": "Will"}     one test text
+          {"action": "alerts_welcome"}                the sign-up confirmation, to everyone"""
+        action = event.get("action")
+        names = [n for n, _ in self.recipients]
+        if action == "alerts_status":
+            # Names must match how the site shows managers, or the lister
+            # would get a text about their own listing.
+            league = {n.casefold() for n in self.team_names().values()}
+            unknown = [n for n in names if n.casefold() not in league]
+            return {"alerts_on": bool(self.sms), "managers": names,
+                    "not_matching_a_league_manager": unknown}
+        if not self.sms:
+            return {"error": "Text alerts are off: set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM."}
+        if action == "alerts_test":
+            who = str(event.get("to") or "")
+            match = [(n, p) for n, p in self.recipients if n.casefold() == who.casefold()]
+            if not match:
+                return {"error": f"No number for {who!r}. On the list: {', '.join(names) or 'nobody'}."}
+            saved, self.recipients = self.recipients, match
+            try:
+                sent, failed = self._text_all("Gooncocks Trade Lab: test text. Trading block alerts are working.")
+            finally:
+                self.recipients = saved
+            return {"sent": sent, "failed": failed}
+        if action == "alerts_welcome":
+            sent, failed = self._text_all(WELCOME)
+            return {"sent": sent, "failed": failed}
+        return {"error": f"Unknown action {action!r}."}
 
     # ---------------- dispatch
     def handle(self, event):
@@ -599,5 +739,11 @@ _APP = None
 def handler(event, context=None):
     global _APP
     if _APP is None:
-        _APP = TradeLab(DynamoStore(os.environ["TRADE_LAB_TABLE"]), YahooLeague())
+        recipients, bad = parse_recipients(os.environ.get("TRADE_LAB_ALERT_NUMBERS", ""))
+        if bad:
+            print(f"Trade Lab alerts: skipped unreadable entries for: {', '.join(bad)}")
+        _APP = TradeLab(DynamoStore(os.environ["TRADE_LAB_TABLE"]), YahooLeague(),
+                        sms=TwilioSender.from_env(os.environ), recipients=recipients)
+    if event.get("action") and not event.get("rawPath"):
+        return _APP.admin(event)
     return _APP.handle(event)
