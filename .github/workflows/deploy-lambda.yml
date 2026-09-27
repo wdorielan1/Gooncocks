@@ -11,6 +11,7 @@ on:
       - "manager-career-center/**"
       - "record-room/**"
       - "shared/**"
+      - "trade-lab/**"
   workflow_dispatch:
 
 permissions:
@@ -24,6 +25,8 @@ concurrency:
 env:
   AWS_REGION: us-east-2
   FUNCTION_NAME: gooncockfantasy
+  TRADE_LAB_FUNCTION: gooncocks-trade-lab
+  SITE_BUCKET: gooncocks-recap-891823750306-us-east-2-an
   LAMBDA_FILES: lambda_function.py awards.py webpage.py yahoo_client.py discord_client.py sample_data.py league_history.py weekly_history.py
 
 jobs:
@@ -41,6 +44,9 @@ jobs:
           pip install --quiet boto3
           python -m py_compile $LAMBDA_FILES
           python -c "import lambda_function"
+          python -m py_compile trade_lab.py trade_lab_store.py
+          python -c "import trade_lab"
+          python trade-lab/build.py trade-lab.html
           python test_awards.py
           python test_boxscores.py
           python test_weekly_history.py
@@ -61,3 +67,21 @@ jobs:
           aws lambda update-function-code --function-name "$FUNCTION_NAME" --zip-file fileb://lambda.zip > /dev/null
           aws lambda wait function-updated --function-name "$FUNCTION_NAME"
           echo "Deployed $(date -u) from commit $GITHUB_SHA"
+
+      # Trade Lab: its own Lambda (interactive API) and its own page, kept
+      # apart from the weekly awards job above.
+      - name: Upload the Trade Lab API
+        run: |
+          zip -j trade-lab-api.zip $LAMBDA_FILES trade_lab.py trade_lab_store.py
+          aws lambda update-function-code --function-name "$TRADE_LAB_FUNCTION" --zip-file fileb://trade-lab-api.zip > /dev/null
+          aws lambda wait function-updated --function-name "$TRADE_LAB_FUNCTION"
+          if [ "$(aws lambda get-function-configuration --function-name "$TRADE_LAB_FUNCTION" --query Handler --output text)" != "trade_lab.handler" ]; then
+            aws lambda update-function-configuration --function-name "$TRADE_LAB_FUNCTION" --handler trade_lab.handler > /dev/null
+            aws lambda wait function-updated --function-name "$TRADE_LAB_FUNCTION"
+          fi
+          echo "Trade Lab API deployed $(date -u) from commit $GITHUB_SHA"
+
+      - name: Publish the Trade Lab page
+        run: |
+          aws s3 cp trade-lab.html "s3://$SITE_BUCKET/trade-lab.html" \
+            --content-type "text/html; charset=utf-8" --cache-control "max-age=300"
