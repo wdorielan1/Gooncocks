@@ -745,5 +745,7 @@ def handler(event, context=None):
         _APP = TradeLab(DynamoStore(os.environ["TRADE_LAB_TABLE"]), YahooLeague(),
                         sms=TwilioSender.from_env(os.environ), recipients=recipients)
     if event.get("action") and not event.get("rawPath"):
-        return _APP.admin(event)
+        result = _APP.admin(event)
+        print("Result: " + json.dumps(result))  # names only, never numbers
+        return result
     return _APP.handle(event)
