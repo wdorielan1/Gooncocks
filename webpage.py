@@ -244,8 +244,9 @@ STYLE_BLOCK = """
   .awc-stat b{display:block;font:400 clamp(38px,3.8vw,48px)/1 var(--display);letter-spacing:.3px}
   .awc-stat small{display:block;margin-top:5px;font-size:11px;font-weight:700;letter-spacing:.24em;color:var(--muted)}
   .awc p{font-size:14px;color:#dfe4ee}
-  .awc .rc{margin-top:auto}
-  .awc .rc summary{text-align:left;align-self:flex-start;margin-top:6px;font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#5b8cff}
+  .awc-rc{list-style:none;margin:2px 0 0;padding:10px 0 0;border-top:1px dashed var(--line2);display:grid;gap:5px;font-size:12.5px;color:#c9d1e2}
+  .awc-rc li{position:relative;padding-left:13px}
+  .awc-rc li:before{content:'';position:absolute;left:0;top:.6em;width:5px;height:5px;border-radius:50%;background:var(--gold)}
   .aw-none{display:flex;align-items:center;gap:18px;margin-top:18px;font-size:13px;color:var(--muted);text-align:center}
   .aw-none:before,.aw-none:after{content:'';flex:1;height:1px;background:var(--line2)}
   .empties{display:grid;grid-template-columns:1fr 1fr;margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:3px}
@@ -439,7 +440,7 @@ STYLE_BLOCK = """
   @media(max-width:1000px){.awc-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
   @media(max-width:520px){.awc-grid{grid-template-columns:minmax(0,1fr);gap:10px}.shelf-head{align-items:flex-start;flex-direction:column}.shelf-week{padding:9px 14px}
     .awc{flex-direction:row}.awc-art{flex:none;width:36%;aspect-ratio:auto;min-height:150px}.awc-art:after{inset:0 0 0 auto;width:40%;height:auto;background:linear-gradient(90deg,transparent,#0b1629)}
-    .awc-body{padding:12px 14px 14px;gap:6px}.awc h3{font-size:20px}.av-ring{width:28px;height:28px;font-size:12px}.awc-who{font-size:14px}.awc-stat b{font-size:32px}.awc-stat small{font-size:10px;margin-top:3px}.awc p{font-size:13px}.awc .rc summary{font-size:12px}}
+    .awc-body{padding:12px 14px 14px;gap:6px}.awc h3{font-size:20px}.av-ring{width:28px;height:28px;font-size:12px}.awc-who{font-size:14px}.awc-stat b{font-size:32px}.awc-stat small{font-size:10px;margin-top:3px}.awc p{font-size:13px}.awc-rc{font-size:12px}}
   @media(max-width:480px){.bn-title{font-size:24px}.bn-title:before,.bn-title:after{flex-basis:24px}.bn-foot{flex-direction:column;align-items:stretch}.bn-btn{justify-content:center}.nr-foot{grid-template-columns:minmax(0,1fr)}.nr-art{min-height:210px}.nr-art:before{background:linear-gradient(90deg,#050914f5 0,#050914d9 60%,#05091466 100%)}}
 </style>
 """
@@ -492,7 +493,7 @@ def _award_row(key, title, team, manager, value, unit, context, lines):
           <div class="awc-who">{_avatar(team, manager, "ring")}<span>{_who(team, manager)}</span></div>
           <div class="awc-stat"><b>{value}</b><small>{unit}</small></div>
           <p>{context}</p>
-          {_receipts(lines)}
+          {_detail_list(lines, "awc-rc")}
         </div>
       </article>"""
 

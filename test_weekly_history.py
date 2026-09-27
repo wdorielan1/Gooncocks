@@ -107,6 +107,10 @@ rec = wh.latest_record(real)
 check("record banner links to that record in the Record Room",
       f'records.html#{rec["record"]}?type=both{"&amp;std=1" if rec["scope"] == "standard" else ""}' in html, rec["record"])
 check("awards are picture cards", 'class="awc-grid"' in html and "award-blowout.webp" in html and "award-heartbreaker.webp" in html)
+withrc = webpage.render_html(1, week_games, is_sample=False, details={"blowout": ["Ann 120.00, Bo 80.00"]})
+shelf = withrc.split('id="awards"')[1].split('id="matchups"')[0]
+check("award receipts show without a click", 'class="awc-rc"' in shelf and "Ann 120.00, Bo 80.00" in shelf
+      and "See the receipts" not in shelf)
 check("awards nobody won are listed on one line", "No qualifying team this week:" in html and 'class="aw-empty"' not in html)
 plain = webpage.render_html(1, week_games, is_sample=False)
 check("no history, page unchanged", 'class="bn-row"' not in plain)
