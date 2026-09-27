@@ -106,6 +106,8 @@ check("record banner opens a box score", html.count('data-box=') >= len(week_gam
 rec = wh.latest_record(real)
 check("record banner links to that record in the Record Room",
       f'records.html#{rec["record"]}?type=both{"&amp;std=1" if rec["scope"] == "standard" else ""}' in html, rec["record"])
+check("awards are picture cards", 'class="awc-grid"' in html and "award-blowout.webp" in html and "award-heartbreaker.webp" in html)
+check("awards nobody won are listed on one line", "No qualifying team this week:" in html and 'class="aw-empty"' not in html)
 plain = webpage.render_html(1, week_games, is_sample=False)
 check("no history, page unchanged", 'class="bn-row"' not in plain)
 check("demo page has no banners", 'class="bn-row"' not in webpage.render_html(1, week_games, is_sample=True, history=real))

@@ -38,6 +38,10 @@ HERO_ART_URL = f"{SITE_URL}/landing-hero.webp"
 GOON_ART_URL = f"{SITE_URL}/goon-art.webp"
 RIVALRY_ART_URL = f"{SITE_URL}/rivalry-art.webp"
 RECORD_ART_URL = f"{SITE_URL}/record-art.webp"
+# Picture at the top of each award card (award-<key>.webp, uploaded with
+# the other artwork). Awards without one show their icon instead.
+AWARD_ART = {key: f"{SITE_URL}/award-{key.replace('_', '-')}.webp" for key in (
+    "blowout", "heartbreaker", "upset", "fraud", "benchwarmer", "start_sit", "waiver", "injury")}
 COCK_ART_URL = f"{SITE_URL}/cock-art.webp"
 
 # Per-manager headshots, if uploaded. Convention: a manager named "Chet"
@@ -219,6 +223,31 @@ STYLE_BLOCK = """
   .rc ul{list-style:none;margin:8px 0 0;padding:10px 0 0;border-top:1px dashed var(--line2);display:grid;gap:5px;font-size:12.5px;color:#c9d1e2}
   .rc li{position:relative;padding-left:13px}
   .rc li:before{content:'';position:absolute;left:0;top:.6em;width:5px;height:5px;border-radius:50%;background:var(--gold)}
+  .shelf-kick{display:flex;align-items:center;gap:16px;font-size:12px;font-weight:700;letter-spacing:3px;color:#8fb0ff}
+  .shelf-kick:after{content:'';flex:1;height:2px;background:var(--gold)}
+  .shelf-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:10px 0 20px}
+  .shelf-head h2{font-size:clamp(42px,6.4vw,70px);line-height:.95}
+  .shelf-sub{margin-top:8px;font-size:clamp(12px,1.5vw,17px);font-weight:700;letter-spacing:.32em;color:#5b8cff}
+  .shelf-week{flex:none;border:2px solid var(--gold);color:var(--gold);font-size:14px;font-weight:700;letter-spacing:.3em;padding:12px 16px 12px 20px}
+  .awc-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+  .awc{display:flex;flex-direction:column;min-width:0;background:#0b1629;border:1px solid var(--line2);border-radius:3px;overflow:hidden}
+  .awc-art{position:relative;aspect-ratio:303/190;overflow:hidden;background:radial-gradient(80% 90% at 50% 40%,#1b2d57,#0b1629 70%);display:grid;place-items:center}
+  .awc-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .awc-art:after{content:'';position:absolute;inset:auto 0 0;height:34%;background:linear-gradient(180deg,transparent,#0b1629)}
+  .awc-art .ico{width:64px;height:64px;color:var(--gold)}
+  .awc-art .ico svg{width:100%;height:100%}
+  .awc-body{display:flex;flex-direction:column;gap:9px;flex:1;padding:6px 20px 18px}
+  .awc h3{font-size:clamp(22px,2.2vw,28px);line-height:1.02}
+  .awc-who{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px;min-width:0}
+  .awc-who>span:not(.av){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .av-ring{width:34px;height:34px;background:transparent;border:2px solid var(--gold);color:var(--gold);font-size:14px}
+  .awc-stat b{display:block;font:400 clamp(38px,3.8vw,48px)/1 var(--display);letter-spacing:.3px}
+  .awc-stat small{display:block;margin-top:5px;font-size:11px;font-weight:700;letter-spacing:.24em;color:var(--muted)}
+  .awc p{font-size:14px;color:#dfe4ee}
+  .awc .rc{margin-top:auto}
+  .awc .rc summary{text-align:left;align-self:flex-start;margin-top:6px;font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#5b8cff}
+  .aw-none{display:flex;align-items:center;gap:18px;margin-top:18px;font-size:13px;color:var(--muted);text-align:center}
+  .aw-none:before,.aw-none:after{content:'';flex:1;height:1px;background:var(--line2)}
   .empties{display:grid;grid-template-columns:1fr 1fr;margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:3px}
   .aw-empty{display:flex;align-items:center;gap:16px;padding:14px 18px;font-size:13px;color:#cfd6e4}
   .aw-empty+.aw-empty{border-left:1px solid var(--line)}
@@ -407,6 +436,10 @@ STYLE_BLOCK = """
   @media(max-width:440px){.nav a.home{display:none}}
   @media(max-width:360px){.brand{flex:none}.top .wrap{padding:0 10px;gap:6px}.nav{gap:7px}.nav a{font-size:12px}.wk summary{padding:7px 9px;font-size:12px}.wk summary:after{margin-left:5px}}
   @media(max-width:900px){.bn-row{grid-template-columns:minmax(0,1fr)}}
+  @media(max-width:1000px){.awc-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:520px){.awc-grid{grid-template-columns:minmax(0,1fr);gap:10px}.shelf-head{align-items:flex-start;flex-direction:column}.shelf-week{padding:9px 14px}
+    .awc{flex-direction:row}.awc-art{flex:none;width:36%;aspect-ratio:auto;min-height:150px}.awc-art:after{inset:0 0 0 auto;width:40%;height:auto;background:linear-gradient(90deg,transparent,#0b1629)}
+    .awc-body{padding:12px 14px 14px;gap:6px}.awc h3{font-size:20px}.av-ring{width:28px;height:28px;font-size:12px}.awc-who{font-size:14px}.awc-stat b{font-size:32px}.awc-stat small{font-size:10px;margin-top:3px}.awc p{font-size:13px}.awc .rc summary{font-size:12px}}
   @media(max-width:480px){.bn-title{font-size:24px}.bn-title:before,.bn-title:after{flex-basis:24px}.bn-foot{flex-direction:column;align-items:stretch}.bn-btn{justify-content:center}.nr-foot{grid-template-columns:minmax(0,1fr)}.nr-art{min-height:210px}.nr-art:before{background:linear-gradient(90deg,#050914f5 0,#050914d9 60%,#05091466 100%)}}
 </style>
 """
@@ -450,20 +483,27 @@ def _receipts(lines):
 
 
 def _award_row(key, title, team, manager, value, unit, context, lines):
+    art = (f'<img src="{AWARD_ART[key]}" alt="" loading="lazy">' if key in AWARD_ART else _icon(key))
     return f"""
-      <article class="aw">
-        {_icon(key)}
-        <div>
+      <article class="awc">
+        <div class="awc-art" aria-hidden="true">{art}</div>
+        <div class="awc-body">
           <h3>{title}</h3>
-          <div class="aw-who">{_avatar(team, manager, "gold")}<span>{_who(team, manager)}</span>
-            <div class="aw-stat"><b>{value}</b><small>{unit}</small></div></div>
+          <div class="awc-who">{_avatar(team, manager, "ring")}<span>{_who(team, manager)}</span></div>
+          <div class="awc-stat"><b>{value}</b><small>{unit}</small></div>
+          <p>{context}</p>
+          {_receipts(lines)}
         </div>
-        <div class="aw-side"><p>{context}</p>{_receipts(lines)}</div>
       </article>"""
 
 
+def _award_name(title):
+    """BAD BEAT -> Bad Beat, UPSET OF THE WEEK -> Upset of the Week."""
+    return " ".join(w if w in ("of", "the") else w.capitalize() for w in title.lower().split())
+
+
 def _empty_row(key, title):
-    return f'<div class="aw-empty">{_icon(key)}<h3>{title}</h3><p>No qualifying team</p></div>'
+    return _award_name(title)
 
 
 def _find(matchups, winner, loser):
@@ -526,7 +566,7 @@ def _award_rows(matchups, awards, extras, details):
         add("injury", "INJURY EXCUSE", extras["injury"], lambda a: (
             a["team"], a.get("manager"), f"{a['count']}", "INJURED STARTERS",
             "A crowded trainer's room. A rough week."))
-    return "".join(rows), "".join(empties)
+    return "".join(rows), empties
 
 
 def _bonus_note_html(note):
@@ -890,7 +930,8 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     )
     award_rows, empty_rows = _award_rows(matchups, awards, extras, details)
     banners = _banners_html(week, season, matchups, history) if history and not is_sample else ""
-    empties = f'<div class="empties">{empty_rows}</div>' if empty_rows else ""
+    empties = (f'<p class="aw-none"><span>No qualifying team this week: {" · ".join(escape(e) for e in empty_rows)}</span></p>'
+               if empty_rows else "")
 
     # Caption shown under the peacock when the link is texted or posted.
     link_preview = escape(
@@ -977,10 +1018,13 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     </article>
   </div>
 {banners}
-  <section class="sec" id="awards" aria-labelledby="awards-title">
-    <div class="sec-head"><h2 id="awards-title">AROUND THE LEAGUE</h2></div>
-    <p class="sec-sub">THE REST OF THIS WEEK'S HARDWARE</p>
-    <div class="awards">{award_rows}
+  <section class="sec shelf" id="awards" aria-labelledby="awards-title">
+    <p class="shelf-kick">THE TROPHY SHELF</p>
+    <div class="shelf-head">
+      <div><h2 id="awards-title">AROUND THE LEAGUE</h2><p class="shelf-sub">THE REST OF THIS WEEK'S HARDWARE</p></div>
+      <span class="shelf-week">WEEK {week:02d}</span>
+    </div>
+    <div class="awc-grid">{award_rows}
     </div>
     {empties}{_bonus_note_html(bonus_note)}
   </section>
