@@ -135,6 +135,26 @@ def _cookie(name, value, max_age):
     return f"{name}={value}; Max-Age={max_age}; Path=/; Secure; HttpOnly; SameSite=Lax"
 
 
+_HTTP_WORDS = {400: "bad_request", 401: "unauthorized", 403: "forbidden", 404: "not_found",
+               429: "rate_limited", 500: "server_error", 502: "bad_gateway", 503: "unavailable"}
+
+
+def _failure_reason(step, exc):
+    """A short, safe label for a failed Yahoo call, shown on the page:
+    the step plus Yahoo's error code (e.g. "token_invalid_client") or the
+    HTTP status in words - letters and underscores only."""
+    text = str(exc)
+    code = re.search(r'"error"\s*:\s*"([A-Za-z_]+)"', text)
+    status = re.match(r"Yahoo returned HTTP (\d+)", text)
+    if code:
+        what = code.group(1)
+    elif status:
+        what = _HTTP_WORDS.get(int(status.group(1)), "http_error")
+    else:
+        what = type(exc).__name__
+    return re.sub(r"[^a-z_]", "", f"{step}_{what}".lower())[:40]
+
+
 def _hash(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -306,15 +326,17 @@ class TradeLab:
         if not q.get("code"):
             print("Trade Lab sign-in: Yahoo returned no code")
             return _redirect(back + "expired", [clear])
+        step = "token"  # which Yahoo call failed: the code exchange, or the team lookup
         try:
             tokens = self.yahoo.exchange(q["code"], self.redirect_uri)
+            step = "teams"
             guid, team_keys = self.yahoo.login_teams(tokens["access_token"], self.game)
         except Exception as exc:
             # Yahoo's error bodies (e.g. {"error":"invalid_client"}) hold no
             # secrets; anything else is logged by type only.
             detail = str(exc)[:300] if str(exc).startswith("Yahoo returned HTTP") else ""
-            print(f"Trade Lab sign-in failed: {type(exc).__name__} {detail}".rstrip())
-            return _redirect(back + "error", [clear])
+            print(f"Trade Lab sign-in failed at {step}: {type(exc).__name__} {detail}".rstrip())
+            return _redirect(back + "error&reason=" + _failure_reason(step, exc), [clear])
         guid = tokens.get("xoauth_yahoo_guid") or guid
         mine = [k for k in team_keys if k.startswith(self.league + ".t.")]
         team_key = mine[0] if mine else None

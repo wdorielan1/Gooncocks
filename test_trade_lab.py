@@ -168,6 +168,12 @@ with contextlib.redirect_stdout(log):
 logged = log.getvalue()
 check("sign-in logs say why it failed", "no state cookie came back" in logged and "state cookie didn't match" in logged
       and "sign-in: ok" in logged and "invalid_grant" in logged, logged)
+check("a failed code exchange tells the page which step and why",
+      trade_lab._failure_reason("token", RuntimeError('Yahoo returned HTTP 401: {"error":"invalid_client","error_description":"x"}')) == "token_invalid_client"
+      and trade_lab._failure_reason("teams", RuntimeError("Yahoo returned HTTP 403: <xml/>")) == "teams_forbidden"
+      and trade_lab._failure_reason("token", KeyError("access_token")) == "token_keyerror")
+r = sign_in(app, "code-unknown")[2]
+check("the error reason reaches the page", r["headers"]["Location"].endswith("signin=error&reason=token_bad_request"), r["headers"]["Location"])
 check("sign-in logs never contain states, codes or tokens",
       not any(x in logged for x in ("STATE-", "CODE-", "SECRET-", "code-will", "code-unknown")), logged)
 
