@@ -254,6 +254,9 @@
         if (me.cells[g].label === 'weak' && o.cells[g].diff > 0) gets.push({ group: g, need: -me.cells[g].diff, surplus: o.cells[g].diff });
         if (me.cells[g].label === 'strong' && o.cells[g].diff < 0) gives.push({ group: g, need: -o.cells[g].diff, surplus: me.cells[g].diff });
       });
+      // Biggest gap first, so the strongest reason leads.
+      function byFit(a, b) { return Math.min(b.need, b.surplus) - Math.min(a.need, a.surplus); }
+      gets.sort(byFit); gives.sort(byFit);
       var theirListed = (listings || []).filter(function (l) {
         return l.team_key === o.team_key && gets.some(function (x) { return x.group === l.position; });
       });

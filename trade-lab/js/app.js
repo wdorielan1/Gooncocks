@@ -720,6 +720,21 @@
   }
 
   // ---------- matchmaker ----------
+  var NOUN = { QB: 'QB', RB: 'RBs', WR: 'WRs', TE: 'TE' }, ARTICLE = { QB: 'a', RB: 'an', WR: 'a', TE: 'a' };
+  function bestPhrase(rank) { return rank === 1 ? 'the best' : 'the ' + ordinal(rank) + '-best'; }
+  // "You need an RB. Sam has plenty: the 2nd-best RBs in the league."
+  // needer/haver are names, or null for "you"; needT/haveT their scouting rows.
+  function needLine(g, i, needer, haver, haveT, needT, offers) {
+    var count = S.league.scout.count, rank = haveT.cells[g].rank, nr = needT.cells[g].rank;
+    var lead = (i === 0 ? (needer ? needer + ' needs ' : 'You need ') : (needer ? needer + ' could also use ' : 'You could also use ')) + ARTICLE[g] + ' ' + g + '.';
+    var spare = offers.some(function (o) { return o.group === g && o.role === 'bench'; });
+    var body;
+    if ((g === 'QB' || g === 'TE') && spare) body = (haver ? haver + ' has' : 'You have') + ' a spare one on the bench.';
+    else if (rank <= 3) body = (haver ? haver + ' has' : 'You have') + ' plenty: ' + bestPhrase(rank) + ' ' + NOUN[g] + ' in the league' +
+      (nr === count ? ', while ' + (needer ? needer + '’s' : 'yours') + (g === 'QB' || g === 'TE' ? ' is' : ' are') + ' the league’s weakest.' : '.');
+    else body = (haver ? haver + '’s' : 'Your') + ' ' + NOUN[g] + (g === 'QB' || g === 'TE' ? ' is' : ' are') + ' above average.';
+    return h('li', {}, [h('b', { text: lead }), ' ' + body]);
+  }
   function renderMatch() {
     withLeague('matchState', function (lg) {
       var key = teamSelect($('mTeam'), S.matchTeam || $('mTeam').value), list = clear($('matches'));
@@ -735,33 +750,24 @@
       }
       r.fits.forEach(function (f) {
         var them = lg.scout.teams.filter(function (t) { return t.team_key === f.team_key; })[0];
-        var youName = who === 'You' ? 'you' : who, YouName = who === 'You' ? 'You' : who;
-        function chips(listx, label) {
-          if (!listx.length) return null;
-          return h('div', { class: 'offer' }, [h('small', { text: label })].concat(listx.slice(0, 4).map(function (o) {
-            return h('span', { class: 'chip' + (o.listed ? ' listed' : '') }, [posBadge(o.player.position), ' ' + o.player.name + ' ',
-              h('small', { text: (o.rating.value === null ? 'no scores' : fmt(o.rating.value) + ' pts/wk') + ' · ' + (o.listed ? 'On the block' : o.role === 'bench' ? 'Bench' : 'Starter') })]);
-          })));
+        var isYou = who === 'You';
+        var bullets = f.gets.map(function (x, i) { return needLine(x.group, i, isYou ? null : who, f.manager, them, me, f.theyOffer); })
+          .concat(f.gives.map(function (x, i) { return needLine(x.group, i, f.manager, isYou ? null : who, me, them, f.youOffer); }));
+        function names(listx) {
+          return listx.slice(0, 4).map(function (o, i) {
+            var tag = o.listed ? ' (on the block)' : o.role === 'bench' ? ' (bench)' : '';
+            return h('span', { class: 'ask-p' + (o.listed ? ' listed' : ''), title: o.rating.value === null ? 'No scores yet' : fmt(o.rating.value) + ' pts/wk' },
+              [(i ? ' · ' : '') + o.player.name + tag]);
+          });
         }
-        // One line per position: "RB  Sam A · You D"
-        function side(title, rows, firstName, firstTeam, secondName, secondTeam, offer, offerLabel) {
-          if (!rows.length) return null;
-          return h('div', { class: 'fit-side' }, [
-            h('h4', { text: title }),
-            h('ul', { class: 'fit-list' }, rows.map(function (x) {
-              return h('li', {}, [posBadge(x.group),
-                h('span', { class: 'fit-g' }, [firstName + ' ', gradeTag(firstTeam.cells[x.group])]),
-                h('span', { class: 'fit-g' }, [secondName + ' ', gradeTag(secondTeam.cells[x.group])])]);
-            })),
-            chips(offer, offerLabel)
-          ]);
-        }
+        function askLine(label, listx) { return listx.length ? h('p', { class: 'ask' }, [h('b', { text: label + ' ' })].concat(names(listx))) : null; }
         var giveKey = (f.youOffer[0] || {}).player, getKey = (f.theyOffer[0] || {}).player;
         list.appendChild(h('li', { class: 'match' + (f.mutual ? ' mutual' : '') }, [
           h('div', { class: 'match-head' }, [h('h3', { text: f.manager }),
             h('span', { class: 'badge' + (f.mutual ? '' : ' one'), text: f.mutual ? 'Two-way fit' : 'One-way fit' })]),
-          side('Where ' + f.manager + ' can help ' + youName, f.gets, f.manager, them, YouName, me, f.theyOffer, f.manager + ' could offer'),
-          side('Where ' + youName + ' can help ' + f.manager, f.gives, YouName, me, f.manager, them, f.youOffer, YouName + ' could offer'),
+          h('ul', { class: 'why' }, bullets),
+          askLine(isYou ? 'Ask ' + f.manager + ' about:' : who + ' could ask ' + f.manager + ' about:', f.theyOffer),
+          askLine(isYou ? 'Offer ' + f.manager + ':' : who + ' could offer:', f.youOffer),
           h('div', { class: 'links' }, [
             h('button', { type: 'button', class: 'btn ghost small', text: 'Compare in calculator', onclick: function () {
               openCalc(key, giveKey ? [giveKey.player_key] : [], f.team_key, getKey ? [getKey.player_key] : []);
