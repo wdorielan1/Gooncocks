@@ -28,11 +28,16 @@ FANTASY_BASE = "https://fantasysports.yahooapis.com/fantasy/v2"
 AUTH_URL = "https://api.login.yahoo.com/oauth2/request_auth"
 
 
-def build_authorize_url(client_id: str, redirect_uri: str = "oob") -> str:
-    return (
-        f"{AUTH_URL}?client_id={client_id}&redirect_uri={redirect_uri}"
-        f"&response_type=code&language=en-us"
-    )
+def build_authorize_url(client_id: str, redirect_uri: str = "oob", state=None, scope=None) -> str:
+    """Yahoo's authorization-code login link. `state` (a one-time random
+    value the caller checks on the way back) and `scope` are optional so
+    the existing command-line setup ("oob") keeps working unchanged."""
+    params = {"client_id": client_id, "redirect_uri": redirect_uri, "response_type": "code", "language": "en-us"}
+    if state:
+        params["state"] = state
+    if scope:
+        params["scope"] = scope
+    return f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
 
 
 def _basic_auth_header(client_id: str, client_secret: str) -> str:
@@ -188,11 +193,22 @@ def _sub_resource(collection_owner, key):
     return {}
 
 
-def get_team_roster(access_token, team_key, week):
+def headshot_url(player):
+    """The best Yahoo headshot URL for a merged player record, or "".
+    Yahoo's URLs wrap the original image in a resizing proxy that shrinks
+    it to about 46x60; the original (after the last "https://") is the
+    larger cutout."""
+    url = (player.get("headshot") or {}).get("url") or player.get("image_url") or ""
+    i = url.rfind("https://")
+    return url[i:] if i > 0 else url
+
+
+def get_team_roster(access_token, team_key, week=None):
     """[{'player_key', 'name', 'slot', 'eligible', 'status', 'position',
-    'nfl_team'}] for a team's lineup that week. slot is the lineup spot
-    ("BN" = bench, "IR"); position is the player's own (e.g. "WR")."""
-    url = f"{FANTASY_BASE}/team/{team_key}/roster;week={week}?format=json"
+    'nfl_team', 'headshot'}] for a team's lineup that week, or its current
+    roster when week is None. slot is the lineup spot ("BN" = bench,
+    "IR"); position is the player's own (e.g. "WR")."""
+    url = f"{FANTASY_BASE}/team/{team_key}/roster{f';week={week}' if week else ''}?format=json"
     data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
     roster = _sub_resource(data["fantasy_content"]["team"], "roster")
     players = []
@@ -212,9 +228,59 @@ def get_team_roster(access_token, team_key, week):
                 "status": p.get("status") or "",
                 "position": p.get("display_position") or "",
                 "nfl_team": (p.get("editorial_team_abbr") or "").upper(),
+                "headshot": headshot_url(p),
             }
         )
     return players
+
+
+def _find_values(obj, key):
+    """Every value stored under `key` anywhere inside Yahoo's nested JSON."""
+    found = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == key:
+                found.append(v)
+            found.extend(_find_values(v, key))
+    elif isinstance(obj, list):
+        for v in obj:
+            found.extend(_find_values(v, key))
+    return found
+
+
+def get_login_teams(access_token, game_key):
+    """(guid, [team keys]) for the Yahoo account the access token belongs
+    to: every team that account manages in that game (e.g. "470")."""
+    url = f"{FANTASY_BASE}/users;use_login=1/games;game_keys={game_key}/teams?format=json"
+    data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+    guids = [g for g in _find_values(data, "guid") if isinstance(g, str)]
+    team_keys = sorted({k for k in _find_values(data, "team_key") if isinstance(k, str)})
+    return (guids[0] if guids else None), team_keys
+
+
+def get_league_teams(access_token, league_key):
+    """[{'team_key', 'name', 'manager'}] for every team in a league."""
+    url = f"{FANTASY_BASE}/league/{league_key}/teams?format=json"
+    data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+    teams = []
+    for entry in _yahoo_collection(_sub_resource(data["fantasy_content"]["league"], "teams")):
+        t = _player_record(entry.get("team") if isinstance(entry, dict) else None)
+        nickname, _guid = _extract_manager(t)
+        if t.get("team_key"):
+            teams.append({"team_key": t["team_key"], "name": t.get("name") or "", "manager": nickname})
+    return teams
+
+
+def get_league_positions(access_token, league_key):
+    """The league's lineup positions (e.g. ["QB", "WR", "RB", "TE",
+    "W/R/T", "K", "DEF", "BN", "IR"]), in Yahoo's order."""
+    url = f"{FANTASY_BASE}/league/{league_key}/settings?format=json"
+    data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+    positions = []
+    for rp in _find_values(data, "roster_position"):
+        if isinstance(rp, dict) and rp.get("position") and rp["position"] not in positions:
+            positions.append(rp["position"])
+    return positions
 
 
 def get_player_points(access_token, league_key, player_keys, week):

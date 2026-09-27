@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07101f">
+<title>Gooncocks Trade Lab</title>
+<meta name="description" content="The Gooncocks trading block: who’s available and what they want.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Work+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the trading block</a>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="https://gooncocks.com" aria-label="Gooncocks home"><img src="assets/logo.webp" alt="" width="40" height="40"><b>GOONCOCKS</b></a>
+    <nav class="nav" aria-label="Site">
+      <a class="keep" href="https://stats.gooncocks.com/">This Week</a>
+      <a class="keep" href="https://stats.gooncocks.com/rivalries.html">Rivalries</a>
+      <a class="keep" href="https://stats.gooncocks.com/careers.html">Careers</a>
+      <a class="keep" href="https://stats.gooncocks.com/records.html">Records</a>
+      <a class="on" href="#main" aria-current="page">Trade Lab</a>
+    </nav>
+    <div class="account" id="account" aria-live="polite"></div>
+  </div>
+</header>
+
+<p class="preview-flag" id="previewFlag" hidden>Design preview · sample listings, not the league’s real trading block</p>
+
+<section class="hero" aria-labelledby="heroTitle">
+  <div class="hero-in">
+    <p class="kicker">Gooncocks League</p>
+    <h1 id="heroTitle">Trade Lab</h1>
+    <p class="tagline">Who’s available. What they want.</p>
+    <p class="checked" id="checked"></p>
+  </div>
+</section>
+
+<div class="tabs-bar">
+  <div class="tabs" role="tablist" aria-label="Trade Lab">
+    <button type="button" role="tab" id="tab-block" aria-controls="panel-block" aria-selected="true">Trading Block</button>
+    <button type="button" role="tab" id="tab-match" aria-controls="panel-match" aria-selected="false" tabindex="-1">Matchmaker</button>
+    <button type="button" role="tab" id="tab-calc" aria-controls="panel-calc" aria-selected="false" tabindex="-1">Trade Calculator</button>
+  </div>
+</div>
+
+<main class="page" id="main" tabindex="-1">
+  <p class="banner-msg" id="signinMsg" role="status" hidden></p>
+
+  <!-- ================= TRADING BLOCK ================= -->
+  <section class="panel-view" id="panel-block" role="tabpanel" aria-labelledby="tab-block">
+    <div class="layout">
+      <section class="board" aria-labelledby="blockTitle">
+        <div class="board-head">
+          <h2 id="blockTitle">On the Block</h2>
+          <span class="count" id="count"></span>
+          <button type="button" class="btn gold manage-btn" id="manageBtn" aria-controls="editorPanel" aria-expanded="false">Manage My Block</button>
+        </div>
+        <form class="filters" id="filters" role="search" aria-label="Filter listings">
+          <label class="search"><span class="sr-only">Search players or managers</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+            <input id="q" type="search" placeholder="Search players or managers" autocomplete="off"></label>
+          <label class="sel"><span class="sr-only">Position</span><select id="fPos"><option value="all">All positions</option></select></label>
+          <label class="sel"><span class="sr-only">Manager</span><select id="fTeam"><option value="all">All managers</option></select></label>
+          <label class="sel"><span class="sr-only">Availability</span><select id="fStatus">
+            <option value="all">Any availability</option><option value="available">Available</option><option value="listening">Listening to offers</option></select></label>
+          <label class="sel"><span class="sr-only">Sort</span><select id="fSort">
+            <option value="recent">Recently updated</option><option value="name">Player name</option></select></label>
+        </form>
+        <div id="listState" class="state" role="status" aria-live="polite"></div>
+        <ul class="cards" id="cards" aria-label="Listings"></ul>
+      </section>
+
+      <aside class="side" aria-label="Your block and league needs">
+        <section class="side-panel editor" id="editorPanel" aria-labelledby="editorTitle" tabindex="-1">
+          <div class="drawer-head">
+            <h2 id="editorTitle">Your Trading Block</h2>
+            <button type="button" class="drawer-x" id="drawerClose" aria-label="Close">&times;</button>
+          </div>
+          <div id="editor"></div>
+        </section>
+        <section class="side-panel" aria-labelledby="needsTitle">
+          <h2 id="needsTitle">Who Needs What</h2>
+          <table class="needs" id="needs"><caption class="sr-only">Positions each manager is looking for</caption></table>
+        </section>
+      </aside>
+    </div>
+
+    <section class="partners" aria-labelledby="partnersTitle">
+      <div>
+        <h2 id="partnersTitle">Find Your Next Trade Partner</h2>
+        <p>See who has what you need, and who needs what you’ve listed.</p>
+      </div>
+      <button type="button" class="btn gold" data-go="match">Open Matchmaker <span aria-hidden="true">→</span></button>
+    </section>
+  </section>
+
+  <!-- ================= MATCHMAKER ================= -->
+  <section class="panel-view" id="panel-match" role="tabpanel" aria-labelledby="tab-match" hidden>
+    <div class="section-head">
+      <h2>Matchmaker</h2>
+      <label class="sel inline"><span>Matches for</span><select id="mTeam"></select></label>
+    </div>
+    <p class="fine">Built only from published listings: a match means they’ve listed a player at a position you want. Mutual matches, where they also want a position you’ve listed, come first. It’s a starting point for a conversation, not a fair-trade verdict.</p>
+    <div id="matchState" class="state" role="status" aria-live="polite"></div>
+    <ol class="matches" id="matches"></ol>
+  </section>
+
+  <!-- ================= TRADE CALCULATOR ================= -->
+  <section class="panel-view" id="panel-calc" role="tabpanel" aria-labelledby="tab-calc" hidden>
+    <div class="section-head"><h2>Trade Calculator</h2><span class="tag">Performance comparison</span></div>
+    <p class="fine" id="calcSource"></p>
+    <div class="calc">
+      <fieldset class="calc-side" id="sideA"><legend><span>Side A</span><select id="cTeamA" aria-label="Side A manager"></select></legend><div class="picks" id="picksA"></div></fieldset>
+      <fieldset class="calc-side" id="sideB"><legend><span>Side B</span><select id="cTeamB" aria-label="Side B manager"></select></legend><div class="picks" id="picksB"></div></fieldset>
+    </div>
+    <div id="calcState" class="state" role="status" aria-live="polite"></div>
+    <div class="calc-out" id="calcOut"></div>
+    <p class="fine">No projections are used: Yahoo projections aren’t part of this site’s data, so there’s no future-value estimate and no fairness grade. It only shows what these players have scored.</p>
+  </section>
+</main>
+
+<footer class="foot"><p>Your league. Your market.</p><p class="fine">Trade Lab lists and compares players. It never makes trades or changes Yahoo lineups.</p></footer>
+
+<div class="modal" id="detail" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <button type="button" class="modal-x" id="detailClose" aria-label="Close">&times;</button>
+    <div id="detailBody"></div>
+  </div>
+</div>
+<div class="scrim" id="scrim" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- DATA -->
+<!-- /DATA -->
+<script src="js/logic.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

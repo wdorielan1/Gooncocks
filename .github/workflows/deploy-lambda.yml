@@ -44,6 +44,8 @@ jobs:
           python test_awards.py
           python test_boxscores.py
           python test_weekly_history.py
+          python test_trade_lab.py
+          node trade-lab/test_logic.js
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
