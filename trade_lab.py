@@ -158,8 +158,10 @@ def _failure_reason(step, exc):
     return re.sub(r"[^a-z_]", "", f"{step}_{what}".lower())[:40]
 
 
-WELCOME = ("Gooncocks Trade Lab: you're signed up for trading block alerts. We'll text you when someone puts "
-           "a player on the block. Reply STOP to opt out.")
+WELCOME = ("Gooncocks Trade Lab: you're signed up for trade alerts! Trade Lab is our league's trading block - see who's "
+           "available and find trade partners: https://stats.gooncocks.com/trade-lab.html To put your own players on the block, "
+           "sign in with the Yahoo account you use for our league. We'll text you when someone adds a player. "
+           "Reply STOP to opt out.")
 
 
 def alert_text(manager, fresh, url):
