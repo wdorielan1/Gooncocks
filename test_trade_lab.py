@@ -489,6 +489,47 @@ check("Discord errors never include the webhook URL", msg == "Discord OSError", 
 check("Discord is on only when TRADE_LAB_DISCORD_WEBHOOK is set",
       trade_lab.DiscordPoster.from_env({}) is None and trade_lab.DiscordPoster.from_env({"TRADE_LAB_DISCORD_WEBHOOK": "u"}) is not None)
 
+# ---------------------------------------------------------------- iPhone Shortcut digest
+clock = Clock()
+gapp_env = {**ENV, "TRADE_LAB_DIGEST_KEY": "s3cret-key"}
+gapp = TradeLab(MemoryStore(clock), FakeYahoo(), gapp_env, clock)
+g_sam, g_scsrf, _ = sign_in(gapp, "code-sam")
+g_will, g_wcsrf, _ = sign_in(gapp, "code-will")
+
+
+def digest(key="s3cret-key", **q):
+    return gapp.handle(event("GET", "/digest", query={"key": key, **q}))
+
+
+check("digest is off unless TRADE_LAB_DIGEST_KEY is set",
+      TradeLab(MemoryStore(clock), FakeYahoo(), ENV, clock).handle(event("GET", "/digest", query={"key": ""}))["statusCode"] == 404)
+check("digest needs the right key", digest("wrong")["statusCode"] == 403 and digest("")["statusCode"] == 403)
+save(gapp, g_sam, g_scsrf, [{"player_key": "470.p.3", "status": "available", "wants": []}])
+first = body(digest())
+check("the first check starts the clock without dumping the whole block", first["count"] == 0 and first["text"] == "", first)
+check("nothing new, nothing to send", body(digest()) == {"count": 0, "text": ""})
+clock.t += 60
+save(gapp, g_sam, g_scsrf, [{"player_key": "470.p.4", "status": "listening", "wants": []}])
+clock.t += 60
+save(gapp, g_will, g_wcsrf, [{"player_key": "470.p.1", "status": "available", "wants": []},
+                             {"player_key": "470.p.2", "status": "available", "wants": []}])
+clock.t += 60
+d = body(digest())
+check("new listings since the last check come back as one ready-to-send text, a line per manager",
+      d == {"count": 3, "text": "Trade Lab - new on the trading block:\nSam: Tee Higgins (WR, KC)\n"
+                                "Will: Amon-Ra St. Brown (WR, KC), Jared Goff (QB, KC)\nhttps://stats.gooncocks.com/trade-lab.html"}, d)
+check("...and only once", body(digest())["count"] == 0)
+cur = [l for l in body(gapp.handle(event("GET", "/listings")))["listings"] if l["player_key"] == "470.p.4"][0]
+clock.t += 60
+save(gapp, g_sam, g_scsrf, [{"player_key": "470.p.4", "status": "available", "wants": ["RB"], "version": cur["version"]}])
+check("edits aren't reported as new", body(digest())["count"] == 0)
+p = body(digest(preview="1"))
+check("preview shows the last week without moving the marker",
+      p["count"] == 4 and p["preview"] is True and body(digest())["count"] == 0, p)
+many = [{"name": f"P{i}", "position": "WR", "nfl_team": "", "manager": "Sam", "created_at": i} for i in range(7)]
+check("a big dump is capped per manager",
+      trade_lab.digest_text(many, "u") == "Trade Lab - new on the trading block:\nSam: P0 (WR), P1 (WR), P2 (WR), P3 (WR), P4 (WR), +2 more\nu")
+
 
 class FakeResp:
     def __enter__(self):

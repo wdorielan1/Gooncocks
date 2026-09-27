@@ -12,6 +12,8 @@ are first-party on stats.gooncocks.com.
   GET  /api/trade-lab/listings           the public trading block
   GET  /api/trade-lab/rosters            every team's current roster (public)
   GET  /api/trade-lab/roster             the signed-in manager's roster
+  GET  /api/trade-lab/digest?key=...     new listings as one ready-to-send text,
+                                         for the commissioner's iPhone Shortcut
   PUT  /api/trade-lab/listings           add or update your listings
   DELETE /api/trade-lab/listings/<player_key>?version=N
 
@@ -34,6 +36,7 @@ Environment:
   TRADE_LAB_REDIRECT_URI   e.g. https://stats.gooncocks.com/api/trade-lab/callback
   SITE_ORIGIN              e.g. https://stats.gooncocks.com
   TRADE_LAB_PAGE           where sign-in returns to (default /trade-lab.html)
+  TRADE_LAB_DIGEST_KEY     turns on /digest; the Shortcut sends it as ?key=
   TRADE_LAB_DISCORD_WEBHOOK
                            Discord alerts: a channel webhook URL (secret)
   TRADE_LAB_ALERT_NUMBERS  text alerts: "Name=number, ..." (names as the site shows them)
@@ -230,6 +233,29 @@ class DiscordPoster:
         except Exception as exc:
             # Never the exception text: it could carry the webhook URL.
             raise RuntimeError(f"Discord {type(exc).__name__}") from None
+
+
+DIGEST_PREVIEW_DAYS = 7
+DIGEST_MAX_PER_MANAGER = 5
+
+
+def digest_text(listings, url):
+    """One group-chat text for new listings: a line per manager, in the
+    order they listed, then the link. Empty when there's nothing new."""
+    if not listings:
+        return ""
+    by_manager = {}
+    for d in sorted(listings, key=lambda d: d["created_at"]):
+        by_manager.setdefault(d.get("manager") or "A manager", []).append(d)
+    lines = ["Trade Lab - new on the trading block:"]
+    for manager, ds in by_manager.items():
+        players = [f"{d['name']} ({d['position']}" + (f", {d['nfl_team']})" if d.get("nfl_team") else ")")
+                   for d in ds[:DIGEST_MAX_PER_MANAGER]]
+        if len(ds) > DIGEST_MAX_PER_MANAGER:
+            players.append(f"+{len(ds) - DIGEST_MAX_PER_MANAGER} more")
+        lines.append(f"{manager}: {', '.join(players)}")
+    lines.append(url)
+    return "\n".join(lines)
 
 
 def normalize_phone(raw):
@@ -859,6 +885,40 @@ class TradeLab:
             return {**result, "sent": sent, "failed": failed, "text": text}
         return {"error": f"Unknown action {action!r}."}
 
+    # ---------------- iPhone Shortcut digest
+    def digest(self, event):
+        """What's been newly listed since the Shortcut last asked, as one
+        text ready to send. Listings are public anyway; the key keeps anyone
+        else from using up the "since last time" marker. ?preview=1 shows
+        the last week without moving the marker, for testing."""
+        want = self.env.get("TRADE_LAB_DIGEST_KEY") or ""
+        if not want:
+            raise HttpError(404, "not_found", "No such Trade Lab endpoint.")
+        q = event.get("queryStringParameters") or {}
+        if not hmac.compare_digest(str(q.get("key") or "").encode("utf-8"), want.encode("utf-8")):
+            raise HttpError(403, "bad_key", "That key doesn't match TRADE_LAB_DIGEST_KEY.")
+        now = int(self.now())
+        url = self.origin + self.page
+        active = [i["data"] for i in self.store.query(self._lk()) if i["data"]["status"] in STATUSES]
+        if q.get("preview") in ("1", "true", "yes"):
+            since = now - DIGEST_PREVIEW_DAYS * 24 * 3600
+            new = [d for d in active if d["created_at"] > since]
+            return _json(200, {"count": len(new), "text": digest_text(new, url), "preview": True})
+        pk = f"DIGEST#{self.league}"
+        cursor = self.store.get(pk, "cursor")
+        try:
+            self.store.put(pk, "cursor", {"through": now}, (cursor["version"] + 1) if cursor else 1,
+                           expect=cursor["version"] if cursor else 0)
+        except Conflict:
+            # Another check ran at the same moment and will report these.
+            return _json(200, {"count": 0, "text": ""})
+        if not cursor:
+            return _json(200, {"count": 0, "text": "",
+                               "note": "Started. Players listed from now on will show up here."})
+        through = cursor["data"]["through"]
+        new = [d for d in active if through < d["created_at"] <= now]
+        return _json(200, {"count": len(new), "text": digest_text(new, url)})
+
     # ---------------- dispatch
     def handle(self, event):
         method = ((event.get("requestContext") or {}).get("http") or {}).get("method") or event.get("httpMethod") or "GET"
@@ -880,6 +940,8 @@ class TradeLab:
                 return self.rosters(event, cookies)
             if method == "GET" and route == "/roster":
                 return self.my_roster(event, cookies)
+            if method == "GET" and route == "/digest":
+                return self.digest(event)
             if method == "PUT" and route == "/listings":
                 return self.save(event, cookies)
             m = re.fullmatch(r"/listings/([0-9]+\.p\.[0-9]+)", route)
