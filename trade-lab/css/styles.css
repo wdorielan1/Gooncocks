@@ -256,9 +256,12 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 /* matchmaker offers */
 .why { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 6px; font-size: 15px; color: #dfe4ee; }
 .why b { color: #fff; }
-.ask { margin-top: 10px; font-size: 14px; color: #dfe4ee; }
-.ask b { color: #fff; }
-.ask-p.listed { color: var(--gold); font-weight: 600; }
+.offer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 12px; }
+.offer > small { width: 100%; font: 600 10.5px/1 var(--body); letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border: 1px solid var(--line-2); border-radius: 3px; background: #081226; font-size: 13.5px; font-weight: 600; }
+.chip small { color: var(--muted); font-weight: 500; }
+.chip.listed { border-color: var(--gold); }
+.chip.listed small { color: var(--gold); }
 
 /* trade verdict */
 .gives { margin: 0 0 8px; font-size: 13px; color: var(--muted); }

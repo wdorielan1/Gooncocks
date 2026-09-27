@@ -753,21 +753,20 @@
         var isYou = who === 'You';
         var bullets = f.gets.map(function (x, i) { return needLine(x.group, i, isYou ? null : who, f.manager, them, me, f.theyOffer); })
           .concat(f.gives.map(function (x, i) { return needLine(x.group, i, f.manager, isYou ? null : who, me, them, f.youOffer); }));
-        function names(listx) {
-          return listx.slice(0, 4).map(function (o, i) {
-            var tag = o.listed ? ' (on the block)' : o.role === 'bench' ? ' (bench)' : '';
-            return h('span', { class: 'ask-p' + (o.listed ? ' listed' : ''), title: o.rating.value === null ? 'No scores yet' : fmt(o.rating.value) + ' pts/wk' },
-              [(i ? ' · ' : '') + o.player.name + tag]);
-          });
+        function chips(listx, label) {
+          if (!listx.length) return null;
+          return h('div', { class: 'offer' }, [h('small', { text: label })].concat(listx.slice(0, 4).map(function (o) {
+            return h('span', { class: 'chip' + (o.listed ? ' listed' : '') }, [posBadge(o.player.position), ' ' + o.player.name + ' ',
+              h('small', { text: (o.rating.value === null ? 'no scores' : fmt(o.rating.value) + ' pts/wk') + ' · ' + (o.listed ? 'On the block' : o.role === 'bench' ? 'Bench' : 'Starter') })]);
+          })));
         }
-        function askLine(label, listx) { return listx.length ? h('p', { class: 'ask' }, [h('b', { text: label + ' ' })].concat(names(listx))) : null; }
         var giveKey = (f.youOffer[0] || {}).player, getKey = (f.theyOffer[0] || {}).player;
         list.appendChild(h('li', { class: 'match' + (f.mutual ? ' mutual' : '') }, [
           h('div', { class: 'match-head' }, [h('h3', { text: f.manager }),
             h('span', { class: 'badge' + (f.mutual ? '' : ' one'), text: f.mutual ? 'Two-way fit' : 'One-way fit' })]),
           h('ul', { class: 'why' }, bullets),
-          askLine(isYou ? 'Ask ' + f.manager + ' about:' : who + ' could ask ' + f.manager + ' about:', f.theyOffer),
-          askLine(isYou ? 'Offer ' + f.manager + ':' : who + ' could offer:', f.youOffer),
+          chips(f.theyOffer, f.manager + ' could offer'),
+          chips(f.youOffer, (isYou ? 'You' : who) + ' could offer'),
           h('div', { class: 'links' }, [
             h('button', { type: 'button', class: 'btn ghost small', text: 'Compare in calculator', onclick: function () {
               openCalc(key, giveKey ? [giveKey.player_key] : [], f.team_key, getKey ? [getKey.player_key] : []);

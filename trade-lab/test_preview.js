@@ -219,8 +219,8 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.strictEqual(await page.inputValue('#mTeam'), '470.l.960265.t.2');
     await page.selectOption('#mTeam', '470.l.960265.t.1');
     const fits = await page.$$eval('#matches .match', els => els.map(e => ({ who: e.querySelector('h3').textContent, two: e.classList.contains('mutual'),
-      listed: [...e.querySelectorAll('.ask-p.listed')].map(c => c.textContent),
-      why: [...e.querySelectorAll('.why li')].map(li => li.textContent), ask: [...e.querySelectorAll('.ask')].map(p => p.textContent) })));
+      listed: [...e.querySelectorAll('.chip.listed')].map(c => c.textContent),
+      why: [...e.querySelectorAll('.why li')].map(li => li.textContent), offers: [...e.querySelectorAll('.offer')].map(o => o.textContent) })));
     assert.ok(fits.length >= 2);
     const firstOne = fits.findIndex(f => !f.two);
     assert.ok(firstOne === -1 || fits.slice(firstOne).every(f => !f.two));
@@ -229,14 +229,13 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.match(why[0], /^You need an RB\. Sam has plenty: the (best|\d+(st|nd|rd|th)-best) RBs in the league/);
     assert.ok(why.some(t => /^Sam needs a WR\. You have plenty: the (best|\d+(st|nd|rd|th)-best) WRs in the league, while Sam’s are the league’s weakest\.$/.test(t)), JSON.stringify(why));
     assert.ok(why.some(t => /^Sam could also use a QB\. You have a spare one on the bench\.$/.test(t)), JSON.stringify(why));
-    assert.match(fits[0].ask[0], /^Ask Sam about: Breece Hall \(on the block\)/);
-    assert.match(fits[0].ask[1], /^Offer Sam: /);
-    assert.match(fits[0].ask[1], /Jared Goff \((on the block|bench)\)/);
+    assert.match(fits[0].offers[0], /^Sam could offer.*Breece Hall \d+\.\d pts\/wk · On the block/);
+    assert.match(fits[0].offers[1], /^You could offer.*Jared Goff \d+\.\d pts\/wk · (On the block|Bench)/);
     const txt = await page.textContent('#matches');
     assert.ok(!txt.includes(';') && !(await page.$('#matches .grade')), 'no semicolons or grade boxes');
     const listedNames = await page.evaluate(() => TradeApi.s.listings.map(l => l.name));
     fits.forEach(f => f.listed.forEach(c => assert.ok(listedNames.some(n => c.includes(n)), c)));
-    assert.ok(fits[0].listed.some(c => c.includes('Breece Hall') && c.includes('(on the block)')));
+    assert.ok(fits[0].listed.some(c => c.includes('Breece Hall') && c.includes('On the block')));
     assert.match(await page.textContent('#matchNote'), /Only players marked “On the block” have been listed/);
   });
   await check('compare from the matchmaker opens the calculator with both sides picked', async () => {
