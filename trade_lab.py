@@ -228,6 +228,40 @@ class TwilioSender:
             raise RuntimeError(f"Twilio HTTP {exc.code}" + (f", error {code}" if code else "")) from None
 
 
+class AwsSmsSender:
+    """Sends one text through AWS End User Messaging SMS (boto3 comes with
+    Lambda). AWS_SMS_FROM is the toll-free number (or its phone number ID)
+    from that console, in the same region as this Lambda."""
+
+    def __init__(self, from_number, client=None):
+        self.from_number = from_number
+        if client is None:
+            import boto3
+            client = boto3.client("pinpoint-sms-voice-v2")
+        self.client = client
+
+    @classmethod
+    def from_env(cls, env):
+        frm = env.get("AWS_SMS_FROM")
+        return cls(frm) if frm else None
+
+    def send(self, to, text):
+        try:
+            self.client.send_text_message(DestinationPhoneNumber=to, OriginationIdentity=self.from_number,
+                                          MessageBody=text, MessageType="TRANSACTIONAL")
+        except Exception as exc:
+            # AWS error messages can include the phone number, so only the
+            # error code goes into the exception (and the logs).
+            code = ((getattr(exc, "response", None) or {}).get("Error") or {}).get("Code") or type(exc).__name__
+            raise RuntimeError(f"AWS SMS error {code}") from None
+
+
+def sms_from_env(env):
+    """AWS when AWS_SMS_FROM is set, else Twilio when its settings are, else
+    None (alerts off)."""
+    return AwsSmsSender.from_env(env) or TwilioSender.from_env(env)
+
+
 def _hash(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -653,7 +687,7 @@ class TradeLab:
             return {"alerts_on": bool(self.sms), "managers": names,
                     "not_matching_a_league_manager": unknown}
         if not self.sms:
-            return {"error": "Text alerts are off: set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM."}
+            return {"error": "Text alerts are off: set AWS_SMS_FROM (or TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM)."}
         if action == "alerts_test":
             who = str(event.get("to") or "")
             match = [(n, p) for n, p in self.recipients if n.casefold() == who.casefold()]
@@ -770,7 +804,7 @@ def handler(event, context=None):
         if bad:
             print(f"Trade Lab alerts: skipped unreadable entries for: {', '.join(bad)}")
         _APP = TradeLab(DynamoStore(os.environ["TRADE_LAB_TABLE"]), YahooLeague(),
-                        sms=TwilioSender.from_env(os.environ), recipients=recipients)
+                        sms=sms_from_env(os.environ), recipients=recipients)
     if event.get("action") and not event.get("rawPath"):
         result = _APP.admin(event)
         print("Result: " + json.dumps(result))  # names only, never numbers

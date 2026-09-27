@@ -10,6 +10,7 @@ import contextlib
 import io
 import json
 import sys
+import types
 import urllib.parse
 
 import trade_lab
@@ -443,6 +444,45 @@ check("Twilio errors keep the code but drop the number", msg == "Twilio HTTP 400
 check("alerts stay off unless all three Twilio settings are set",
       trade_lab.TwilioSender.from_env({"TWILIO_ACCOUNT_SID": "AC1", "TWILIO_AUTH_TOKEN": "t"}) is None
       and trade_lab.TwilioSender.from_env({"TWILIO_ACCOUNT_SID": "AC1", "TWILIO_AUTH_TOKEN": "t", "TWILIO_FROM": "+18885550100"}) is not None)
+
+class FakeAws:
+    def __init__(self, error=None):
+        self.calls, self.error = [], error
+    def send_text_message(self, **kw):
+        if self.error:
+            raise self.error
+        self.calls.append(kw)
+
+aws = FakeAws()
+trade_lab.AwsSmsSender("+18885550100", client=aws).send("+12015550123", "hello")
+check("AWS SMS request: from/to/body, transactional",
+      aws.calls == [{"DestinationPhoneNumber": "+12015550123", "OriginationIdentity": "+18885550100",
+                     "MessageBody": "hello", "MessageType": "TRANSACTIONAL"}], aws.calls)
+
+class AwsError(Exception):
+    def __init__(self):
+        super().__init__("Destination +12015550123 is not verified")
+        self.response = {"Error": {"Code": "ValidationException", "Message": "Destination +12015550123 is not verified"}}
+
+try:
+    trade_lab.AwsSmsSender("+18885550100", client=FakeAws(AwsError())).send("+12015550123", "x")
+    msg = "no error"
+except RuntimeError as exc:
+    msg = str(exc)
+check("AWS errors keep the code but drop the number", msg == "AWS SMS error ValidationException", msg)
+both = {"AWS_SMS_FROM": "+18885550100", "TWILIO_ACCOUNT_SID": "AC1", "TWILIO_AUTH_TOKEN": "t", "TWILIO_FROM": "+18885550100"}
+saved_boto3 = sys.modules.get("boto3")
+sys.modules["boto3"] = types.SimpleNamespace(client=lambda name: FakeAws())
+try:
+    picked = [type(trade_lab.sms_from_env(env)).__name__ for env in
+              (both, {k: v for k, v in both.items() if k != "AWS_SMS_FROM"}, {})]
+finally:
+    if saved_boto3 is None:
+        sys.modules.pop("boto3")
+    else:
+        sys.modules["boto3"] = saved_boto3
+check("AWS is used when AWS_SMS_FROM is set, else Twilio, else alerts off",
+      picked == ["AwsSmsSender", "TwilioSender", "NoneType"], picked)
 
 print()
 if failures:
