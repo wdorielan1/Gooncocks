@@ -117,6 +117,167 @@
     return t;
   }
 
+  // ---------- ratings ----------
+  // A player's rating is his points per week this season, with last
+  // season's average counting as PRIOR_WEEKS extra weeks - so two good
+  // (or bad) weeks in September don't outweigh a whole season, and the
+  // pull of last season fades as this one goes on. Only real scores.
+  var PRIOR_WEEKS = 2;
+  function playerRating(cur, prev, player) {
+    var c = playerStats(cur || {}, player, 3), p = playerStats(prev || {}, player, 3), value = null, basis = 'none';
+    if (c.games && p.games) { value = (c.total + PRIOR_WEEKS * p.ppg) / (c.games + PRIOR_WEEKS); basis = 'blend'; }
+    else if (c.games) { value = c.ppg; basis = 'season'; }
+    else if (p.games) { value = p.ppg; basis = 'last'; }
+    return { value: value, basis: basis, games: c.games, ppg: c.ppg, total: c.total, recent: c.recent,
+             lastPpg: p.games ? p.ppg : null, lastGames: p.games };
+  }
+
+  // ---------- scouting ----------
+  var FLEX = { 'W/R/T': ['WR', 'RB', 'TE'], 'W/R': ['WR', 'RB'], 'W/T': ['WR', 'TE'], 'R/T': ['RB', 'TE'], 'Q/W/R/T': ['QB', 'WR', 'RB', 'TE'] };
+  var GROUPS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DEF'];
+  var OUT = { IR: 1, 'IR+': 1, NA: 1 };
+  var DEFAULT_SLOTS = ['QB', 'WR', 'WR', 'WR', 'RB', 'RB', 'TE', 'W/R/T', 'K', 'DEF'];
+
+  // The league's starting slots, as seen in the latest week's box scores
+  // (a fallback when the server doesn't send them).
+  function slotsFromBox(box) {
+    var ids = Object.keys((box && box.games) || {}).sort();
+    for (var i = ids.length - 1; i >= 0; i--) {
+      var lineup = box.games[ids[i]].a || [];
+      var s = lineup.map(function (p) { return p[0]; }).filter(function (x) { return x && x !== 'BN' && !OUT[x]; });
+      if (s.length) return s;
+    }
+    return DEFAULT_SLOTS.slice();
+  }
+  function eligible(p, pos) { return p.position === pos || (p.positions || []).indexOf(pos) >= 0; }
+
+  // One team's best lineup from its current roster, by rating. Each group
+  // (QB, RB, WR, TE, FLEX, K, DEF) gets the points per week of the players
+  // who'd fill its slots; injured-reserve players don't start.
+  function teamReport(players, slots, rate) {
+    var pool = [], out = [];
+    players.forEach(function (p) {
+      var r = rate(p);
+      (OUT[p.slot] ? out : pool).push({ player: p, rating: r });
+    });
+    pool.sort(function (a, b) { return (b.rating.value === null ? -1 : b.rating.value) - (a.rating.value === null ? -1 : a.rating.value); });
+    var used = {}, groups = {};
+    GROUPS.forEach(function (g) { groups[g] = { slots: 0, points: 0, starters: [], missing: 0 }; });
+    function fill(group, ok) {
+      var pick = pool.filter(function (x) { return !used[x.player.player_key] && ok(x.player); })[0];
+      var g = groups[group];
+      g.slots += 1;
+      if (!pick) { g.missing += 1; return; }
+      used[pick.player.player_key] = 1;
+      g.starters.push(pick);
+      g.points += pick.rating.value || 0;
+      if (pick.rating.value === null) g.missing += 1;
+    }
+    slots.forEach(function (s) { if (!FLEX[s] && groups[s]) fill(s, function (p) { return eligible(p, s); }); });
+    slots.forEach(function (s) {
+      if (FLEX[s]) fill('FLEX', function (p) { return FLEX[s].some(function (pos) { return eligible(p, pos); }); });
+    });
+    var bench = pool.filter(function (x) { return !used[x.player.player_key]; });
+    var total = GROUPS.reduce(function (t, g) { return t + groups[g].points; }, 0);
+    return { groups: groups, bench: bench, out: out, total: total };
+  }
+
+  // Every team's report, compared with the league average at each group.
+  // A group is "strong" or "weak" when it's at least 12% (and 1.5 points)
+  // away from the average.
+  function scouting(teams, slots, rate) {
+    var reports = teams.map(function (t) {
+      return { team_key: t.team_key, manager: t.manager, report: teamReport(t.players || [], slots, rate) };
+    });
+    var groups = GROUPS.filter(function (g) { return reports.length && reports[0].report.groups[g].slots > 0; });
+    var avg = {};
+    groups.forEach(function (g) {
+      avg[g] = reports.reduce(function (t, r) { return t + r.report.groups[g].points; }, 0) / (reports.length || 1);
+    });
+    reports.forEach(function (r) {
+      r.cells = {};
+      groups.forEach(function (g) {
+        var pts = r.report.groups[g].points, diff = pts - avg[g], band = Math.max(1.5, 0.12 * avg[g]);
+        var rank = 1 + reports.filter(function (o) { return o.report.groups[g].points > pts; }).length;
+        r.cells[g] = { points: pts, diff: diff, rank: rank, label: diff >= band ? 'strong' : diff <= -band ? 'weak' : 'average',
+                       missing: r.report.groups[g].missing };
+      });
+      r.strengths = groups.filter(function (g) { return r.cells[g].label === 'strong'; })
+        .sort(function (a, b) { return r.cells[b].diff - r.cells[a].diff; });
+      r.weaknesses = groups.filter(function (g) { return r.cells[g].label === 'weak'; })
+        .sort(function (a, b) { return r.cells[a].diff - r.cells[b].diff; });
+    });
+    return { groups: groups, avg: avg, teams: reports, count: reports.length };
+  }
+
+  // ---------- trade partners ----------
+  // Positions a trade could fix (flex, kicker and defense aren't matched on).
+  var TRADE_GROUPS = ['QB', 'RB', 'WR', 'TE'];
+  function playersAt(report, group) {
+    var all = [];
+    Object.keys(report.groups).forEach(function (g) {
+      report.groups[g].starters.forEach(function (x) { all.push({ player: x.player, rating: x.rating, role: 'starter' }); });
+    });
+    report.bench.forEach(function (x) { all.push({ player: x.player, rating: x.rating, role: 'bench' }); });
+    return all.filter(function (x) { return x.player.position === group; })
+      .sort(function (a, b) { return (b.rating.value || 0) - (a.rating.value || 0); });
+  }
+  // Teams that are strong where `teamKey` is weak, and weak where it's
+  // strong (a two-way fit ranks first). Players are suggestions to ask
+  // about - only the ones on the block are marked as listed.
+  function tradeFits(scout, teamKey, listings) {
+    var me = scout.teams.filter(function (t) { return t.team_key === teamKey; })[0];
+    if (!me) return { team: null, fits: [] };
+    var listed = {};
+    (listings || []).forEach(function (l) { listed[l.player_key] = l; });
+    var fits = [];
+    scout.teams.forEach(function (o) {
+      if (o.team_key === teamKey) return;
+      var gets = [], gives = [];
+      TRADE_GROUPS.forEach(function (g) {
+        if (!me.cells[g] || !o.cells[g]) return;
+        if (me.cells[g].label === 'weak' && o.cells[g].diff > 0) gets.push({ group: g, need: -me.cells[g].diff, surplus: o.cells[g].diff });
+        if (me.cells[g].label === 'strong' && o.cells[g].diff < 0) gives.push({ group: g, need: -o.cells[g].diff, surplus: me.cells[g].diff });
+      });
+      var theirListed = (listings || []).filter(function (l) {
+        return l.team_key === o.team_key && gets.some(function (x) { return x.group === l.position; });
+      });
+      if (!gets.length && !gives.length) return;
+      var score = gets.concat(gives).reduce(function (t, x) { return t + Math.min(x.need, x.surplus); }, 0) + theirListed.length;
+      function offer(report, list, team) {
+        var out = [];
+        list.forEach(function (x) {
+          playersAt(report, x.group).slice(0, 3).forEach(function (c) {
+            out.push({ player: c.player, rating: c.rating, role: c.role, group: x.group, listed: !!listed[c.player.player_key] && listed[c.player.player_key].team_key === team });
+          });
+        });
+        // Listed players first, then bench (spare) players, then by rating.
+        return out.sort(function (a, b) { return (b.listed - a.listed) || ((a.role === 'bench') ? -1 : 0) - ((b.role === 'bench') ? -1 : 0) || (b.rating.value || 0) - (a.rating.value || 0); });
+      }
+      fits.push({ team_key: o.team_key, manager: o.manager, mutual: gets.length > 0 && gives.length > 0, score: score,
+                  gets: gets, gives: gives, theyOffer: offer(o.report, gets, o.team_key), youOffer: offer(me.report, gives, teamKey) });
+    });
+    fits.sort(function (a, b) { return (b.mutual - a.mutual) || (b.score - a.score) || a.manager.localeCompare(b.manager); });
+    return { team: me, fits: fits };
+  }
+
+  // ---------- fairness ----------
+  // Compares what each side receives, by rating (points per week). Within
+  // 10% is fair; up to 25% leans one way; beyond that it's lopsided.
+  function fairness(aGives, bGives) {
+    function sum(list) {
+      return list.reduce(function (t, x) { return t + (x.value === null || x.value === undefined ? 0 : x.value); }, 0);
+    }
+    var a = sum(aGives), b = sum(bGives), top = Math.max(a, b);
+    var diff = b - a;  // positive: side A receives more (A gets B's players)
+    var pct = top > 0 ? Math.abs(diff) / top : 0;
+    var verdict = pct < 0.10 ? 'fair' : pct < 0.25 ? 'leans' : 'lopsided';
+    var missing = aGives.concat(bGives).filter(function (x) { return x.value === null || x.value === undefined; }).length;
+    var thin = aGives.concat(bGives).filter(function (x) { return x.value !== null && x.value !== undefined && x.games < 3; }).length;
+    return { aReceives: b, bReceives: a, diff: diff, pct: pct, verdict: verdict, favors: pct < 0.10 ? null : diff > 0 ? 'A' : 'B',
+             missing: missing, thin: thin, uneven: aGives.length !== bGives.length };
+  }
+
   // ---------- time ----------
   function ago(epochSeconds, now) {
     if (!epochSeconds) return 'never';
@@ -130,6 +291,8 @@
 
   root.TradeLogic = {
     STATUS_LABEL: STATUS_LABEL, filterListings: filterListings, needs: needs, matchmaker: matchmaker,
-    playerWeeks: playerWeeks, playerStats: playerStats, sideTotals: sideTotals, ago: ago
+    playerWeeks: playerWeeks, playerStats: playerStats, sideTotals: sideTotals, ago: ago,
+    playerRating: playerRating, slotsFromBox: slotsFromBox, teamReport: teamReport, scouting: scouting,
+    tradeFits: tradeFits, fairness: fairness, GROUPS: GROUPS, PRIOR_WEEKS: PRIOR_WEEKS
   };
 })(typeof window !== 'undefined' ? window : globalThis);

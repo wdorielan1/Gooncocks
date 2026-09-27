@@ -61,6 +61,7 @@ MAX_ITEMS = 25
 STATUSES = ("available", "listening")
 SCOPE = "fspt-r"            # Fantasy Sports read - all Trade Lab needs from Yahoo
 DEFAULT_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"]
+NOT_STARTING = {"BN", "IR", "IR+", "NA"}  # roster spots that aren't in the weekly lineup
 NOT_TRADABLE = {"BN", "IR", "IR+", "NA", "W/R/T", "W/R", "W/T", "Q/W/R/T", "D", "DB", "DL", "LB"}
 YAHOO_DOWN = ("We couldn't confirm rosters with Yahoo right now, so nothing was changed. "
               "Your listings are safe - try again in a minute.")
@@ -204,10 +205,14 @@ class TradeLab:
         try:
             teams = self.yahoo.league_teams(self.league)
             try:
-                positions = [p for p in self.yahoo.positions(self.league) if p not in NOT_TRADABLE]
+                raw = self.yahoo.positions(self.league)
             except Exception:
-                positions = []
-            data = {"teams": teams, "positions": positions or DEFAULT_POSITIONS, "fetched_at": self.now()}
+                raw = []
+            positions = [p for p in raw if p not in NOT_TRADABLE]
+            # The weekly starting lineup, one entry per slot (e.g. WR three
+            # times, W/R/T once) - what the Scouting Report fills.
+            slots = [p for p in raw if p not in NOT_STARTING]
+            data = {"teams": teams, "positions": positions or DEFAULT_POSITIONS, "slots": slots, "fetched_at": self.now()}
             self.store.put(f"META#{self.league}", "league", data, 1)
             return data
         except Exception:
@@ -238,7 +243,8 @@ class TradeLab:
             raise YahooUnavailable()
         data = {"team_key": team_key, "fetched_at": self.now(), "players": [
             {"player_key": p["player_key"], "name": p.get("name") or "", "position": primary_position(p),
-             "positions": p.get("eligible") or [], "nfl_team": p.get("nfl_team") or "", "headshot": p.get("headshot") or ""}
+             "positions": p.get("eligible") or [], "nfl_team": p.get("nfl_team") or "", "headshot": p.get("headshot") or "",
+             "slot": p.get("slot") or ""}
             for p in players if p.get("player_key")]}
         self.store.put(self._rk(), team_key, data, 1)
         self._archive_gone(team_key, {p["player_key"] for p in data["players"]})
@@ -404,9 +410,13 @@ class TradeLab:
             names = self.team_names()
         except YahooUnavailable:
             return _json(503, {"error": "yahoo_unavailable", "message": "Rosters aren't available from Yahoo right now."})
+        try:
+            slots = self.league_info().get("slots") or []
+        except YahooUnavailable:
+            slots = []
         return _json(200, {"teams": [{"team_key": k, "manager": names.get(k, k), "players": r["players"]}
                                      for k, r in rosters.items()],
-                           "rosters_checked_at": refreshed, "rosters_stale": stale})
+                           "slots": slots, "rosters_checked_at": refreshed, "rosters_stale": stale})
 
     def my_roster(self, event, cookies):
         sess = self.session(cookies)

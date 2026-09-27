@@ -197,6 +197,10 @@ check("league list unavailable during sign-in: no session, a clear reason",
 gapp.yahoo.down = False
 listing_json = json.dumps(body(gapp.handle(event("GET", "/listings")))) + json.dumps(body(gapp.handle(event("GET", "/rosters"))))
 check("managers' Yahoo account IDs are never sent to the browser", "guid-" not in listing_json)
+ros = body(gapp.handle(event("GET", "/rosters")))
+check("rosters include the weekly lineup slots, without bench or IR",
+      ros["slots"] == ["QB", "WR", "WR", "RB", "RB", "TE", "W/R/T", "K", "DEF"], ros.get("slots"))
+check("each rostered player carries their lineup slot", all("slot" in p for t in ros["teams"] for p in t["players"]))
 
 # ---------------------------------------------------------------- signed-out and outsiders
 r = save(app, {}, "", [{"player_key": "470.p.1", "status": "available", "wants": ["RB"]}])

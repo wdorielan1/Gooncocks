@@ -63,7 +63,7 @@
   PreviewApi.prototype.rosters = function () {
     var s = this.s;
     return later({ teams: s.teams.map(function (t) { return { team_key: t.team_key, manager: t.manager, players: s.rosters[t.team_key] || [] }; }),
-                   rosters_checked_at: s.now - 240 });
+                   slots: s.slots || [], rosters_checked_at: s.now - 240 });
   };
   PreviewApi.prototype.myRoster = function () {
     var s = this.s;
@@ -98,7 +98,7 @@
   PreviewApi.prototype.signInUrl = function () { return null; };
   PreviewApi.prototype.signIn = function () { this.signedIn = true; };
   PreviewApi.prototype.signOut = function () { this.signedIn = false; return later({ signed_in: false }); };
-  PreviewApi.prototype.boxscores = function () { return later(this.s.boxscores); };
+  PreviewApi.prototype.boxscores = function (season) { return later((this.s.boxscores || {})[season] || null); };
 
   window.TradeApi = window.TRADE_LAB_PREVIEW && window.TRADE_LAB_SAMPLE ? new PreviewApi(window.TRADE_LAB_SAMPLE) : new LiveApi();
   window.TradeApi.preview = !!(window.TRADE_LAB_PREVIEW && window.TRADE_LAB_SAMPLE);

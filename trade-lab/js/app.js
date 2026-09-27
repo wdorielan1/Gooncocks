@@ -21,7 +21,7 @@
     data: null, dataError: null,
     mine: null, mineError: null, mineLoading: false,
     selected: [], draft: null, dirty: false, busy: null, msg: null, confirmRemove: false,
-    rosters: null, rostersError: null, box: null, boxSeason: null, weeks: null,
+    league: null, leagueLoad: null, leagueError: null, matchTeam: null, calcReady: false, calcPreset: null,
     picks: { A: [], B: [] }
   };
 
@@ -88,7 +88,7 @@
   }
 
   // ---------- tabs ----------
-  var TABS = ['block', 'match', 'calc'];
+  var TABS = ['block', 'scout', 'match', 'calc'];
   function showTab(name, focus) {
     TABS.forEach(function (t) {
       var on = t === name, b = $('tab-' + t);
@@ -97,6 +97,7 @@
       $('panel-' + t).hidden = !on;
       if (on && focus) b.focus();
     });
+    if (name === 'scout') renderScout();
     if (name === 'match') renderMatch();
     if (name === 'calc') loadCalc();
   }
@@ -189,6 +190,7 @@
       fillSelect($('fPos'), 'All positions', (d.positions || []).map(function (p) { return [p, p]; }));
       fillSelect($('fTeam'), 'All managers', teams().map(function (t) { return [t.team_key, t.manager]; }));
       renderChecked(); renderBlock(); renderNeeds();
+      loadLeague().then(function () { renderBlock(); }, function () { /* the other tabs show the error */ });
       if (!$('panel-match').hidden) renderMatch();
     }, function (e) {
       S.dataError = e.message;
@@ -227,7 +229,7 @@
       h('div', { class: 'col-name' }, [
         h('h3', { class: 'pname', text: l.name }),
         h('div', { class: 'pmeta' }, [posBadge(l.position), l.nfl_team ? h('span', { class: 'nfl', text: l.nfl_team }) : null,
-          own ? h('span', { class: 'mine-tag', text: 'Your Listing' }) : null])
+          ratingTag(l), own ? h('span', { class: 'mine-tag', text: 'Your Listing' }) : null])
       ]),
       h('div', { class: 'col-info' }, [
         h('div', { class: 'col' }, [h('small', { text: 'Manager' }), h('b', { text: l.manager })]),
@@ -239,12 +241,20 @@
         h('span', { class: 'upd', text: 'Updated ' + L.ago(l.updated_at, now()) }),
         h('div', { class: 'row' }, [
           own ? h('button', { type: 'button', class: 'btn gold small', text: 'Edit', 'aria-label': 'Edit your listing: ' + l.name,
-            onclick: function (e) { editPlayers([l.player_key], e.currentTarget); } }) : null,
+            onclick: function (e) { editPlayers([l.player_key], e.currentTarget); } })
+            : h('button', { type: 'button', class: 'btn ghost small', text: 'Compare', 'aria-label': 'Compare ' + l.name + ' in the trade calculator',
+              onclick: function () { openCalc(myKey(), [], l.team_key, [l.player_key]); } }),
           h('button', { type: 'button', class: 'btn ghost small', text: 'View listing', 'aria-label': 'View listing: ' + l.name,
             onclick: function (e) { openDetail(l.player_key, e.currentTarget); } })
         ])
       ])
     ]);
+  }
+  // "12.4 pts/wk" once rosters and scores have loaded (see the Scouting Report).
+  function ratingTag(p) {
+    if (!S.league) return null;
+    var r = S.league.rate(p);
+    return r.value === null ? null : h('span', { class: 'rate', title: 'Rating: points per week (see Scouting for how it’s worked out)', text: fmt(r.value) + ' pts/wk' });
   }
   function renderNeeds() {
     var t = clear($('needs')), rows = L.needs(listingsAll(), teams());
@@ -295,8 +305,9 @@
     ]));
     body.appendChild(h('p', { class: 'fine', text: own ? 'This is your listing. Edit it from Your Trading Block.'
       : 'Interested? Message ' + l.manager + ' in the league chat. Trade Lab never proposes or makes trades.' }));
-    if (own) body.appendChild(h('div', { class: 'form-actions', style: 'margin-top:14px' }, [
-      h('button', { type: 'button', class: 'btn gold', text: 'Edit listing', onclick: function () { closeDetail(); editPlayers([l.player_key], opener); } })
+    body.appendChild(h('div', { class: 'form-actions', style: 'margin-top:14px' }, [own
+      ? h('button', { type: 'button', class: 'btn gold', text: 'Edit listing', onclick: function () { closeDetail(); editPlayers([l.player_key], opener); } })
+      : h('button', { type: 'button', class: 'btn gold', text: 'Compare in calculator', onclick: function () { closeDetail(); openCalc(myKey(), [], l.team_key, [l.player_key]); } })
     ]));
     lastFocus = opener || document.activeElement;
     $('detail').hidden = false;
@@ -576,82 +587,228 @@
     back.focus();
   }
 
-  // ---------- matchmaker ----------
-  function renderMatch() {
-    var sel = $('mTeam'), list = clear($('matches')), st = $('matchState');
-    st.className = 'state';
-    if (!S.data) { st.textContent = S.dataError ? 'Couldn’t load listings. ' + S.dataError : 'Loading listings…'; return; }
-    var ts = teams(), keep = sel.value || myKey() || '';
-    if (!ts.some(function (t) { return t.team_key === keep; })) {
-      var withListings = ts.filter(function (t) { return listingsAll().some(function (l) { return l.team_key === t.team_key && l.wants.length; }); })[0];
-      keep = (withListings || ts[0] || {}).team_key || '';
-    }
+  // ---------- league data: rosters + scores, shared by Scouting, Matchmaker and the Calculator ----------
+  function season() { var d = new Date(); return d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear(); }
+  var GROUP_NAME = { QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', FLEX: 'Flex', K: 'K', DEF: 'DEF' };
+  function loadLeague() {
+    if (S.leagueLoad) return S.leagueLoad;
+    var yr = season();
+    S.leagueLoad = Promise.all([api.rosters(), api.boxscores(yr), api.boxscores(yr - 1)]).then(function (res) {
+      var ro = res[0], cur = res[1] || { games: {} }, prev = res[2] || { games: {} };
+      var cw = L.playerWeeks(cur), pw = L.playerWeeks(prev), cache = {};
+      function rate(p) {
+        var k = p.name + '|' + p.position;
+        return cache[k] || (cache[k] = L.playerRating(cw, pw, p));
+      }
+      var slots = (ro.slots && ro.slots.length) ? ro.slots : L.slotsFromBox(Object.keys(cur.games).length ? cur : prev);
+      S.league = { rosters: ro, slots: slots, cur: cur, prev: prev, yr: yr, rate: rate,
+                   weeksPlayed: weeksIn(cur), scout: L.scouting(ro.teams, slots, rate) };
+      S.leagueError = null;
+      return S.league;
+    }, function (e) {
+      S.leagueLoad = null;
+      S.leagueError = e.status === 503 ? 'Rosters aren’t available from Yahoo right now.' : 'Couldn’t load rosters and scores. ' + e.message;
+      throw e;
+    });
+    return S.leagueLoad;
+  }
+  function weeksIn(box) {
+    var w = [];
+    Object.keys((box && box.games) || {}).forEach(function (id) { var m = /-w(\d+)-/.exec(id); if (m && w.indexOf(+m[1]) < 0) w.push(+m[1]); });
+    return w.sort(function (a, b) { return a - b; });
+  }
+  function withLeague(stateEl, render) {
+    var st = $(stateEl);
+    if (S.league) { st.textContent = ''; return render(S.league); }
+    st.className = 'state'; st.textContent = 'Loading rosters and scores…';
+    loadLeague().then(function (lg) { st.textContent = ''; render(lg); }, function () {
+      clear(st).className = 'state err';
+      st.appendChild(document.createTextNode(S.leagueError + ' '));
+      st.appendChild(h('button', { type: 'button', class: 'linkbtn', text: 'Try again', onclick: function () { withLeague(stateEl, render); } }));
+    });
+  }
+  function signed(n) { return (n >= 0 ? '+' : '−') + fmt(Math.abs(n)); }
+  function ordinal(n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+  function methodNote(lg) {
+    var w = lg.weeksPlayed;
+    return 'Ratings are points per week in Yahoo league scoring from this site’s box scores' +
+      (w.length ? ' (' + lg.yr + ' weeks ' + w[0] + (w.length > 1 ? '–' + w[w.length - 1] : '') + ')' : ' (no ' + lg.yr + ' weeks yet)') +
+      ', with last season’s average counting as ' + L.PRIOR_WEEKS + ' extra weeks. Each team is scored by its best lineup from its current Yahoo roster; injured-reserve players don’t count. No projections.';
+  }
+  function teamSelect(sel, keep) {
+    var ts = S.league.rosters.teams;
+    if (!ts.some(function (t) { return t.team_key === keep; })) keep = ts.some(function (t) { return t.team_key === myKey(); }) ? myKey() : (ts[0] || {}).team_key;
     clear(sel);
     ts.forEach(function (t) { sel.appendChild(h('option', { value: t.team_key, text: t.manager + (t.team_key === myKey() ? ' (you)' : '') })); });
     sel.value = keep;
-    var who = keep === myKey() ? 'You' : managerName(keep) || 'This manager';
-    var r = L.matchmaker(listingsAll(), keep);
-    if (!r.listed) {
-      st.textContent = who + (who === 'You' ? ' haven’t' : ' hasn’t') + ' listed anyone yet. Matches come from the positions a manager says they’re looking for on their listings' +
-        (who === 'You' ? ', so list a player and pick what you want back.' : '.');
-      return;
-    }
-    if (!r.wants.length) {
-      st.textContent = who + (who === 'You' ? ' haven’t' : ' hasn’t') + ' said what positions ' + (who === 'You' ? 'you’re' : 'they’re') + ' looking for, so there’s nothing to match on yet.';
-      return;
-    }
-    if (!r.matches.length) {
-      st.textContent = 'No one has listed a ' + r.wants.join(' or ') + ' yet. Check back as the block fills up.';
-      return;
-    }
-    var text = function (s) { return who === 'You' ? s : s.replace(/^You’re looking for/, who + ' is looking for').replace(/which you have listed/, 'which ' + who + ' has listed').replace(/you haven’t listed/, who + ' hasn’t listed'); };
-    r.matches.forEach(function (m) {
-      list.appendChild(h('li', { class: 'match' + (m.mutual ? ' mutual' : '') }, [
-        h('div', { class: 'match-head' }, [h('h3', { text: m.manager }),
-          h('span', { class: 'badge' + (m.mutual ? '' : ' one'), text: m.mutual ? 'Mutual match' : 'One-way' })]),
-        h('p', { text: text(m.text) }),
-        h('div', { class: 'links' }, m.get.concat(m.give).map(function (l) {
-          return h('button', { type: 'button', class: 'linkbtn', text: 'View ' + l.name, onclick: function (e) { openDetail(l.player_key, e.currentTarget); } });
+    return keep;
+  }
+  function you(teamKey, name) { return teamKey === myKey() ? 'You' : name; }
+
+  // ---------- scouting ----------
+  function renderScout() {
+    withLeague('scoutState', function (lg) {
+      var key = teamSelect($('sTeam'), $('sTeam').value), sc = lg.scout;
+      var t = sc.teams.filter(function (x) { return x.team_key === key; })[0];
+      var box = clear($('scoutReport'));
+      if (!t) return;
+      var who = you(key, t.manager);
+      function list(gs) { return gs.map(function (g) { return GROUP_NAME[g] + ' (' + signed(t.cells[g].diff) + ')'; }).join(', '); }
+      box.appendChild(h('p', { class: 'scout-sum' }, [
+        h('b', { text: who === 'You' ? 'Your team' : t.manager }), ' · ',
+        t.strengths.length ? 'Strong at ' + list(t.strengths) + '. ' : 'No position well above the league average. ',
+        t.weaknesses.length ? 'Weak at ' + list(t.weaknesses) + '.' : 'No position well below the league average.'
+      ]));
+      var maxAbs = Math.max.apply(null, sc.groups.map(function (g) { return Math.max.apply(null, sc.teams.map(function (x) { return Math.abs(x.cells[g].diff); })); }).concat([1]));
+      box.appendChild(h('table', { class: 'scout' }, [
+        h('caption', { class: 'sr-only', text: (who === 'You' ? 'Your' : t.manager + '’s') + ' starting lineup by position, points per week compared with the league average' }),
+        h('thead', {}, [h('tr', {}, ['Position', 'Pts/wk', 'vs league avg', 'Rank', 'Starters'].map(function (x) { return h('th', { scope: 'col', text: x }); }))]),
+        h('tbody', {}, sc.groups.map(function (g) {
+          var c = t.cells[g], grp = t.report.groups[g], pct = Math.min(50, Math.abs(c.diff) / maxAbs * 50);
+          return h('tr', { class: 'lbl-' + c.label }, [
+            h('th', { scope: 'row' }, [posBadge(GROUP_NAME[g])]),
+            h('td', { class: 'num', text: fmt(c.points) }),
+            h('td', { class: 'dv-cell' }, [
+              h('span', { class: 'dv', title: GROUP_NAME[g] + ': ' + signed(c.diff) + ' pts/wk vs the league average of ' + fmt(sc.avg[g]) }, [
+                h('span', { class: 'dv-bar ' + (c.diff >= 0 ? 'up' : 'down'), style: (c.diff >= 0 ? 'left:50%;' : 'right:50%;') + 'width:' + pct.toFixed(1) + '%' })
+              ]),
+              h('span', { class: 'dv-txt' }, [h('b', { text: signed(c.diff) }), ' ', h('span', { class: 'tagw ' + c.label, text: c.label === 'average' ? 'Average' : c.label === 'strong' ? 'Strong' : 'Weak' })])
+            ]),
+            h('td', { text: ordinal(c.rank) + ' of ' + sc.count }),
+            h('td', { class: 'starters' }, grp.starters.length ? grp.starters.map(function (x) {
+              return h('span', { class: 'st-p' }, [x.player.name + ' ', h('small', { text: x.rating.value === null ? 'no scores' : fmt(x.rating.value) })]);
+            }) : [h('small', { text: 'Nobody to start' })])
+          ]);
         }))
       ]));
+      box.appendChild(h('p', { class: 'fine starters-m', text: 'Starters: ' + sc.groups.map(function (g) {
+        return GROUP_NAME[g] + ' ' + (t.report.groups[g].starters.map(function (x) { return x.player.name; }).join(', ') || '—');
+      }).join(' · ') + '.' }));
+      var bench = t.report.bench.filter(function (x) { return x.rating.value !== null; }).slice(0, 6);
+      if (bench.length) box.appendChild(h('p', { class: 'fine' }, ['Best bench depth: ' + bench.map(function (x) { return x.player.name + ' (' + x.player.position + ', ' + fmt(x.rating.value) + ')'; }).join(', ') + '.']));
+      if (t.report.out.length) box.appendChild(h('p', { class: 'fine', text: 'On injured reserve (not counted): ' + t.report.out.map(function (x) { return x.player.name; }).join(', ') + '.' }));
+      box.appendChild(h('div', { class: 'scout-act' }, [
+        h('button', { type: 'button', class: 'btn gold small', text: 'Find trade partners', onclick: function () { $('mTeam').value = key; S.matchTeam = key; showTab('match'); } })
+      ]));
+
+      // league grid: every team at every position
+      var grid = clear($('scoutGrid'));
+      grid.appendChild(h('caption', { class: 'sr-only', text: 'Every team’s points per week above or below the league average, by position' }));
+      grid.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', text: 'Manager' })].concat(sc.groups.map(function (g) { return h('th', { scope: 'col', text: GROUP_NAME[g] }); })))]));
+      grid.appendChild(h('tbody', {}, sc.teams.slice().sort(function (a, b) { return b.report.total - a.report.total; }).map(function (x) {
+        return h('tr', { class: x.team_key === key ? 'on' : '' }, [
+          h('th', { scope: 'row' }, [h('button', { type: 'button', class: 'linkbtn', text: x.manager + (x.team_key === myKey() ? ' (you)' : ''),
+            onclick: function () { $('sTeam').value = x.team_key; renderScout(); $('scoutReport').scrollIntoView({ block: 'nearest' }); } })])
+        ].concat(sc.groups.map(function (g) {
+          var c = x.cells[g], lvl = Math.min(3, Math.ceil(Math.abs(c.diff) / (maxAbs / 3 || 1)));
+          return h('td', { class: 'hm ' + c.label + (c.label === 'average' ? '' : ' l' + lvl),
+            title: x.manager + ' at ' + GROUP_NAME[g] + ': ' + fmt(c.points) + ' pts/wk, ' + ordinal(c.rank) + ' of ' + sc.count + ', league average ' + fmt(sc.avg[g]) },
+            [h('span', { text: signed(c.diff) }), c.label === 'average' ? null : h('small', { text: c.label === 'strong' ? 'Strong' : 'Weak' })]);
+        })));
+      })));
+      $('scoutNote').textContent = methodNote(lg) + ' Strong or weak means at least 12% (and 1.5 points) away from the league average.';
+    });
+  }
+
+  // ---------- matchmaker ----------
+  function renderMatch() {
+    withLeague('matchState', function (lg) {
+      var key = teamSelect($('mTeam'), S.matchTeam || $('mTeam').value), list = clear($('matches'));
+      S.matchTeam = key;
+      var r = L.tradeFits(lg.scout, key, listingsAll()), me = r.team;
+      var who = you(key, me ? me.manager : '');
+      var st = $('matchState');
+      if (!me) return;
+      if (!me.weaknesses.filter(function (g) { return ['QB', 'RB', 'WR', 'TE'].indexOf(g) >= 0; }).length && !me.strengths.length) {
+        st.textContent = (who === 'You' ? 'Your team is' : me.manager + '’s team is') + ' close to the league average everywhere, so there’s no clear trade fit right now.';
+      } else if (!r.fits.length) {
+        st.textContent = 'No team lines up yet: nobody is strong where ' + (who === 'You' ? 'you’re' : me.manager + ' is') + ' weak, or weak where ' + (who === 'You' ? 'you’re' : 'they’re') + ' strong.';
+      }
+      r.fits.forEach(function (f) {
+        var bits = f.gets.map(function (x) {
+          return f.manager + ' is ' + signed(x.surplus) + ' at ' + x.group + ', where ' + (who === 'You' ? 'you’re ' : who + ' is ') + signed(-x.need) + '.';
+        }).concat(f.gives.map(function (x) {
+          return (who === 'You' ? 'You’re ' : who + ' is ') + signed(x.surplus) + ' at ' + x.group + ', where ' + f.manager + ' is ' + signed(-x.need) + '.';
+        }));
+        function chips(listx, label) {
+          if (!listx.length) return null;
+          return h('div', { class: 'offer' }, [h('small', { text: label })].concat(listx.slice(0, 4).map(function (o) {
+            return h('span', { class: 'chip' + (o.listed ? ' listed' : '') }, [posBadge(o.player.position), ' ' + o.player.name + ' ',
+              h('small', { text: (o.rating.value === null ? '—' : fmt(o.rating.value)) + ' · ' + (o.listed ? 'On the block' : o.role === 'bench' ? 'Bench' : 'Starter') })]);
+          })));
+        }
+        var giveKey = (f.youOffer[0] || {}).player, getKey = (f.theyOffer[0] || {}).player;
+        list.appendChild(h('li', { class: 'match' + (f.mutual ? ' mutual' : '') }, [
+          h('div', { class: 'match-head' }, [h('h3', { text: f.manager }),
+            h('span', { class: 'badge' + (f.mutual ? '' : ' one'), text: f.mutual ? 'Two-way fit' : 'One-way fit' })]),
+          h('p', { text: bits.join(' ') }),
+          chips(f.theyOffer, f.manager + ' could offer'),
+          chips(f.youOffer, (who === 'You' ? 'You' : who) + ' could offer'),
+          h('div', { class: 'links' }, [
+            h('button', { type: 'button', class: 'btn ghost small', text: 'Compare in calculator', onclick: function () {
+              openCalc(key, giveKey ? [giveKey.player_key] : [], f.team_key, getKey ? [getKey.player_key] : []);
+            } })
+          ])
+        ]));
+      });
+      $('matchNote').textContent = 'Only players marked “On the block” have been listed; everyone else is a suggestion to ask about. ' + methodNote(lg);
+      // Matches from what managers typed on their listings.
+      var old = L.matchmaker(listingsAll(), key), lm = clear($('listMatches'));
+      $('listMatchWrap').hidden = !old.matches.length;
+      old.matches.forEach(function (m) {
+        var text = who === 'You' ? m.text : m.text.replace(/^You’re looking for/, who + ' is looking for').replace(/which you have listed/, 'which ' + who + ' has listed').replace(/you haven’t listed/, who + ' hasn’t listed');
+        lm.appendChild(h('li', { class: 'match' + (m.mutual ? ' mutual' : '') }, [
+          h('div', { class: 'match-head' }, [h('h3', { text: m.manager }), h('span', { class: 'badge' + (m.mutual ? '' : ' one'), text: m.mutual ? 'Mutual match' : 'One-way' })]),
+          h('p', { text: text }),
+          h('div', { class: 'links' }, m.get.concat(m.give).map(function (l) {
+            return h('button', { type: 'button', class: 'linkbtn', text: 'View ' + l.name, onclick: function (e) { openDetail(l.player_key, e.currentTarget); } });
+          }))
+        ]));
+      });
     });
   }
 
   // ---------- trade calculator ----------
-  function season() { var d = new Date(); return d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear(); }
   function loadCalc() {
-    var st = $('calcState');
-    if (S.rosters && S.weeks) return renderCalc();
-    st.className = 'state'; st.textContent = 'Loading rosters and this season’s scores…';
-    var yr = season();
-    var box = S.box ? Promise.resolve(S.box) : api.boxscores(yr).then(function (b) {
-      if (b && b.games && Object.keys(b.games).length) { S.boxSeason = yr; return b; }
-      return api.boxscores(yr - 1).then(function (p) { S.boxSeason = yr - 1; return p; });
-    });
-    Promise.all([S.rosters ? Promise.resolve(S.rosters) : api.rosters(), box]).then(function (res) {
-      S.rosters = res[0]; S.box = res[1] || { games: {} };
-      S.weeks = L.playerWeeks(S.box);
-      setupCalcTeams(); renderCalc();
-    }, function (e) {
-      clear(st).className = 'state err';
-      st.appendChild(document.createTextNode((e.status === 503 ? 'Rosters aren’t available from Yahoo right now.' : 'Couldn’t load the calculator. ' + e.message) + ' '));
-      st.appendChild(h('button', { type: 'button', class: 'linkbtn', text: 'Try again', onclick: loadCalc }));
+    withLeague('calcState', function () {
+      if (!S.calcReady) setupCalcTeams();
+      renderCalc();
     });
   }
   function setupCalcTeams() {
-    var ts = S.rosters.teams, a = $('cTeamA'), b = $('cTeamB');
+    var ts = S.league.rosters.teams, a = $('cTeamA'), b = $('cTeamB');
     [a, b].forEach(function (s) { clear(s); ts.forEach(function (t) { s.appendChild(h('option', { value: t.team_key, text: t.manager })); }); });
     var mine = myKey(), first = ts.some(function (t) { return t.team_key === mine; }) ? mine : (ts[0] || {}).team_key;
     a.value = first;
     b.value = (ts.filter(function (t) { return t.team_key !== first; })[0] || {}).team_key || first;
     a.onchange = function () { S.picks.A = []; renderCalc(); };
     b.onchange = function () { S.picks.B = []; renderCalc(); };
+    S.calcReady = true;
   }
-  function rosterOf(teamKey) { var t = S.rosters.teams.filter(function (x) { return x.team_key === teamKey; })[0]; return t ? t.players : []; }
+  // Open the calculator with teams and players already picked.
+  function openCalc(teamA, picksA, teamB, picksB) {
+    S.calcPreset = { a: teamA, pa: picksA, b: teamB, pb: picksB };
+    showTab('calc');
+    $('panel-calc').scrollIntoView({ block: 'start' });
+  }
+  function applyPreset() {
+    var p = S.calcPreset;
+    if (!p) return;
+    S.calcPreset = null;
+    if (p.a) $('cTeamA').value = p.a;
+    if (p.b) $('cTeamB').value = p.b;
+    if ($('cTeamA').value === $('cTeamB').value) {  // e.g. signed out: any other team on side A
+      var other = S.league.rosters.teams.filter(function (t) { return t.team_key !== $('cTeamB').value; })[0];
+      if (other) $('cTeamA').value = other.team_key;
+    }
+    S.picks.A = (p.pa || []).slice(); S.picks.B = (p.pb || []).slice();
+  }
+  function rosterOf(teamKey) { var t = S.league.rosters.teams.filter(function (x) { return x.team_key === teamKey; })[0]; return t ? t.players : []; }
   function renderPicks(side) {
     var box = clear($('picks' + side)), teamKey = $('cTeam' + side).value, players = rosterOf(teamKey), picks = S.picks[side];
     if (!players.length) { box.appendChild(h('p', { class: 'fine', text: 'No players on this roster.' })); return; }
-    players.forEach(function (p) {
+    players.slice().sort(function (a, b) { return (S.league.rate(b).value || 0) - (S.league.rate(a).value || 0); }).forEach(function (p) {
+      var r = S.league.rate(p);
       box.appendChild(h('label', {}, [
         h('input', { type: 'checkbox', checked: picks.indexOf(p.player_key) >= 0, 'data-k': side + ':' + p.player_key, onchange: function (e) {
           var i = picks.indexOf(p.player_key);
@@ -659,67 +816,87 @@
           if (!e.target.checked && i >= 0) picks.splice(i, 1);
           renderCalcOut();
         } }),
-        posBadge(p.position), h('span', { class: 'nm', text: p.name }), p.nfl_team ? h('span', { class: 'nfl', text: p.nfl_team }) : null
+        posBadge(p.position), h('span', { class: 'nm', text: p.name }),
+        h('span', { class: 'nfl', text: r.value === null ? '—' : fmt(r.value) })
       ]));
     });
   }
   function renderCalc() {
-    $('calcState').textContent = '';
+    applyPreset();
     renderPicks('A'); renderPicks('B'); renderCalcOut();
   }
-  function fmt(n) { return n === null || n === undefined ? '—' : (Math.round(n * 10) / 10).toFixed(1); }
+  function fmt(n) { return n === null || n === undefined || isNaN(n) ? '—' : (Math.round(n * 10) / 10).toFixed(1); }
   function renderCalcOut() {
-    var out = clear($('calcOut')), weeks = [];
-    Object.keys(S.box.games || {}).forEach(function (id) { var m = /-w(\d+)-/.exec(id); if (m && weeks.indexOf(+m[1]) < 0) weeks.push(+m[1]); });
-    weeks.sort(function (a, b) { return a - b; });
-    $('calcSource').textContent = weeks.length
-      ? 'Source: ' + S.boxSeason + ' Yahoo league scoring from this site’s weekly box scores, weeks ' + weeks[0] + (weeks.length > 1 ? '–' + weeks[weeks.length - 1] : '') +
-        '. A player only has scores for weeks they were on a league roster.'
-      : 'No scored weeks are available yet, so there’s nothing to compare.';
+    var lg = S.league, out = clear($('calcOut'));
+    $('calcSource').textContent = methodNote(lg);
     var sides = ['A', 'B'].map(function (s) {
-      var players = rosterOf($('cTeam' + s).value);
+      var key = $('cTeam' + s).value, players = rosterOf(key);
       var picked = S.picks[s].map(function (k) { return players.filter(function (p) { return p.player_key === k; })[0]; }).filter(Boolean);
-      var stats = picked.map(function (p) { return L.playerStats(S.weeks, p, 3); });
-      return { side: s, manager: managerOfRoster($('cTeam' + s).value), players: picked, stats: stats, tot: L.sideTotals(stats) };
+      return { side: s, key: key, manager: managerOfRoster(key), players: picked, ratings: picked.map(function (p) { return lg.rate(p); }) };
     });
+    ['A', 'B'].forEach(function (s, i) { $('gives' + s).textContent = sides[i].manager ? sides[i].manager + ' gives' : ''; });
     if (!sides[0].players.length || !sides[1].players.length) {
-      out.appendChild(h('p', { class: 'state', text: 'Pick at least one player on each side to compare what they’ve scored.' }));
+      out.appendChild(h('p', { class: 'state', text: 'Pick at least one player on each side to see how fair the trade is.' }));
       return;
     }
+    if (sides[0].key === sides[1].key) {
+      out.appendChild(h('p', { class: 'state', text: 'Pick two different teams to compare a trade.' }));
+      return;
+    }
+    var f = L.fairness(sides[0].ratings, sides[1].ratings), A = sides[0], B = sides[1];
+    var winner = f.favors === 'A' ? A.manager : f.favors === 'B' ? B.manager : null;
+    var head = f.verdict === 'fair' ? 'Fair trade' : (f.verdict === 'leans' ? 'Leans toward ' : 'Lopsided toward ') + winner;
+    // Marker: 0% = all to A, 100% = all to B; the middle is even.
+    var pos = 50 + Math.max(-45, Math.min(45, (f.diff > 0 ? -1 : 1) * f.pct * 100 * 0.9));
+    out.appendChild(h('div', { class: 'verdict ' + f.verdict }, [
+      h('p', { class: 'v-head', text: head }),
+      h('div', { class: 'gauge', role: 'img', 'aria-label': head + '. ' + A.manager + ' receives ' + fmt(f.aReceives) + ' points per week, ' + B.manager + ' receives ' + fmt(f.bReceives) + '.' }, [
+        h('span', { class: 'g-zone' }), h('span', { class: 'g-mark', style: 'left:' + pos.toFixed(1) + '%' }),
+        h('span', { class: 'g-end l', text: A.manager }), h('span', { class: 'g-end r', text: B.manager })
+      ]),
+      h('p', { text: A.manager + ' receives ' + fmt(f.aReceives) + ' pts/wk and ' + B.manager + ' receives ' + fmt(f.bReceives) + ' pts/wk' +
+        (f.verdict === 'fair' ? ' — within 10%, so it’s even.' : ' — a ' + fmt(Math.abs(f.diff)) + ' pt/wk (' + Math.round(f.pct * 100) + '%) edge to ' + winner + '.') })
+    ]));
+    // How each side's needs are met, from the Scouting Report.
+    var notes = [];
+    [[A, B], [B, A]].forEach(function (pair) {
+      var recv = pair[0], giver = pair[1], rep = lg.scout.teams.filter(function (t) { return t.team_key === recv.key; })[0];
+      giver.players.forEach(function (p) {
+        if (rep && rep.cells[p.position] && rep.cells[p.position].label === 'weak') notes.push('Fills a need: ' + recv.manager + ' is weak at ' + p.position + ' and gets ' + p.name + '.');
+      });
+      recv.players.forEach(function (p) {
+        if (!rep) return;
+        var starter = Object.keys(rep.report.groups).some(function (g) { return rep.report.groups[g].starters.some(function (x) { return x.player.player_key === p.player_key; }); });
+        if (starter && rep.cells[p.position] && rep.cells[p.position].label !== 'strong') notes.push('Watch out: ' + recv.manager + ' gives up a starting ' + p.position + ' (' + p.name + ') without depth to spare there.');
+      });
+    });
+    if (f.uneven) notes.push('Uneven trade (' + A.players.length + ' for ' + B.players.length + '): the side getting more players gets more total points, but only starters score, so check who would actually start.');
+    if (f.missing) notes.push(plural(f.missing, 'player has', 'players have') + ' no scores this season or last, so they count as zero.');
+    if (f.thin) notes.push('Small sample: ' + plural(f.thin, 'player has', 'players have') + ' fewer than 3 weeks this season, so last season carries more weight.');
+    notes.forEach(function (t) { out.appendChild(h('p', { class: 'fine', text: t })); });
+
     var rows = [];
     sides.forEach(function (sd) {
       sd.players.forEach(function (p, i) {
-        var st = sd.stats[i];
+        var r = sd.ratings[i];
         rows.push(h('tr', { class: 'side-' + sd.side.toLowerCase() }, [
           h('td', {}, [p.name + ' ', h('span', { class: 'nfl', text: p.position + (p.nfl_team ? ' · ' + p.nfl_team : '') })]),
-          h('td', { text: st.games ? String(st.games) : '0' }), h('td', { class: 'num', text: st.games ? fmt(st.total) : '—' }),
-          h('td', { class: 'num', text: fmt(st.ppg) }), h('td', { class: 'num', text: fmt(st.recent) })
+          h('td', { text: String(r.games) }), h('td', { class: 'num', text: fmt(r.ppg) }), h('td', { class: 'num', text: fmt(r.recent) }),
+          h('td', { class: 'num', text: fmt(r.lastPpg) }), h('td', { class: 'num strong', text: fmt(r.value) })
         ]));
       });
+      var tot = sd.ratings.reduce(function (t, r) { return t + (r.value || 0); }, 0);
       rows.push(h('tr', { class: 'total side-' + sd.side.toLowerCase() }, [
-        h('td', { text: 'Side ' + sd.side + ' (' + sd.manager + ') combined' }), h('td', { text: String(sd.tot.games) }),
-        h('td', { class: 'num', text: fmt(sd.tot.total) }), h('td', { class: 'num', text: fmt(sd.tot.ppg) }), h('td', { class: 'num', text: fmt(sd.tot.recent) })
+        h('td', { text: sd.manager + ' gives' }), h('td'), h('td'), h('td'), h('td'), h('td', { class: 'num', text: fmt(tot) })
       ]));
     });
-    out.appendChild(h('table', { class: 'cmp' }, [
-      h('caption', { class: 'sr-only', text: 'Points scored by the players on each side' }),
-      h('thead', {}, [h('tr', {}, ['Player', 'Weeks', 'Total', 'Per week', 'Last 3 avg'].map(function (t) { return h('th', { scope: 'col', text: t }); }))]),
+    out.appendChild(h('div', { class: 'cmp-wrap' }, [h('table', { class: 'cmp' }, [
+      h('caption', { class: 'sr-only', text: 'Each player’s scoring and rating' }),
+      h('thead', {}, [h('tr', {}, ['Player', 'Weeks', 'Per week', 'Last 3', 'Last season', 'Rating'].map(function (t) { return h('th', { scope: 'col', text: t }); }))]),
       h('tbody', {}, rows)
-    ]));
-    var a = sides[0].tot, b = sides[1].tot, notes = [];
-    if (a.games && b.games) {
-      var diff = a.ppg - b.ppg;
-      notes.push(Math.abs(diff) < 0.05 ? 'Both sides have averaged the same combined points per week.'
-        : 'Side ' + (diff > 0 ? 'A' : 'B') + '’s players have averaged ' + fmt(Math.abs(diff)) + ' more combined points per week so far.');
-    }
-    sides.forEach(function (sd) {
-      if (sd.tot.missing) notes.push('Side ' + sd.side + ': ' + plural(sd.tot.missing, 'player has', 'players have') + ' no scored weeks on a league roster yet, so ' + (sd.tot.missing === 1 ? 'isn’t' : 'aren’t') + ' in the totals.');
-    });
-    var small = sides.some(function (sd) { return sd.stats.some(function (s) { return s.games && s.games < 3; }); });
-    if (small) notes.push('Small sample: some players have fewer than 3 scored weeks.');
-    notes.forEach(function (t) { out.appendChild(h('p', { class: 'fine', text: t })); });
+    ])]));
   }
-  function managerOfRoster(teamKey) { var t = S.rosters.teams.filter(function (x) { return x.team_key === teamKey; })[0]; return t ? t.manager : ''; }
+  function managerOfRoster(teamKey) { var t = S.league.rosters.teams.filter(function (x) { return x.team_key === teamKey; })[0]; return t ? t.manager : ''; }
 
   // ---------- wire up ----------
   function init() {
@@ -727,7 +904,8 @@
     showSigninMessage();
     ['q', 'fPos', 'fTeam', 'fStatus', 'fSort'].forEach(function (id) { $(id).addEventListener(id === 'q' ? 'input' : 'change', renderBlock); });
     $('filters').addEventListener('submit', function (e) { e.preventDefault(); });
-    $('mTeam').addEventListener('change', renderMatch);
+    $('mTeam').addEventListener('change', function () { S.matchTeam = $('mTeam').value; renderMatch(); });
+    $('sTeam').addEventListener('change', renderScout);
     $('manageBtn').addEventListener('click', function (e) { openDrawer(e.currentTarget); });
     $('drawerClose').addEventListener('click', closeDrawer);
     $('scrim').addEventListener('click', closeDrawer);
@@ -742,7 +920,7 @@
     window.addEventListener('resize', function () { if (!isDrawer()) closeDrawer(); });
     setInterval(renderChecked, 60000);
     var hash = location.hash.replace('#', '');
-    if (hash === 'matchmaker') showTab('match'); else if (hash === 'calculator') showTab('calc');
+    if (hash === 'scouting') showTab('scout'); else if (hash === 'matchmaker') showTab('match'); else if (hash === 'calculator') showTab('calc');
     loadListings();
     loadMe();
   }

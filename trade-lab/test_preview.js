@@ -176,47 +176,93 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
   await check('tabs work with arrow keys', async () => {
     await page.focus('#tab-block');
     await page.keyboard.press('ArrowRight');
-    assert.strictEqual(await page.getAttribute('#tab-match', 'aria-selected'), 'true');
-    assert.ok(await page.isVisible('#panel-match'));
+    assert.strictEqual(await page.getAttribute('#tab-scout', 'aria-selected'), 'true');
+    assert.ok(await page.isVisible('#panel-scout'));
     assert.ok(await page.isHidden('#panel-block'));
-    assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'tab-match');
+    assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'tab-scout');
     await page.keyboard.press('End');
     assert.ok(await page.isVisible('#panel-calc'));
     await page.keyboard.press('ArrowRight');
     assert.ok(await page.isVisible('#panel-block'));
   });
-  await check('matchmaker shows mutual matches first, from listings only', async () => {
-    await page.click('#tab-match');
-    assert.strictEqual(await page.inputValue('#mTeam'), '470.l.960265.t.1');
-    const m = await page.$$eval('#matches .match', els => els.map(e => [e.querySelector('h3').textContent, e.classList.contains('mutual')]));
-    // Will now wants WR (Goff and Hurts). Chet listed Tee Higgins (WR) and wants RB/WR; Will has no RB/WR listed now.
-    assert.ok(m.length > 0);
-    const firstOneWay = m.findIndex(x => !x[1]);
-    assert.ok(firstOneWay === -1 || m.slice(firstOneWay).every(x => !x[1]));
-    await page.selectOption('#mTeam', '470.l.960265.t.2');
-    const sam = await page.$$eval('#matches .match', els => els.map(e => e.textContent));
-    assert.ok(sam.every(t => !t.includes('You’re looking for')));
+  await check('listing cards show each player’s rating once scores load', async () => {
+    await page.waitForSelector('#cards .rate');
+    const rates = await page.$$eval('#cards .card', cs => cs.map(c => (c.querySelector('.rate') || {}).textContent || ''));
+    assert.ok(rates.every(r => /^\d+\.\d pts\/wk$/.test(r)), rates.join(','));
   });
-  await check('trade calculator compares recorded scores, no projections', async () => {
-    await page.click('#tab-calc');
-    await page.waitForSelector('#picksA label');
+  await check('scouting report: every position vs the league average, in words as well as color', async () => {
+    await page.click('#tab-scout');
+    await page.waitForSelector('#scoutReport table.scout');
+    assert.strictEqual(await page.inputValue('#sTeam'), '470.l.960265.t.1');  // your team first
+    const rows = await page.$$eval('.scout tbody tr', trs => trs.map(t => [t.querySelector('th').textContent, t.querySelector('.dv-txt').textContent]));
+    assert.deepStrictEqual(rows.map(r => r[0]), ['QB', 'RB', 'WR', 'TE', 'Flex', 'K', 'DEF']);
+    assert.ok(rows.every(r => /^[+−]\d+\.\d (Strong|Weak|Average)$/.test(r[1])), JSON.stringify(rows));
+    assert.match(await page.textContent('.scout-sum'), /Your team · Strong at WR .* Weak at RB/);
+    const grid = await page.$$eval('#scoutGrid tbody tr', trs => trs.map(t => [...t.querySelectorAll('td')].map(td => td.textContent)));
+    assert.strictEqual(grid.length, 6);
+    assert.ok(grid.every(r => r.length === 7 && r.every(c => /^[+−]\d+\.\d(Strong|Weak)?$/.test(c))), JSON.stringify(grid));
+    assert.ok(await page.$$eval('#scoutGrid td', tds => tds.every(td => td.title.includes('pts/wk'))));  // hover detail
+    await page.locator('#scoutGrid tbody th button', { hasText: 'Sam' }).click();
+    assert.strictEqual(await page.inputValue('#sTeam'), '470.l.960265.t.2');
+    assert.match(await page.textContent('.scout-sum'), /^Sam · Strong at RB/);
+    assert.match(await page.textContent('#scoutNote'), /No projections/);
+  });
+  await check('matchmaker: partners from real rosters, two-way fits first, only listed players marked listed', async () => {
+    await page.click('#scoutReport .scout-act button');  // Find trade partners, for Sam
+    assert.ok(await page.isVisible('#panel-match'));
+    assert.strictEqual(await page.inputValue('#mTeam'), '470.l.960265.t.2');
+    await page.selectOption('#mTeam', '470.l.960265.t.1');
+    const fits = await page.$$eval('#matches .match', els => els.map(e => ({ who: e.querySelector('h3').textContent, two: e.classList.contains('mutual'),
+      listed: [...e.querySelectorAll('.chip.listed')].map(c => c.textContent), text: e.querySelector('p').textContent })));
+    assert.ok(fits.length >= 2);
+    const firstOne = fits.findIndex(f => !f.two);
+    assert.ok(firstOne === -1 || fits.slice(firstOne).every(f => !f.two));
+    assert.strictEqual(fits[0].who, 'Sam');
+    assert.match(fits[0].text, /Sam is \+\d+\.\d at RB, where you’re −\d+\.\d/);
+    const listedNames = await page.evaluate(() => TradeApi.s.listings.map(l => l.name));
+    fits.forEach(f => f.listed.forEach(c => assert.ok(listedNames.some(n => c.includes(n)), c)));
+    assert.ok(fits[0].listed.some(c => c.includes('Breece Hall') && c.includes('On the block')));
+    assert.match(await page.textContent('#matchNote'), /Only players marked “On the block” have been listed/);
+  });
+  await check('compare from the matchmaker opens the calculator with both sides picked', async () => {
+    await page.locator('#matches .match').first().getByRole('button', { name: 'Compare in calculator' }).click();
+    assert.ok(await page.isVisible('#panel-calc'));
+    assert.strictEqual(await page.inputValue('#cTeamA'), '470.l.960265.t.1');
+    assert.strictEqual(await page.inputValue('#cTeamB'), '470.l.960265.t.2');
+    assert.strictEqual(await page.$$eval('#picksA input:checked', x => x.length), 1);
+    assert.strictEqual(await page.$$eval('#picksB input:checked', x => x.length), 1);
+    await page.waitForSelector('#calcOut .verdict');
+  });
+  await check('trade calculator gives a verdict from ratings, with the numbers behind it', async () => {
+    for (const side of ['A', 'B']) for (const box of await page.$$('#picks' + side + ' input:checked')) await box.uncheck();
     assert.match(await page.textContent('#calcOut'), /Pick at least one player on each side/);
-    assert.match(await page.textContent('#calcSource'), /weeks 1–3/);
     await page.locator('#picksA label', { hasText: 'Jared Goff' }).locator('input').check();
     await page.locator('#picksB label', { hasText: 'Breece Hall' }).locator('input').check();
+    assert.strictEqual(await page.textContent('#givesA'), 'Will gives');
     const rows = await page.$$eval('#calcOut tbody tr', trs => trs.map(t => [...t.children].map(c => c.textContent)));
-    assert.deepStrictEqual(rows[0].slice(1), ['3', '87.9', '29.3', '29.3']);
-    assert.deepStrictEqual(rows[2].slice(1), ['3', '63.1', '21.0', '21.0']);
-    assert.match(await page.textContent('#calcOut'), /Side A’s players have averaged 8\.3 more/);
-    // A player with no recorded weeks is shown as such, not as zero.
-    await page.locator('#picksB label', { hasText: 'Matthew Stafford' }).locator('input').check();
-    const staff = await page.$$eval('#calcOut tbody tr', trs => trs.map(t => [...t.children].map(c => c.textContent)).find(r => r[0].startsWith('Matthew')));
-    assert.deepStrictEqual(staff.slice(1), ['0', '—', '—', '—']);
-    assert.match(await page.textContent('#calcOut'), /Side B: 1 player has no scored weeks/);
-    assert.ok(!/projection/i.test(await page.textContent('#calcOut')));
+    const goff = parseFloat(rows[0][5]), hall = parseFloat(rows[2][5]);
+    const head = await page.textContent('.v-head'), line = await page.textContent('.verdict p:last-child');
+    const pct = Math.abs(goff - hall) / Math.max(goff, hall);
+    const expect = pct < 0.10 ? 'Fair trade' : (pct < 0.25 ? 'Leans toward ' : 'Lopsided toward ') + (hall > goff ? 'Will' : 'Sam');
+    assert.strictEqual(head, expect);
+    assert.ok(line.includes('Will receives ' + hall.toFixed(1)) && line.includes('Sam receives ' + goff.toFixed(1)), line);
+    assert.match(await page.textContent('#calcOut'), /Fills a need: Will is weak at RB and gets Breece Hall/);
+    assert.ok(await page.getAttribute('.gauge', 'aria-label'));
+    // two different teams only
+    await page.selectOption('#cTeamB', '470.l.960265.t.1');
+    assert.match(await page.textContent('#calcOut'), /Pick at least one player on each side|Pick two different teams/);
+  });
+  await check('compare on a listing card opens that player in the calculator', async () => {
+    await page.click('#tab-block');
+    await page.locator('#cards .card', { hasText: 'Brock Purdy' }).getByRole('button', { name: /Compare/ }).click();
+    assert.ok(await page.isVisible('#panel-calc'));
+    assert.strictEqual(await page.inputValue('#cTeamB'), '470.l.960265.t.3');
+    assert.strictEqual(await page.inputValue('#cTeamA'), '470.l.960265.t.1');
+    assert.deepStrictEqual(await page.$$eval('#picksB input:checked', x => x.map(i => i.closest('label').textContent)), [await page.$$eval('#picksB input:checked', x => x[0].closest('label').textContent)]);
+    assert.match(await page.$eval('#picksB input:checked', x => x.closest('label').textContent), /Brock Purdy/);
   });
   await check('desktop has no sideways scroll and no script errors', async () => {
-    for (const t of ['block', 'match', 'calc']) { await page.click('#tab-' + t); assert.ok(await noOverflow(page), t); }
+    for (const t of ['block', 'scout', 'match', 'calc']) { await page.click('#tab-' + t); await page.waitForTimeout(300); assert.ok(await noOverflow(page), t); }
     assert.deepStrictEqual(page.errors, []);
   });
   if (shots) {
@@ -226,7 +272,7 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
 
   const phone = await open(browser, 360, 780);
   await check('360px: every tab fits without sideways scroll', async () => {
-    for (const t of ['match', 'calc', 'block']) { await phone.click('#tab-' + t); assert.ok(await noOverflow(phone), t); }
+    for (const t of ['scout', 'match', 'calc', 'block']) { await phone.click('#tab-' + t); await phone.waitForTimeout(600); assert.ok(await noOverflow(phone), t); }
     assert.ok(await phone.isHidden('#editorPanel'));
     assert.ok(await phone.isVisible('#manageBtn'));
   });
