@@ -34,6 +34,10 @@ Environment:
   TRADE_LAB_REDIRECT_URI   e.g. https://stats.gooncocks.com/api/trade-lab/callback
   SITE_ORIGIN              e.g. https://stats.gooncocks.com
   TRADE_LAB_PAGE           where sign-in returns to (default /trade-lab.html)
+  TRADE_LAB_ALERT_NUMBERS  text alerts: "Name=number, ..." (names as the site shows them)
+  BREVO_API_KEY / BREVO_SMS_SENDER (/ BREVO_SMS_PREFIX), or AWS_SMS_FROM, or
+  TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM
+                           the text service; the first one set up is used
 """
 import base64
 import hashlib
@@ -256,10 +260,47 @@ class AwsSmsSender:
             raise RuntimeError(f"AWS SMS error {code}") from None
 
 
+class BrevoSmsSender:
+    """Sends one text through Brevo's transactional SMS API (no extra
+    libraries). BREVO_SMS_SENDER is the sender name (up to 11 letters or
+    digits) or number Brevo approved; BREVO_SMS_PREFIX is the optional
+    organisation prefix Brevo puts in front of US texts."""
+
+    URL = "https://api.brevo.com/v3/transactionalSMS/send"
+
+    def __init__(self, api_key, sender, prefix=None, opener=None):
+        self.api_key, self.sender, self.prefix = api_key, sender, prefix
+        self.opener = opener or urllib.request.urlopen
+
+    @classmethod
+    def from_env(cls, env):
+        key, sender = env.get("BREVO_API_KEY"), env.get("BREVO_SMS_SENDER")
+        return cls(key, sender, env.get("BREVO_SMS_PREFIX") or None) if key and sender else None
+
+    def send(self, to, text):
+        payload = {"sender": self.sender, "recipient": to.lstrip("+"), "content": text, "type": "transactional"}
+        if self.prefix:
+            payload["organisationPrefix"] = self.prefix
+        req = urllib.request.Request(self.URL, data=json.dumps(payload).encode("utf-8"), method="POST", headers={
+            "api-key": self.api_key, "Content-Type": "application/json", "Accept": "application/json"})
+        try:
+            with self.opener(req, timeout=10) as resp:
+                resp.read()
+        except urllib.error.HTTPError as exc:
+            # Brevo's error message can include the phone number, so only
+            # its short error code goes into the exception (and the logs).
+            try:
+                code = json.loads(exc.read().decode("utf-8")).get("code")
+            except Exception:
+                code = None
+            code = re.sub(r"[^A-Za-z0-9_]", "", str(code or ""))[:40]
+            raise RuntimeError(f"Brevo HTTP {exc.code}" + (f", error {code}" if code else "")) from None
+
+
 def sms_from_env(env):
-    """AWS when AWS_SMS_FROM is set, else Twilio when its settings are, else
-    None (alerts off)."""
-    return AwsSmsSender.from_env(env) or TwilioSender.from_env(env)
+    """The first text service that's set up: Brevo, then AWS, then Twilio.
+    None means text alerts are off."""
+    return BrevoSmsSender.from_env(env) or AwsSmsSender.from_env(env) or TwilioSender.from_env(env)
 
 
 def _hash(value):
@@ -687,7 +728,7 @@ class TradeLab:
             return {"alerts_on": bool(self.sms), "managers": names,
                     "not_matching_a_league_manager": unknown}
         if not self.sms:
-            return {"error": "Text alerts are off: set AWS_SMS_FROM (or TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM)."}
+            return {"error": "Text alerts are off: set BREVO_API_KEY and BREVO_SMS_SENDER (or AWS_SMS_FROM, or the TWILIO_ settings)."}
         if action == "alerts_test":
             who = str(event.get("to") or "")
             match = [(n, p) for n, p in self.recipients if n.casefold() == who.casefold()]

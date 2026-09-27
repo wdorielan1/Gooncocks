@@ -484,6 +484,38 @@ finally:
 check("AWS is used when AWS_SMS_FROM is set, else Twilio, else alerts off",
       picked == ["AwsSmsSender", "TwilioSender", "NoneType"], picked)
 
+brevo_seen = {}
+
+
+def brevo_open(req, timeout=None):
+    brevo_seen.update(url=req.full_url, body=json.loads(req.data.decode()), key=req.get_header("Api-key"))
+    return FakeResp()
+
+
+trade_lab.BrevoSmsSender("bk-123", "Gooncocks", opener=brevo_open).send("+12015550123", "hello")
+check("Brevo request: SMS endpoint, API key header, number without +, transactional",
+      brevo_seen == {"url": "https://api.brevo.com/v3/transactionalSMS/send", "key": "bk-123",
+                     "body": {"sender": "Gooncocks", "recipient": "12015550123", "content": "hello", "type": "transactional"}},
+      brevo_seen)
+trade_lab.BrevoSmsSender("bk-123", "Gooncocks", prefix="Gooncocks", opener=brevo_open).send("+12015550123", "hi")
+check("Brevo organisation prefix is sent only when set", brevo_seen["body"].get("organisationPrefix") == "Gooncocks")
+
+
+def brevo_failing(req, timeout=None):
+    raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", {},
+                                 io.BytesIO(b'{"code":"invalid_parameter","message":"12015550123 is not valid"}'))
+
+
+try:
+    trade_lab.BrevoSmsSender("bk-123", "Gooncocks", opener=brevo_failing).send("+12015550123", "x")
+    msg = "no error"
+except RuntimeError as exc:
+    msg = str(exc)
+check("Brevo errors keep the code but drop the number", msg == "Brevo HTTP 400, error invalid_parameter", msg)
+check("Brevo is used first once its key and sender are set",
+      type(trade_lab.sms_from_env({**both, "BREVO_API_KEY": "bk", "BREVO_SMS_SENDER": "Gooncocks"})).__name__ == "BrevoSmsSender"
+      and trade_lab.BrevoSmsSender.from_env({"BREVO_API_KEY": "bk"}) is None)
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed: {', '.join(failures)}")
