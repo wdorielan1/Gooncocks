@@ -194,20 +194,23 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     await page.click('#tab-scout');
     await page.waitForSelector('#scoutReport table.scout');
     assert.strictEqual(await page.inputValue('#sTeam'), '470.l.960265.t.1');  // your team first
-    const rows = await page.$$eval('.scout tbody tr', trs => trs.map(t => [t.querySelector('th').textContent, t.querySelector('.dv-txt').textContent]));
+    const GRADE = /^(A\+|A|A−|B\+|B|C|C−|D\+|D|D−|F)$/;
+    const rows = await page.$$eval('.scout tbody tr', trs => trs.map(t => [t.querySelector('th').textContent, t.querySelector('.grade').textContent, t.querySelector('.dv-txt').textContent]));
     assert.deepStrictEqual(rows.map(r => r[0]), ['QB', 'RB', 'WR', 'TE', 'Flex', 'K', 'DEF']);
-    assert.ok(rows.every(r => /^[+−]\d+\.\d (Strong|Weak|Average)$/.test(r[1])), JSON.stringify(rows));
-    assert.match(await page.textContent('.scout-sum'), /Your team · Strong at WR .* Weak at RB/);
+    assert.ok(rows.every(r => GRADE.test(r[1])), JSON.stringify(rows));
+    assert.ok(rows.every(r => /^(\d+\.\d pts\/wk (better|worse) than average|about average)$/.test(r[2])), JSON.stringify(rows));
+    assert.ok(!rows.some(r => /^[+−]/.test(r[2])));  // no bare +/- numbers
+    assert.match(await page.textContent('.scout-sum'), /^Your team: A.* at WR.* Your weak spots are RB \(D\)/);
     const grid = await page.$$eval('#scoutGrid tbody tr', trs => trs.map(t => [...t.querySelectorAll('td')].map(td => td.textContent)));
     assert.strictEqual(grid.length, 6);
-    assert.ok(grid.every(r => r.length === 7 && r.every(c => /^[+−]\d+\.\d(Strong|Weak)?$/.test(c))), JSON.stringify(grid));
-    assert.ok(await page.$$eval('#scoutGrid td', tds => tds.every(td => td.title.includes('pts/wk'))));  // hover detail
+    assert.ok(grid.every(r => r.length === 7 && r.every(c => GRADE.test(c))), JSON.stringify(grid));
+    assert.ok(await page.$$eval('#scoutGrid td', tds => tds.every(td => /pts\/wk, .*(than average|about average)/.test(td.title))));  // hover detail
     await page.locator('#scoutGrid tbody th button', { hasText: 'Sam' }).click();
     assert.strictEqual(await page.inputValue('#sTeam'), '470.l.960265.t.2');
-    assert.match(await page.textContent('.scout-sum'), /^Sam · Strong at RB/);
+    assert.match(await page.textContent('.scout-sum'), /^Sam: A.* at RB/);
     assert.match(await page.textContent('#scoutNote'), /No projections/);
     const key = await page.textContent('#panel-scout .key');
-    assert.ok(['Pts/wk', '+ / −', 'Strong', 'Weak', 'Average', 'Rank', 'trade bait'].every(w => key.includes(w)), key);
+    assert.ok(['Grade', 'A is well above average', 'C is about average', 'F is well below', 'Pts/wk', 'Rank', 'trade bait'].every(w => key.includes(w)), key);
     assert.ok(await page.$$eval('.scout td.num .avg', els => els.length === 7 && els.every(e => /^avg \d+\.\d$/.test(e.textContent))));
   });
   await check('matchmaker: partners from real rosters, two-way fits first, only listed players marked listed', async () => {
@@ -221,7 +224,8 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     const firstOne = fits.findIndex(f => !f.two);
     assert.ok(firstOne === -1 || fits.slice(firstOne).every(f => !f.two));
     assert.strictEqual(fits[0].who, 'Sam');
-    assert.match(fits[0].text, /Sam is \+\d+\.\d at RB, where you’re −\d+\.\d/);
+    assert.match(fits[0].text, /Sam’s RBs grade A[+−]?; yours grade D/);
+    assert.match(fits[0].text, /Your WRs grade A[+−]?; Sam’s grade [DF]/);
     const listedNames = await page.evaluate(() => TradeApi.s.listings.map(l => l.name));
     fits.forEach(f => f.listed.forEach(c => assert.ok(listedNames.some(n => c.includes(n)), c)));
     assert.ok(fits[0].listed.some(c => c.includes('Breece Hall') && c.includes('On the block')));
@@ -249,7 +253,7 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     const expect = pct < 0.10 ? 'Fair trade' : (pct < 0.25 ? 'Leans toward ' : 'Lopsided toward ') + (hall > goff ? 'Will' : 'Sam');
     assert.strictEqual(head, expect);
     assert.ok(line.includes('Will receives ' + hall.toFixed(1)) && line.includes('Sam receives ' + goff.toFixed(1)), line);
-    assert.match(await page.textContent('#calcOut'), /Fills a need: Will is weak at RB and gets Breece Hall/);
+    assert.match(await page.textContent('#calcOut'), /Fills a need: Will’s RBs grade D, so getting Breece Hall helps/);
     assert.ok(await page.getAttribute('.gauge', 'aria-label'));
     // two different teams only
     await page.selectOption('#cTeamB', '470.l.960265.t.1');

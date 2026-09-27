@@ -167,4 +167,19 @@ check('fairness verdict: fair within 10%, leans to 25%, lopsided beyond', () => 
   assert.strictEqual(L.fairness([{ value: null }], [{ value: 5, games: 3 }]).missing, 1);
 });
 
+check('letter grades mirror each other around C, and small point gaps never grade strong or weak', () => {
+  const g = (d, a) => L.grade(d, a).grade + '/' + L.grade(d, a).label;
+  assert.strictEqual(g(21.1, 44.3), 'A+/strong');
+  assert.strictEqual(g(8.0, 40), 'A/strong');      // +20%
+  assert.strictEqual(g(5.3, 30.6), 'A-/strong');
+  assert.strictEqual(g(3, 30), 'B+/average');       // +10%
+  assert.strictEqual(g(0.2, 44.3), 'C/average');
+  assert.strictEqual(g(-3, 30), 'D+/average');      // -10% mirrors B+
+  assert.strictEqual(g(-4.3, 35.1), 'D/weak');
+  assert.strictEqual(g(-8, 40), 'D-/weak');
+  assert.strictEqual(g(-10.5, 12.4), 'F/weak');
+  assert.strictEqual(g(1.4, 9.7), 'B+/average');    // 14% but under 1.5 points
+  assert.strictEqual(g(-1.2, 9.7), 'D+/average');
+});
+
 console.log(`\n${passed} checks passed`);

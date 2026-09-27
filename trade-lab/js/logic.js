@@ -182,6 +182,22 @@
     return { groups: groups, bench: bench, out: out, total: total };
   }
 
+  // A letter grade for how a position compares with the average team:
+  // by percent above or below average (A- or better is at least 12% and
+  // 1.5 points above; D or worse at least 12% and 1.5 points below).
+  var GRADES = [[0.30, 'A+'], [0.20, 'A'], [0.12, 'A-'], [0.07, 'B+'], [0.03, 'B'], [-0.03, 'C'],
+                [-0.07, 'C-'], [-0.12, 'D+'], [-0.20, 'D'], [-0.30, 'D-']];
+  function grade(diff, avg) {
+    var pct = avg > 0 ? diff / avg : 0;
+    if (Math.abs(diff) < 1.5) pct = Math.max(-0.119, Math.min(0.119, pct));  // too few points to call strong or weak
+    var g = 'F';
+    for (var i = 0; i < GRADES.length; i++) {
+      var cut = GRADES[i][0];
+      if (cut >= 0 ? pct >= cut : pct > cut) { g = GRADES[i][1]; break; }
+    }
+    return { grade: g, label: g.charAt(0) === 'A' ? 'strong' : (g === 'D' || g === 'D-' || g === 'F') ? 'weak' : 'average' };
+  }
+
   // Every team's report, compared with the league average at each group.
   // A group is "strong" or "weak" when it's at least 12% (and 1.5 points)
   // away from the average.
@@ -197,10 +213,9 @@
     reports.forEach(function (r) {
       r.cells = {};
       groups.forEach(function (g) {
-        var pts = r.report.groups[g].points, diff = pts - avg[g], band = Math.max(1.5, 0.12 * avg[g]);
+        var pts = r.report.groups[g].points, diff = pts - avg[g], gr = grade(diff, avg[g]);
         var rank = 1 + reports.filter(function (o) { return o.report.groups[g].points > pts; }).length;
-        r.cells[g] = { points: pts, diff: diff, rank: rank, label: diff >= band ? 'strong' : diff <= -band ? 'weak' : 'average',
-                       missing: r.report.groups[g].missing };
+        r.cells[g] = { points: pts, diff: diff, rank: rank, grade: gr.grade, label: gr.label, missing: r.report.groups[g].missing };
       });
       r.strengths = groups.filter(function (g) { return r.cells[g].label === 'strong'; })
         .sort(function (a, b) { return r.cells[b].diff - r.cells[a].diff; });
@@ -293,6 +308,6 @@
     STATUS_LABEL: STATUS_LABEL, filterListings: filterListings, needs: needs, matchmaker: matchmaker,
     playerWeeks: playerWeeks, playerStats: playerStats, sideTotals: sideTotals, ago: ago,
     playerRating: playerRating, slotsFromBox: slotsFromBox, teamReport: teamReport, scouting: scouting,
-    tradeFits: tradeFits, fairness: fairness, GROUPS: GROUPS, PRIOR_WEEKS: PRIOR_WEEKS
+    tradeFits: tradeFits, fairness: fairness, grade: grade, GROUPS: GROUPS, PRIOR_WEEKS: PRIOR_WEEKS
   };
 })(typeof window !== 'undefined' ? window : globalThis);

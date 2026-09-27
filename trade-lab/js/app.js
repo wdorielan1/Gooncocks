@@ -628,6 +628,13 @@
     });
   }
   function signed(n) { return (n >= 0 ? '+' : '−') + fmt(Math.abs(n)); }
+  function gradeText(g) { return String(g).replace('-', '−'); }
+  // "21.1 pts/wk better than average" / "about average"
+  function vsAvg(diff) {
+    return Math.abs(diff) < 0.5 ? 'about average' : fmt(Math.abs(diff)) + ' pts/wk ' + (diff > 0 ? 'better' : 'worse') + ' than average';
+  }
+  var PLURAL = { QB: 'QBs', RB: 'RBs', WR: 'WRs', TE: 'TEs', FLEX: 'flex', K: 'kicker', DEF: 'defense' };
+  function gradeTag(c, big) { return h('span', { class: 'grade ' + c.label + (big ? ' big' : ''), text: gradeText(c.grade) }); }
   function ordinal(n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
   function methodNote(lg) {
     var w = lg.weeksPlayed;
@@ -653,26 +660,28 @@
       var box = clear($('scoutReport'));
       if (!t) return;
       var who = you(key, t.manager);
-      function list(gs) { return gs.map(function (g) { return GROUP_NAME[g] + ' (' + signed(t.cells[g].diff) + ')'; }).join(', '); }
+      function list(gs) { return gs.map(function (g) { return gradeText(t.cells[g].grade) + ' at ' + GROUP_NAME[g]; }).join(', '); }
+      function weak(gs) { return gs.map(function (g) { return GROUP_NAME[g] + ' (' + gradeText(t.cells[g].grade) + ')'; }).join(' and '); }
       box.appendChild(h('p', { class: 'scout-sum' }, [
-        h('b', { text: who === 'You' ? 'Your team' : t.manager }), ' · ',
-        t.strengths.length ? 'Strong at ' + list(t.strengths) + '. ' : 'No position well above the league average. ',
-        t.weaknesses.length ? 'Weak at ' + list(t.weaknesses) + '.' : 'No position well below the league average.'
+        h('b', { text: who === 'You' ? 'Your team' : t.manager }), ': ',
+        t.strengths.length ? list(t.strengths) + '. ' : 'No position grades in the A range. ',
+        t.weaknesses.length ? (who === 'You' ? 'Your' : 'The') + ' weak spot' + (t.weaknesses.length > 1 ? 's are ' : ' is ') + weak(t.weaknesses) + '.' : 'No weak spots (nothing below a D+).'
       ]));
       var maxAbs = Math.max.apply(null, sc.groups.map(function (g) { return Math.max.apply(null, sc.teams.map(function (x) { return Math.abs(x.cells[g].diff); })); }).concat([1]));
       box.appendChild(h('table', { class: 'scout' }, [
         h('caption', { class: 'sr-only', text: (who === 'You' ? 'Your' : t.manager + '’s') + ' starting lineup by position, points per week compared with the league average' }),
-        h('thead', {}, [h('tr', {}, ['Position', 'Pts/wk', 'vs league avg', 'Rank', 'Starters'].map(function (x) { return h('th', { scope: 'col', text: x }); }))]),
+        h('thead', {}, [h('tr', {}, ['Position', 'Grade', 'Pts/wk', 'Compared with the average team', 'Rank', 'Starters'].map(function (x) { return h('th', { scope: 'col', text: x }); }))]),
         h('tbody', {}, sc.groups.map(function (g) {
           var c = t.cells[g], grp = t.report.groups[g], pct = Math.min(50, Math.abs(c.diff) / maxAbs * 50);
           return h('tr', { class: 'lbl-' + c.label }, [
             h('th', { scope: 'row' }, [posBadge(GROUP_NAME[g])]),
+            h('td', {}, [gradeTag(c, true)]),
             h('td', { class: 'num' }, [fmt(c.points), h('small', { class: 'avg', text: 'avg ' + fmt(sc.avg[g]) })]),
             h('td', { class: 'dv-cell' }, [
-              h('span', { class: 'dv', title: GROUP_NAME[g] + ': ' + signed(c.diff) + ' pts/wk vs the league average of ' + fmt(sc.avg[g]) }, [
+              h('span', { class: 'dv', title: GROUP_NAME[g] + ': ' + vsAvg(c.diff) + ' (league average ' + fmt(sc.avg[g]) + ')' }, [
                 h('span', { class: 'dv-bar ' + (c.diff >= 0 ? 'up' : 'down'), style: (c.diff >= 0 ? 'left:50%;' : 'right:50%;') + 'width:' + pct.toFixed(1) + '%' })
               ]),
-              h('span', { class: 'dv-txt' }, [h('b', { text: signed(c.diff) }), ' ', h('span', { class: 'tagw ' + c.label, text: c.label === 'average' ? 'Average' : c.label === 'strong' ? 'Strong' : 'Weak' })])
+              h('span', { class: 'dv-txt', text: vsAvg(c.diff) })
             ]),
             h('td', { text: ordinal(c.rank) + ' of ' + sc.count }),
             h('td', { class: 'starters' }, grp.starters.length ? grp.starters.map(function (x) {
@@ -693,7 +702,7 @@
 
       // league grid: every team at every position
       var grid = clear($('scoutGrid'));
-      grid.appendChild(h('caption', { class: 'sr-only', text: 'Every team’s points per week above or below the league average, by position' }));
+      grid.appendChild(h('caption', { class: 'sr-only', text: 'Every team’s grade at each position, compared with the average team' }));
       grid.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', text: 'Manager' })].concat(sc.groups.map(function (g) { return h('th', { scope: 'col', text: GROUP_NAME[g] }); })))]));
       grid.appendChild(h('tbody', {}, sc.teams.slice().sort(function (a, b) { return b.report.total - a.report.total; }).map(function (x) {
         return h('tr', { class: x.team_key === key ? 'on' : '' }, [
@@ -702,11 +711,11 @@
         ].concat(sc.groups.map(function (g) {
           var c = x.cells[g], lvl = Math.min(3, Math.ceil(Math.abs(c.diff) / (maxAbs / 3 || 1)));
           return h('td', { class: 'hm ' + c.label + (c.label === 'average' ? '' : ' l' + lvl),
-            title: x.manager + ' at ' + GROUP_NAME[g] + ': ' + fmt(c.points) + ' pts/wk, ' + ordinal(c.rank) + ' of ' + sc.count + ', league average ' + fmt(sc.avg[g]) },
-            [h('span', { text: signed(c.diff) }), c.label === 'average' ? null : h('small', { text: c.label === 'strong' ? 'Strong' : 'Weak' })]);
+            title: x.manager + ' at ' + GROUP_NAME[g] + ': ' + gradeText(c.grade) + ' · ' + fmt(c.points) + ' pts/wk, ' + vsAvg(c.diff) + ' (' + fmt(sc.avg[g]) + '), ' + ordinal(c.rank) + ' of ' + sc.count },
+            [h('span', { class: 'hm-g', text: gradeText(c.grade) })]);
         })));
       })));
-      $('scoutNote').textContent = methodNote(lg) + ' Strong or weak means at least 12% (and 1.5 points) away from the league average.';
+      $('scoutNote').textContent = methodNote(lg) + ' Grades: A+ is 30% or more above the average team, A 20%, A− 12%, B+ 7%, B 3%, C within 3%, and the same steps below average down to F (30% or more below). A small gap of under 1.5 points never grades A or D.';
     });
   }
 
@@ -725,10 +734,12 @@
         st.textContent = 'No team lines up yet: nobody is strong where ' + (who === 'You' ? 'you’re' : me.manager + ' is') + ' weak, or weak where ' + (who === 'You' ? 'you’re' : 'they’re') + ' strong.';
       }
       r.fits.forEach(function (f) {
+        var them = lg.scout.teams.filter(function (t) { return t.team_key === f.team_key; })[0];
+        var mine = who === 'You' ? 'yours' : who + '’s', My = who === 'You' ? 'Your' : who + '’s';
         var bits = f.gets.map(function (x) {
-          return f.manager + ' is ' + signed(x.surplus) + ' at ' + x.group + ', where ' + (who === 'You' ? 'you’re ' : who + ' is ') + signed(-x.need) + '.';
+          return f.manager + '’s ' + PLURAL[x.group] + ' grade ' + gradeText(them.cells[x.group].grade) + '; ' + mine + ' grade ' + gradeText(me.cells[x.group].grade) + '.';
         }).concat(f.gives.map(function (x) {
-          return (who === 'You' ? 'You’re ' : who + ' is ') + signed(x.surplus) + ' at ' + x.group + ', where ' + f.manager + ' is ' + signed(-x.need) + '.';
+          return My + ' ' + PLURAL[x.group] + ' grade ' + gradeText(me.cells[x.group].grade) + '; ' + f.manager + '’s grade ' + gradeText(them.cells[x.group].grade) + '.';
         }));
         function chips(listx, label) {
           if (!listx.length) return null;
@@ -862,12 +873,12 @@
     [[A, B], [B, A]].forEach(function (pair) {
       var recv = pair[0], giver = pair[1], rep = lg.scout.teams.filter(function (t) { return t.team_key === recv.key; })[0];
       giver.players.forEach(function (p) {
-        if (rep && rep.cells[p.position] && rep.cells[p.position].label === 'weak') notes.push('Fills a need: ' + recv.manager + ' is weak at ' + p.position + ' and gets ' + p.name + '.');
+        if (rep && rep.cells[p.position] && rep.cells[p.position].label === 'weak') notes.push('Fills a need: ' + recv.manager + '’s ' + PLURAL[p.position] + ' grade ' + gradeText(rep.cells[p.position].grade) + ', so getting ' + p.name + ' helps.');
       });
       recv.players.forEach(function (p) {
         if (!rep) return;
         var starter = Object.keys(rep.report.groups).some(function (g) { return rep.report.groups[g].starters.some(function (x) { return x.player.player_key === p.player_key; }); });
-        if (starter && rep.cells[p.position] && rep.cells[p.position].label !== 'strong') notes.push('Watch out: ' + recv.manager + ' gives up a starting ' + p.position + ' (' + p.name + ') without depth to spare there.');
+        if (starter && rep.cells[p.position] && rep.cells[p.position].label !== 'strong') notes.push('Watch out: ' + recv.manager + ' gives up a starting ' + p.position + ' (' + p.name + '), and ' + recv.manager + '’s ' + PLURAL[p.position] + ' only grade ' + gradeText(rep.cells[p.position].grade) + '.');
       });
     });
     if (f.uneven) notes.push('Uneven trade (' + A.players.length + ' for ' + B.players.length + '): the side getting more players gets more total points, but only starters score, so check who would actually start.');
