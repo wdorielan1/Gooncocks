@@ -219,13 +219,18 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.strictEqual(await page.inputValue('#mTeam'), '470.l.960265.t.2');
     await page.selectOption('#mTeam', '470.l.960265.t.1');
     const fits = await page.$$eval('#matches .match', els => els.map(e => ({ who: e.querySelector('h3').textContent, two: e.classList.contains('mutual'),
-      listed: [...e.querySelectorAll('.chip.listed')].map(c => c.textContent), text: e.querySelector('p').textContent })));
+      listed: [...e.querySelectorAll('.chip.listed')].map(c => c.textContent),
+      sides: [...e.querySelectorAll('.fit-side')].map(d => [d.querySelector('h4').textContent, [...d.querySelectorAll('.fit-list li')].map(li => li.textContent)]) })));
     assert.ok(fits.length >= 2);
     const firstOne = fits.findIndex(f => !f.two);
     assert.ok(firstOne === -1 || fits.slice(firstOne).every(f => !f.two));
     assert.strictEqual(fits[0].who, 'Sam');
-    assert.match(fits[0].text, /Sam’s RBs grade A[+−]?; yours grade D/);
-    assert.match(fits[0].text, /Your WRs grade A[+−]?; Sam’s grade [DF]/);
+    const [help, give] = fits[0].sides;
+    assert.strictEqual(help[0], 'Where Sam can help you');
+    assert.ok(help[1].some(t => /^RBSam A[+−]?You D$/.test(t)), JSON.stringify(help));
+    assert.strictEqual(give[0], 'Where you can help Sam');
+    assert.ok(give[1].some(t => /^WRYou A[+−]?Sam [DF]$/.test(t)), JSON.stringify(give));
+    assert.ok(!(await page.textContent('#matches')).includes(';'));
     const listedNames = await page.evaluate(() => TradeApi.s.listings.map(l => l.name));
     fits.forEach(f => f.listed.forEach(c => assert.ok(listedNames.some(n => c.includes(n)), c)));
     assert.ok(fits[0].listed.some(c => c.includes('Breece Hall') && c.includes('On the block')));
