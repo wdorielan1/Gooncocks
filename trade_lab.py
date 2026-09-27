@@ -640,7 +640,9 @@ class TradeLab:
         from the website):
           {"action": "alerts_status"}                 who's on the list
           {"action": "alerts_test", "to": "Will"}     one test text
-          {"action": "alerts_welcome"}                the sign-up confirmation, to everyone"""
+          {"action": "alerts_welcome"}                the sign-up confirmation, to everyone
+          {"action": "alerts_send", "message": "...", "to": ["Will", "Sam"]}
+                                                      your own message ("to" is optional: everyone)"""
         action = event.get("action")
         names = [n for n, _ in self.recipients]
         if action == "alerts_status":
@@ -666,6 +668,29 @@ class TradeLab:
         if action == "alerts_welcome":
             sent, failed = self._text_all(WELCOME)
             return {"sent": sent, "failed": failed}
+        if action == "alerts_send":
+            text = " ".join(str(event.get("message") or "").split())
+            if not text:
+                return {"error": 'Add a message, e.g. {"action": "alerts_send", "message": "Trade deadline is Friday"}.'}
+            if len(text) > 480:
+                return {"error": f"That message is {len(text)} characters; keep it under 480."}
+            if not text.lower().startswith("gooncocks"):
+                text = "Gooncocks Trade Lab: " + text  # say who it's from
+            if "stop" not in text.lower():
+                text += " Reply STOP to opt out."
+            to = event.get("to")
+            wanted = None if not to else {n.casefold() for n in ([to] if isinstance(to, str) else to)}
+            unknown = sorted(w for w in (wanted or ()) if w not in {n.casefold() for n in names})
+            if unknown:
+                return {"error": f"No number for {', '.join(unknown)}. On the list: {', '.join(names)}."}
+            saved = self.recipients
+            if wanted:
+                self.recipients = [(n, p) for n, p in saved if n.casefold() in wanted]
+            try:
+                sent, failed = self._text_all(text)
+            finally:
+                self.recipients = saved
+            return {"sent": sent, "failed": failed, "text": text}
         return {"error": f"Unknown action {action!r}."}
 
     # ---------------- dispatch

@@ -383,6 +383,20 @@ sms.sent.clear()
 r = aapp.admin({"action": "alerts_welcome"})
 check("welcome text goes to everyone and says how to opt out", r == {"sent": 3, "failed": []}
       and all(t == trade_lab.WELCOME for _, t in sms.sent) and "Reply STOP" in trade_lab.WELCOME)
+sms.sent.clear()
+r = aapp.admin({"action": "alerts_send", "message": "Trade deadline is   Friday at noon."})
+check("a custom message goes to everyone, says who it's from and how to stop",
+      r["sent"] == 3 and r["text"] == "Gooncocks Trade Lab: Trade deadline is Friday at noon. Reply STOP to opt out."
+      and all(t == r["text"] for _, t in sms.sent), r)
+sms.sent.clear()
+r = aapp.admin({"action": "alerts_send", "message": "Gooncocks: draft order is up. Text STOP to opt out.", "to": ["will", "Bo"]})
+check("a custom message can go to just some managers, and isn't double-labeled",
+      r["sent"] == 2 and sorted(p for p, _ in sms.sent) == ["+12015550123", "+17325550199"]
+      and r["text"] == "Gooncocks: draft order is up. Text STOP to opt out.", r)
+check("custom messages need text, a short length, and known names",
+      "error" in aapp.admin({"action": "alerts_send", "message": "  "})
+      and "error" in aapp.admin({"action": "alerts_send", "message": "x" * 500})
+      and "No number for zed" in aapp.admin({"action": "alerts_send", "message": "hi", "to": "Zed"})["error"])
 check("admin actions aren't reachable from the website",
       aapp.handle(event("POST", "/admin", cookies=will, headers={"x-csrf-token": will_csrf}))["statusCode"] == 404)
 
