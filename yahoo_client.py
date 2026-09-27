@@ -259,15 +259,18 @@ def get_login_teams(access_token, game_key):
 
 
 def get_league_teams(access_token, league_key):
-    """[{'team_key', 'name', 'manager'}] for every team in a league."""
+    """[{'team_key', 'name', 'manager', 'guids'}] for every team in a
+    league. guids holds the Yahoo account ID of every manager and
+    co-manager - permanent per account, unlike names."""
     url = f"{FANTASY_BASE}/league/{league_key}/teams?format=json"
     data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
     teams = []
     for entry in _yahoo_collection(_sub_resource(data["fantasy_content"]["league"], "teams")):
         t = _player_record(entry.get("team") if isinstance(entry, dict) else None)
         nickname, _guid = _extract_manager(t)
+        guids = [g for g in _find_values(t.get("managers") or [], "guid") if isinstance(g, str) and g]
         if t.get("team_key"):
-            teams.append({"team_key": t["team_key"], "name": t.get("name") or "", "manager": nickname})
+            teams.append({"team_key": t["team_key"], "name": t.get("name") or "", "manager": nickname, "guids": guids})
     return teams
 
 

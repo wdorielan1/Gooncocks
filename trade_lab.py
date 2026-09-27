@@ -329,15 +329,24 @@ class TradeLab:
         step = "token"  # which Yahoo call failed: the code exchange, or the team lookup
         try:
             tokens = self.yahoo.exchange(q["code"], self.redirect_uri)
-            step = "teams"
-            guid, team_keys = self.yahoo.login_teams(tokens["access_token"], self.game)
+            guid = tokens.get("xoauth_yahoo_guid")
+            if guid:
+                # Yahoo's account ID for whoever signed in, straight from
+                # Yahoo's token response, matched against the league's own
+                # manager list (read with the league's connection). The
+                # sign-in app never needs Fantasy Sports access for this.
+                step = "league"
+                team_keys = [t["team_key"] for t in self.yahoo.league_teams(self.league)
+                             if guid in (t.get("guids") or [])]
+            else:
+                step = "teams"
+                guid, team_keys = self.yahoo.login_teams(tokens["access_token"], self.game)
         except Exception as exc:
             # Yahoo's error bodies (e.g. {"error":"invalid_client"}) hold no
             # secrets; anything else is logged by type only.
             detail = str(exc)[:300] if str(exc).startswith("Yahoo returned HTTP") else ""
             print(f"Trade Lab sign-in failed at {step}: {type(exc).__name__} {detail}".rstrip())
             return _redirect(back + "error&reason=" + _failure_reason(step, exc), [clear])
-        guid = tokens.get("xoauth_yahoo_guid") or guid
         mine = [k for k in team_keys if k.startswith(self.league + ".t.")]
         team_key = mine[0] if mine else None
         names = self.team_names() if team_key else {}

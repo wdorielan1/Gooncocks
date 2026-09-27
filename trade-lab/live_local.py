@@ -52,7 +52,8 @@ class FakeYahoo:
 
     def league_teams(self, league):
         self._check()
-        return [{"team_key": WILL, "name": "Hubita", "manager": "Will"}, {"team_key": SAM, "name": "Saquon's", "manager": "Sam"}]
+        return [{"team_key": WILL, "name": "Hubita", "manager": "Will", "guids": ["guid-will"]},
+                {"team_key": SAM, "name": "Saquon's", "manager": "Sam", "guids": ["guid-sam"]}]
 
     def roster(self, team_key):
         self._check()

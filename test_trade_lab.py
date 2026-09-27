@@ -43,7 +43,9 @@ class FakeYahoo:
             SAM: [player("470.p.3", "Breece Hall", "RB"), player("470.p.4", "Tee Higgins", "WR")],
         }
         self.accounts = {"code-will": ("guid-will", [WILL, "470.l.555.t.9"]), "code-sam": ("guid-sam", [SAM]),
-                         "code-outsider": ("guid-out", [OUTSIDER])}
+                         "code-outsider": ("guid-out", [OUTSIDER]), "code-cosam": ("guid-cosam", []),
+                         "code-noguid": ("", [WILL])}
+        self.login_teams_calls = 0
         self.down, self.calls = False, 0
         self.tokens_seen = []
 
@@ -60,13 +62,14 @@ class FakeYahoo:
                 "xoauth_yahoo_guid": self.accounts[code][0]}
 
     def login_teams(self, access_token, game_key):
+        self.login_teams_calls += 1
         return self.accounts[access_token.replace("SECRET-ACCESS-", "")]
 
     def league_teams(self, league_key):
         if self.down:
             raise RuntimeError("Yahoo returned HTTP 503")
-        return [{"team_key": WILL, "name": "Hubita", "manager": "wilzer"},
-                {"team_key": SAM, "name": "Saquon's", "manager": "Samuel"}]
+        return [{"team_key": WILL, "name": "Hubita", "manager": "wilzer", "guids": ["guid-will"]},
+                {"team_key": SAM, "name": "Saquon's", "manager": "Samuel", "guids": ["guid-sam", "guid-cosam"]}]
 
     def roster(self, team_key):
         self.calls += 1
@@ -176,6 +179,24 @@ r = sign_in(app, "code-unknown")[2]
 check("the error reason reaches the page", r["headers"]["Location"].endswith("signin=error&reason=token_bad_request"), r["headers"]["Location"])
 check("sign-in logs never contain states, codes or tokens",
       not any(x in logged for x in ("STATE-", "CODE-", "SECRET-", "code-will", "code-unknown")), logged)
+
+# ---------------------------------------------------------------- matching by Yahoo account ID
+gapp, _ = new_app()
+_, _, r = sign_in(gapp, "code-cosam")
+me = body(gapp.handle(event("GET", "/me", cookies=sign_in(gapp, "code-cosam")[0])))
+check("a co-manager is matched to their team by Yahoo account ID", me.get("team_key") == SAM, me)
+check("account-ID matching doesn't need the sign-in app's Fantasy access", gapp.yahoo.login_teams_calls == 0)
+cookies, _, r = sign_in(gapp, "code-noguid")
+check("without an account ID in Yahoo's reply, Yahoo's own team lookup is used",
+      "signin=ok" in r["headers"]["Location"] and gapp.yahoo.login_teams_calls == 1)
+gapp.yahoo.down = True
+r = sign_in(gapp, "code-will")[2]
+check("league list unavailable during sign-in: no session, a clear reason",
+      r["headers"]["Location"].endswith("signin=error&reason=league_unavailable") and SESSION_COOKIE not in parse_cookies(r),
+      r["headers"]["Location"])
+gapp.yahoo.down = False
+listing_json = json.dumps(body(gapp.handle(event("GET", "/listings")))) + json.dumps(body(gapp.handle(event("GET", "/rosters"))))
+check("managers' Yahoo account IDs are never sent to the browser", "guid-" not in listing_json)
 
 # ---------------------------------------------------------------- signed-out and outsiders
 r = save(app, {}, "", [{"player_key": "470.p.1", "status": "available", "wants": ["RB"]}])
