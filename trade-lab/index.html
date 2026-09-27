@@ -105,7 +105,16 @@
       <h2>Scouting Report</h2>
       <label class="sel inline"><span>Team</span><select id="sTeam"></select></label>
     </div>
-    <p class="fine">Each team’s best starting lineup from its current roster, position by position, against the league average. Blue is above average, orange is below.</p>
+    <section class="key" aria-labelledby="keyTitle">
+      <h3 id="keyTitle">How to read this</h3>
+      <dl class="key-list">
+        <div><dt>Pts/wk</dt><dd>What this team’s starters at that position score per week, added together. For example, 3 starting WRs combined.</dd></div>
+        <div><dt>+ / −</dt><dd>Compared with the average team in the league. <b>+21</b> means these starters score 21 more points a week than an average team’s; <b>−4</b> means 4 fewer.</dd></div>
+        <div><dt>Labels</dt><dd><span class="tagw strong">Strong</span> clearly above average &nbsp; <span class="tagw weak">Weak</span> clearly below &nbsp; <span class="tagw average">Average</span> close to average (within 12%)</dd></div>
+        <div><dt>Rank</dt><dd>Where the team stands in the league at that position. 1st is the best.</dd></div>
+      </dl>
+      <p class="key-use"><b>Using it for trades:</b> a <b>weak</b> spot is what to trade <em>for</em>. Find teams that are strong there in the Matchmaker. A <b>strong</b> spot is your trade bait, since you can spare a player there.</p>
+    </section>
     <div id="scoutState" class="state" role="status" aria-live="polite"></div>
     <div id="scoutReport"></div>
     <h3 class="sub-head">The league at a glance</h3>

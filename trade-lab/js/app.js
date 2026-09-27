@@ -667,7 +667,7 @@
           var c = t.cells[g], grp = t.report.groups[g], pct = Math.min(50, Math.abs(c.diff) / maxAbs * 50);
           return h('tr', { class: 'lbl-' + c.label }, [
             h('th', { scope: 'row' }, [posBadge(GROUP_NAME[g])]),
-            h('td', { class: 'num', text: fmt(c.points) }),
+            h('td', { class: 'num' }, [fmt(c.points), h('small', { class: 'avg', text: 'avg ' + fmt(sc.avg[g]) })]),
             h('td', { class: 'dv-cell' }, [
               h('span', { class: 'dv', title: GROUP_NAME[g] + ': ' + signed(c.diff) + ' pts/wk vs the league average of ' + fmt(sc.avg[g]) }, [
                 h('span', { class: 'dv-bar ' + (c.diff >= 0 ? 'up' : 'down'), style: (c.diff >= 0 ? 'left:50%;' : 'right:50%;') + 'width:' + pct.toFixed(1) + '%' })

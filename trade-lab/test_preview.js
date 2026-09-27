@@ -206,6 +206,9 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.strictEqual(await page.inputValue('#sTeam'), '470.l.960265.t.2');
     assert.match(await page.textContent('.scout-sum'), /^Sam · Strong at RB/);
     assert.match(await page.textContent('#scoutNote'), /No projections/);
+    const key = await page.textContent('#panel-scout .key');
+    assert.ok(['Pts/wk', '+ / −', 'Strong', 'Weak', 'Average', 'Rank', 'trade bait'].every(w => key.includes(w)), key);
+    assert.ok(await page.$$eval('.scout td.num .avg', els => els.length === 7 && els.every(e => /^avg \d+\.\d$/.test(e.textContent))));
   });
   await check('matchmaker: partners from real rosters, two-way fits first, only listed players marked listed', async () => {
     await page.click('#scoutReport .scout-act button');  // Find trade partners, for Sam

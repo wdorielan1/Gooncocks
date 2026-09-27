@@ -204,6 +204,15 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 /* scouting: strong = blue, weak = orange (validated pair); every value is also written out */
 :root { --up: #5b8cff; --down: #dd7230; }
 #scoutReport { margin-top: 14px; overflow-x: auto; }
+.key { margin-top: 14px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line-2); border-left: 3px solid var(--gold); border-radius: 3px; }
+.key h3 { font: 400 20px/1 var(--headline); text-transform: uppercase; letter-spacing: .5px; color: var(--gold); }
+.key-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; margin: 12px 0 0; }
+.key-list div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.key-list dt { font: 600 11px/1.3 var(--body); letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+.key-list dd { margin: 0; font-size: 13.5px; color: #dfe4ee; }
+.key-list .tagw { margin-right: 2px; }
+.key-use { margin-top: 12px; font-size: 13.5px; color: #dfe4ee; }
+.scout td.num small.avg { display: block; font: 500 11px/1.2 var(--body); color: var(--muted); letter-spacing: 0; margin-top: 3px; }
 .scout-sum { padding: 12px 14px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 3px; }
 .scout-sum b { color: var(--gold); }
 .scout { width: 100%; min-width: 640px; border-collapse: collapse; margin-top: 12px; background: var(--panel); border: 1px solid var(--line-2); }
@@ -322,5 +331,6 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .dv-cell { min-width: 110px; width: auto; }
   .scout td.num { font-size: 16px; }
   .v-head { font-size: 24px; }
+  .key-list { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
