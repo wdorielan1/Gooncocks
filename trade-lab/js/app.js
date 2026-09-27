@@ -7,6 +7,13 @@
  */
 (function () {
   var api = window.TradeApi, L = window.TradeLogic;
+  // Sign-in cookies belong to stats.gooncocks.com, so the live page only
+  // runs there; other gooncocks.com addresses are sent to it.
+  var HOME = 'stats.gooncocks.com';
+  if (!api.preview && /(^|\.)gooncocks\.com$/.test(location.hostname) && location.hostname !== HOME) {
+    location.replace('https://' + HOME + location.pathname + location.search + location.hash);
+    return;
+  }
   var $ = function (id) { return document.getElementById(id); };
 
   var S = {
@@ -124,8 +131,8 @@
   function showSigninMessage() {
     var m = /[?&]signin=([a-z-]+)/.exec(location.search), msg = m && SIGNIN[m[1]];
     if (!msg) return;
-    var el = $('signinMsg');
-    el.textContent = msg[0]; el.className = 'banner-msg' + (msg[1] ? ' ' + msg[1] : ''); el.hidden = false;
+    var el = $('signinMsg'), why = /[?&]reason=([a-z_]{1,40})/.exec(location.search);
+    el.textContent = msg[0] + (why ? ' (Yahoo said: ' + why[1] + ')' : ''); el.className = 'banner-msg' + (msg[1] ? ' ' + msg[1] : ''); el.hidden = false;
     try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* ignore */ }
   }
   function signInControl(cls) {

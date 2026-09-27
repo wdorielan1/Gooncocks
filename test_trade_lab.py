@@ -6,6 +6,8 @@ ownership (including forged requests), roster checks, archiving traded
 players, concurrent edits, note validation, and Yahoo outages.
 Exits non-zero if anything is wrong.
 """
+import contextlib
+import io
 import json
 import sys
 import urllib.parse
@@ -152,6 +154,22 @@ check("/me identifies the verified team and manager name", me["team_key"] == WIL
 check("a league manager's other leagues are ignored", me["team_key"] == WILL)
 r = app.handle(event("GET", "/callback", cookies={STATE_COOKIE: "x"}, query={"state": "x", "error": "access_denied"}))
 check("cancelled sign-in goes back to the page", "signin=cancelled" in r["headers"]["Location"])
+check("Yahoo's error code is passed to the page, cleaned", r["headers"]["Location"].endswith("&reason=access_denied"))
+r = app.handle(event("GET", "/callback", cookies={STATE_COOKIE: "x"}, query={"state": "x", "error": "<b>bad</b> & more"}))
+check("an odd error code can't inject into the page URL", r["headers"]["Location"].endswith("&reason=bbadbmore"), r["headers"]["Location"])
+
+# every sign-in outcome is logged with a reason, never a state, code or token
+log = io.StringIO()
+with contextlib.redirect_stdout(log):
+    app.handle(event("GET", "/callback", query={"state": "STATE-abc", "code": "CODE-xyz"}))
+    app.handle(event("GET", "/callback", cookies={STATE_COOKIE: "STATE-other"}, query={"state": "STATE-abc", "code": "CODE-xyz"}))
+    sign_in(app, "code-will")
+    sign_in(app, "code-unknown")
+logged = log.getvalue()
+check("sign-in logs say why it failed", "no state cookie came back" in logged and "state cookie didn't match" in logged
+      and "sign-in: ok" in logged and "invalid_grant" in logged, logged)
+check("sign-in logs never contain states, codes or tokens",
+      not any(x in logged for x in ("STATE-", "CODE-", "SECRET-", "code-will", "code-unknown")), logged)
 
 # ---------------------------------------------------------------- signed-out and outsiders
 r = save(app, {}, "", [{"player_key": "470.p.1", "status": "available", "wants": ["RB"]}])

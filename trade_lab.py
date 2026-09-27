@@ -287,21 +287,33 @@ class TradeLab:
         clear = _cookie(STATE_COOKIE, "", 0)
         back = self.page + "?signin="
         state, cookie_state = q.get("state") or "", cookies.get(STATE_COOKIE) or ""
+        # Every outcome is logged with a plain reason (never a code, state or
+        # token) so a failed sign-in can be diagnosed from the Lambda logs.
         if q.get("error"):
-            return _redirect(back + "cancelled", [clear])
+            reason = re.sub(r"[^a-z_]", "", str(q["error"]).lower())[:40]
+            print(f"Trade Lab sign-in: Yahoo sent back error={reason or '?'}")
+            return _redirect(back + "cancelled" + (f"&reason={reason}" if reason else ""), [clear])
         if not state or not cookie_state or not hmac.compare_digest(state, cookie_state):
+            print("Trade Lab sign-in: state check failed ("
+                  + ("no state in URL" if not state else "no state cookie came back" if not cookie_state
+                     else "state cookie didn't match") + ")")
             return _redirect(back + "expired", [clear])
         try:  # each state works once
             self.store.delete("STATE", _hash(state), expect=1)
         except Conflict:
+            print("Trade Lab sign-in: state already used or expired")
             return _redirect(back + "expired", [clear])
         if not q.get("code"):
+            print("Trade Lab sign-in: Yahoo returned no code")
             return _redirect(back + "expired", [clear])
         try:
             tokens = self.yahoo.exchange(q["code"], self.redirect_uri)
             guid, team_keys = self.yahoo.login_teams(tokens["access_token"], self.game)
         except Exception as exc:
-            print(f"Trade Lab sign-in failed: {type(exc).__name__}")  # never the tokens
+            # Yahoo's error bodies (e.g. {"error":"invalid_client"}) hold no
+            # secrets; anything else is logged by type only.
+            detail = str(exc)[:300] if str(exc).startswith("Yahoo returned HTTP") else ""
+            print(f"Trade Lab sign-in failed: {type(exc).__name__} {detail}".rstrip())
             return _redirect(back + "error", [clear])
         guid = tokens.get("xoauth_yahoo_guid") or guid
         mine = [k for k in team_keys if k.startswith(self.league + ".t.")]
@@ -312,6 +324,7 @@ class TradeLab:
             "guid": _hash(guid or ""), "team_key": team_key, "manager": names.get(team_key) if team_key else None,
             "csrf": secrets.token_urlsafe(24), "created": self.now(),
         }, 1, expect=0, expires=self.now() + SESSION_TTL)
+        print(f"Trade Lab sign-in: ok ({'manages a team in the league' if team_key else 'no team in this league'})")
         return _redirect(back + ("ok" if team_key else "not-in-league"),
                          [clear, _cookie(SESSION_COOKIE, sid, SESSION_TTL)])
 
