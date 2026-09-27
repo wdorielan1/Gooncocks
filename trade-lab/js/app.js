@@ -685,7 +685,7 @@
             ]),
             h('td', { text: ordinal(c.rank) + ' of ' + sc.count }),
             h('td', { class: 'starters' }, grp.starters.length ? grp.starters.map(function (x) {
-              return h('span', { class: 'st-p' }, [x.player.name + ' ', h('small', { text: x.rating.value === null ? 'no scores' : fmt(x.rating.value) })]);
+              return h('span', { class: 'st-p' }, [x.player.name + ' ', h('small', { text: x.rating.value === null ? 'no scores' : fmt(x.rating.value) + ' pts/wk' })]);
             }) : [h('small', { text: 'Nobody to start' })])
           ]);
         }))
@@ -745,7 +745,7 @@
           if (!listx.length) return null;
           return h('div', { class: 'offer' }, [h('small', { text: label })].concat(listx.slice(0, 4).map(function (o) {
             return h('span', { class: 'chip' + (o.listed ? ' listed' : '') }, [posBadge(o.player.position), ' ' + o.player.name + ' ',
-              h('small', { text: (o.rating.value === null ? '—' : fmt(o.rating.value)) + ' · ' + (o.listed ? 'On the block' : o.role === 'bench' ? 'Bench' : 'Starter') })]);
+              h('small', { text: (o.rating.value === null ? 'no scores' : fmt(o.rating.value) + ' pts/wk') + ' · ' + (o.listed ? 'On the block' : o.role === 'bench' ? 'Bench' : 'Starter') })]);
           })));
         }
         var giveKey = (f.youOffer[0] || {}).player, getKey = (f.theyOffer[0] || {}).player;
@@ -828,7 +828,7 @@
           renderCalcOut();
         } }),
         posBadge(p.position), h('span', { class: 'nm', text: p.name }),
-        h('span', { class: 'nfl', text: r.value === null ? '—' : fmt(r.value) })
+        h('span', { class: 'nfl', text: r.value === null ? 'no scores' : fmt(r.value) + ' pts/wk' })
       ]));
     });
   }
