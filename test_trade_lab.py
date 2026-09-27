@@ -375,7 +375,7 @@ check("with no sender configured, saving works and nothing is texted",
 sms.sent.clear()
 st = aapp.admin({"action": "alerts_status"})
 check("admin status lists names only, never numbers, and flags names that match no manager",
-      st == {"alerts_on": True, "managers": ["Will", "Sam", "Bo"], "not_matching_a_league_manager": ["Bo"]}
+      st == {"discord_on": False, "alerts_on": True, "managers": ["Will", "Sam", "Bo"], "not_matching_a_league_manager": ["Bo"]}
       and "555" not in json.dumps(st))
 r = aapp.admin({"action": "alerts_test", "to": "bo"})
 check("admin test texts just that manager", r == {"sent": 1, "failed": []} and [p for p, _ in sms.sent] == ["+17325550199"])
@@ -400,6 +400,94 @@ check("custom messages need text, a short length, and known names",
       and "No number for zed" in aapp.admin({"action": "alerts_send", "message": "hi", "to": "Zed"})["error"])
 check("admin actions aren't reachable from the website",
       aapp.handle(event("POST", "/admin", cookies=will, headers={"x-csrf-token": will_csrf}))["statusCode"] == 404)
+
+# ---------------------------------------------------------------- Discord alerts
+class FakeDiscord:
+    def __init__(self):
+        self.posts, self.fail = [], False
+
+    def send(self, content, mentions=False):
+        if self.fail:
+            raise RuntimeError("Discord HTTP 404")
+        self.posts.append((content, mentions))
+
+
+clock = Clock()
+disc = FakeDiscord()
+dapp = TradeLab(MemoryStore(clock), FakeYahoo(), ENV, clock, discord=disc)
+d_sam, d_csrf, _ = sign_in(dapp, "code-sam")
+log = io.StringIO()
+with contextlib.redirect_stdout(log):
+    r = save(dapp, d_sam, d_csrf, [{"player_key": "470.p.3", "status": "available", "wants": ["WR"]},
+                                   {"player_key": "470.p.4", "status": "listening", "wants": []}])
+check("new listings post once in Discord, naming the manager, players and the link",
+      r["statusCode"] == 200 and len(disc.posts) == 1
+      and disc.posts[0][0] == "**Sam** put 2 players on the trading block:\n"
+                             "- Breece Hall (RB, KC) - available, wants WR\n"
+                             "- Tee Higgins (WR, KC) - listening to offers\n"
+                             "https://stats.gooncocks.com/trade-lab.html", disc.posts)
+check("listing posts can never ping anyone", disc.posts[0][1] is False)
+check("the Discord post is logged", "Discord posted" in log.getvalue(), log.getvalue())
+disc.posts.clear()
+cur = [l for l in body(dapp.handle(event("GET", "/listings")))["listings"] if l["player_key"] == "470.p.3"][0]
+save(dapp, d_sam, d_csrf, [{"player_key": "470.p.3", "status": "listening", "wants": [], "version": cur["version"]}])
+check("editing a listing doesn't post", disc.posts == [])
+disc.fail = True
+with contextlib.redirect_stdout(io.StringIO()) as out:
+    d_will, d_wcsrf, _ = sign_in(dapp, "code-will")
+    r = save(dapp, d_will, d_wcsrf, [{"player_key": "470.p.1", "status": "available", "wants": []}])
+check("a failed Discord post never breaks the save", r["statusCode"] == 200 and "Discord post failed (Discord HTTP 404)" in out.getvalue(),
+      out.getvalue())
+disc.fail = False
+check("Discord markdown in names is escaped",
+      trade_lab.discord_alert("*Sam*", [{"name": "A_B", "position": "RB", "nfl_team": "", "status": "available"}], "u")
+      == "**\\*Sam\\*** put a player on the trading block:\n- A\\_B (RB) - available\nu")
+many = [{"name": f"P{i}", "position": "WR", "nfl_team": "X", "status": "available"} for i in range(12)]
+check("big listings are capped at 10 lines", trade_lab.discord_alert("Sam", many, "u").count("\n- P") == 10
+      and "- +2 more" in trade_lab.discord_alert("Sam", many, "u"))
+with contextlib.redirect_stdout(io.StringIO()):
+    st = dapp.admin({"action": "alerts_status"})
+check("status says Discord is on", st["discord_on"] is True and st["alerts_on"] is False)
+disc.posts.clear()
+check("alerts_test with no name posts a test in Discord", dapp.admin({"action": "alerts_test"}) == {"discord": "posted"}
+      and len(disc.posts) == 1)
+check("alerts_test with a name explains texts are off", "Text alerts are off" in dapp.admin({"action": "alerts_test", "to": "Sam"})["error"])
+disc.posts.clear()
+check("welcome posts the Trade Lab introduction in Discord", dapp.admin({"action": "alerts_welcome"}) == {"discord": "posted"}
+      and disc.posts == [(trade_lab.DISCORD_WELCOME, False)] and "stats.gooncocks.com/trade-lab.html" in trade_lab.DISCORD_WELCOME)
+disc.posts.clear()
+r = dapp.admin({"action": "alerts_send", "message": "@everyone  trade deadline is Friday"})
+check("a custom message posts as typed, and the commissioner's @everyone works",
+      r == {"discord": "posted"} and disc.posts == [("@everyone trade deadline is Friday", True)], (r, disc.posts))
+check("a custom message to named managers needs text alerts",
+      "error" in dapp.admin({"action": "alerts_send", "message": "hi", "to": "Sam"}))
+both_app = TradeLab(MemoryStore(clock), FakeYahoo(), ENV, clock, sms=FakeSms(), recipients=recips, discord=FakeDiscord())
+r = both_app.admin({"action": "alerts_send", "message": "Draft is Sunday"})
+check("with both on, a custom message goes to Discord and every text", r["discord"] == "posted" and r["sent"] == 3, r)
+r = both_app.admin({"action": "alerts_send", "message": "Hi", "to": "Will"})
+check("...and naming managers texts only them, skipping Discord", "discord" not in r and r["sent"] == 1, r)
+check("nothing configured: admin explains how to turn alerts on",
+      "TRADE_LAB_DISCORD_WEBHOOK" in TradeLab(MemoryStore(clock), FakeYahoo(), ENV, clock).admin({"action": "alerts_welcome"})["error"])
+
+posted = {}
+trade_lab.DiscordPoster("https://discord.com/api/webhooks/1/secret",
+                        post=lambda url, content, **kw: posted.update(url=url, content=content, **kw)).send("hi")
+check("Discord posts go to the webhook as Gooncocks Trade Lab, with pings off by default",
+      posted == {"url": "https://discord.com/api/webhooks/1/secret", "content": "hi", "username": "Gooncocks Trade Lab", "mentions": False}, posted)
+
+
+def discord_down(url, content, **kw):
+    raise OSError(f"could not reach {url}")
+
+
+try:
+    trade_lab.DiscordPoster("https://discord.com/api/webhooks/1/secret", post=discord_down).send("hi")
+    msg = "no error"
+except RuntimeError as exc:
+    msg = str(exc)
+check("Discord errors never include the webhook URL", msg == "Discord OSError", msg)
+check("Discord is on only when TRADE_LAB_DISCORD_WEBHOOK is set",
+      trade_lab.DiscordPoster.from_env({}) is None and trade_lab.DiscordPoster.from_env({"TRADE_LAB_DISCORD_WEBHOOK": "u"}) is not None)
 
 
 class FakeResp:

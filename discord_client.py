@@ -10,11 +10,18 @@ import json
 import urllib.request
 
 
-def post_message(webhook_url, content):
+def post_message(webhook_url, content, username=None, mentions=True):
     """Posts a single message. Discord caps messages at 2000 characters -
     this doesn't chunk long text, so keep messages short (a headline +
-    a link works well) and put the full recap on the webpage instead."""
-    body = json.dumps({"content": content}).encode("utf-8")
+    a link works well) and put the full recap on the webpage instead.
+    username overrides the webhook's display name; mentions=False stops
+    "@everyone" or "@someone" in the text from pinging anyone."""
+    payload = {"content": content}
+    if username:
+        payload["username"] = username
+    if not mentions:
+        payload["allowed_mentions"] = {"parse": []}
+    body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         webhook_url,
         data=body,

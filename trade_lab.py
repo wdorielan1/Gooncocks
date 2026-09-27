@@ -34,6 +34,8 @@ Environment:
   TRADE_LAB_REDIRECT_URI   e.g. https://stats.gooncocks.com/api/trade-lab/callback
   SITE_ORIGIN              e.g. https://stats.gooncocks.com
   TRADE_LAB_PAGE           where sign-in returns to (default /trade-lab.html)
+  TRADE_LAB_DISCORD_WEBHOOK
+                           Discord alerts: a channel webhook URL (secret)
   TRADE_LAB_ALERT_NUMBERS  text alerts: "Name=number, ..." (names as the site shows them)
   BREVO_API_KEY / BREVO_SMS_SENDER (/ BREVO_SMS_PREFIX), or AWS_SMS_FROM, or
   TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM
@@ -52,6 +54,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import discord_client
 import yahoo_client
 from trade_lab_store import Conflict, DynamoStore
 
@@ -173,6 +176,60 @@ def alert_text(manager, fresh, url):
     shown = ", ".join(players[:3]) + (f" +{len(players) - 3} more" if len(players) > 3 else "")
     what = "a player" if len(fresh) == 1 else f"{len(fresh)} players"
     return f"Gooncocks Trade Lab: {manager} put {what} on the block - {shown}. {url} Reply STOP to opt out."
+
+
+DISCORD_NAME = "Gooncocks Trade Lab"
+DISCORD_WELCOME = ("**Trade Lab is live!** It's our league's trading block: see who's available, check each team's "
+                   "strengths and weak spots, and find trade partners.\n"
+                   "https://stats.gooncocks.com/trade-lab.html\n"
+                   "To put your own players on the block, sign in with the Yahoo account you use for our league. "
+                   "New listings get posted in this channel automatically.")
+WANT_WORDS = {"available": "available", "listening": "listening to offers"}
+
+
+def _md(text):
+    """Plain text for a Discord message: markdown characters escaped."""
+    return re.sub(r"([\\*_~`|>#\[\]()@:-])", r"\\\1", str(text or ""))
+
+
+def discord_alert(manager, fresh, url):
+    """The Discord post for new listings: who, each player, and the link.
+    Everything but the link is escaped, and the post can't ping anyone."""
+    what = "a player" if len(fresh) == 1 else f"{len(fresh)} players"
+    lines = [f"**{_md(manager)}** put {what} on the trading block:"]
+    for d in fresh[:10]:
+        line = f"- {_md(d['name'])} ({_md(d['position'])}"
+        line += f", {_md(d['nfl_team'])})" if d.get("nfl_team") else ")"
+        line += f" - {WANT_WORDS.get(d.get('status'), 'available')}"
+        if d.get("wants"):
+            line += ", wants " + "/".join(_md(w) for w in d["wants"])
+        lines.append(line)
+    if len(fresh) > 10:
+        lines.append(f"- +{len(fresh) - 10} more")
+    lines.append(url)
+    return "\n".join(lines)
+
+
+class DiscordPoster:
+    """Posts into one Discord channel through its webhook."""
+
+    def __init__(self, webhook_url, post=None):
+        self.url = webhook_url
+        self.post = post or discord_client.post_message
+
+    @classmethod
+    def from_env(cls, env):
+        url = env.get("TRADE_LAB_DISCORD_WEBHOOK")
+        return cls(url) if url else None
+
+    def send(self, content, mentions=False):
+        try:
+            self.post(self.url, content, username=DISCORD_NAME, mentions=mentions)
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(f"Discord HTTP {exc.code}") from None
+        except Exception as exc:
+            # Never the exception text: it could carry the webhook URL.
+            raise RuntimeError(f"Discord {type(exc).__name__}") from None
 
 
 def normalize_phone(raw):
@@ -327,8 +384,9 @@ def primary_position(player):
 
 
 class TradeLab:
-    def __init__(self, store, yahoo, env=os.environ, clock=time.time, sms=None, recipients=()):
+    def __init__(self, store, yahoo, env=os.environ, clock=time.time, sms=None, recipients=(), discord=None):
         self.store, self.yahoo, self.env, self.now = store, yahoo, env, clock
+        self.discord = discord  # a DiscordPoster for the league channel (None = off)
         # Text alerts: a sender (None = off) and the league's opted-in numbers
         # as [(manager name, +1XXXXXXXXXX)], set by the commissioner.
         self.sms, self.recipients = sms, list(recipients)
@@ -698,9 +756,24 @@ class TradeLab:
                 print(f"Trade Lab alerts: text to {name} failed ({exc})")
         return sent, failed
 
+    def _post_discord(self, content, mentions=False):
+        """'posted' or 'failed'. The error is logged without the webhook URL."""
+        try:
+            self.discord.send(content, mentions=mentions)
+            return "posted"
+        except Exception as exc:
+            print(f"Trade Lab alerts: Discord post failed ({exc})")
+            return "failed"
+
     def alert_new(self, manager, fresh):
         """After new listings are saved: tell the rest of the league.
         Never fails the save that triggered it."""
+        if self.discord:
+            try:
+                result = self._post_discord(discord_alert(manager, fresh, self.origin + self.page))
+                print(f"Trade Lab alerts: {manager} listed {len(fresh)}; Discord {result}")
+            except Exception:
+                traceback.print_exc()
         if not self.sms or not self.recipients:
             return
         try:
@@ -713,11 +786,13 @@ class TradeLab:
     def admin(self, event):
         """Commissioner actions, run as a Lambda test event (not reachable
         from the website):
-          {"action": "alerts_status"}                 who's on the list
+          {"action": "alerts_status"}                 what's on, and who's on the text list
+          {"action": "alerts_test"}                   a test post in Discord
           {"action": "alerts_test", "to": "Will"}     one test text
-          {"action": "alerts_welcome"}                the sign-up confirmation, to everyone
+          {"action": "alerts_welcome"}                the Trade Lab introduction (Discord and texts)
           {"action": "alerts_send", "message": "...", "to": ["Will", "Sam"]}
-                                                      your own message ("to" is optional: everyone)"""
+                                                      your own message: Discord and every text, or
+                                                      with "to", texts to just those managers"""
         action = event.get("action")
         names = [n for n, _ in self.recipients]
         if action == "alerts_status":
@@ -725,9 +800,15 @@ class TradeLab:
             # would get a text about their own listing.
             league = {n.casefold() for n in self.team_names().values()}
             unknown = [n for n in names if n.casefold() not in league]
-            return {"alerts_on": bool(self.sms), "managers": names,
+            return {"discord_on": bool(self.discord), "alerts_on": bool(self.sms), "managers": names,
                     "not_matching_a_league_manager": unknown}
-        if not self.sms:
+        if not self.sms and not self.discord:
+            return {"error": "Alerts are off: set TRADE_LAB_DISCORD_WEBHOOK (or a text service)."}
+        if action == "alerts_test" and not event.get("to"):
+            if not self.discord:
+                return {"error": 'Discord is off. To test a text, add "to", e.g. {"action": "alerts_test", "to": "Will"}.'}
+            return {"discord": self._post_discord("Test post: Trade Lab alerts are working.")}
+        if action == "alerts_test" and not self.sms:
             return {"error": "Text alerts are off: set BREVO_API_KEY and BREVO_SMS_SENDER (or AWS_SMS_FROM, or the TWILIO_ settings)."}
         if action == "alerts_test":
             who = str(event.get("to") or "")
@@ -741,19 +822,29 @@ class TradeLab:
                 self.recipients = saved
             return {"sent": sent, "failed": failed}
         if action == "alerts_welcome":
-            sent, failed = self._text_all(WELCOME)
-            return {"sent": sent, "failed": failed}
+            result = {"discord": self._post_discord(DISCORD_WELCOME)} if self.discord else {}
+            if self.sms:
+                result["sent"], result["failed"] = self._text_all(WELCOME)
+            return result
         if action == "alerts_send":
             text = " ".join(str(event.get("message") or "").split())
             if not text:
                 return {"error": 'Add a message, e.g. {"action": "alerts_send", "message": "Trade deadline is Friday"}.'}
             if len(text) > 480:
                 return {"error": f"That message is {len(text)} characters; keep it under 480."}
+            to = event.get("to")
+            result = {}
+            if self.discord and not to:
+                # Your own words, as typed - and your @everyone works here.
+                result["discord"] = self._post_discord(text, mentions=True)
+            if not self.sms:
+                if to:
+                    return {"error": "Text alerts are off, so there's no one to send to by name."}
+                return result
             if not text.lower().startswith("gooncocks"):
                 text = "Gooncocks Trade Lab: " + text  # say who it's from
             if "stop" not in text.lower():
                 text += " Reply STOP to opt out."
-            to = event.get("to")
             wanted = None if not to else {n.casefold() for n in ([to] if isinstance(to, str) else to)}
             unknown = sorted(w for w in (wanted or ()) if w not in {n.casefold() for n in names})
             if unknown:
@@ -765,7 +856,7 @@ class TradeLab:
                 sent, failed = self._text_all(text)
             finally:
                 self.recipients = saved
-            return {"sent": sent, "failed": failed, "text": text}
+            return {**result, "sent": sent, "failed": failed, "text": text}
         return {"error": f"Unknown action {action!r}."}
 
     # ---------------- dispatch
@@ -845,7 +936,8 @@ def handler(event, context=None):
         if bad:
             print(f"Trade Lab alerts: skipped unreadable entries for: {', '.join(bad)}")
         _APP = TradeLab(DynamoStore(os.environ["TRADE_LAB_TABLE"]), YahooLeague(),
-                        sms=sms_from_env(os.environ), recipients=recipients)
+                        sms=sms_from_env(os.environ), recipients=recipients,
+                        discord=DiscordPoster.from_env(os.environ))
     if event.get("action") and not event.get("rawPath"):
         result = _APP.admin(event)
         print("Result: " + json.dumps(result))  # names only, never numbers
