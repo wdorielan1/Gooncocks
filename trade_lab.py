@@ -259,8 +259,8 @@ def digest_text(listings, url):
         if len(ds) > DIGEST_MAX_PER_MANAGER:
             players.append(f"{len(ds) - DIGEST_MAX_PER_MANAGER} more")
         lines.append(f"{manager} just added {_and_list(players)} to the Trading Block.")
-    lines[0] = "Gooncocks Trade Lab AI: " + lines[0]
-    lines.append(url)
+    lines[0] = "Gooncocks Trading Lab AI: " + lines[0]
+    lines.append(f"Check out the Trading Lab: {url}")
     return "\n".join(lines)
 
 
