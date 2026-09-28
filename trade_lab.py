@@ -239,29 +239,25 @@ DIGEST_PREVIEW_DAYS = 7
 DIGEST_MAX_PER_MANAGER = 5
 
 
-def _and_list(items):
-    """"A", "A and B", "A, B and C"."""
-    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
-
-
 def digest_text(listings, url):
-    """One group-chat text for new listings: a sentence per manager, in the
-    order they listed, then the link. Empty when there's nothing new."""
+    """One text for new listings: a heading, then a section per manager (in
+    the order they listed) with one player per line, then the link, with
+    blank lines between so it's easy to read. Empty when there's nothing new."""
     if not listings:
         return ""
     by_manager = {}
     for d in sorted(listings, key=lambda d: d["created_at"]):
         by_manager.setdefault(d.get("manager") or "A manager", []).append(d)
-    lines = []
+    parts = ["🦚 Gooncocks Trading Lab AI"]
     for manager, ds in by_manager.items():
-        players = [f"{d['name']} ({d['position']}" + (f", {d['nfl_team']})" if d.get("nfl_team") else ")")
-                   for d in ds[:DIGEST_MAX_PER_MANAGER]]
+        lines = [f"{manager} added to the Trading Block:"]
+        for d in ds[:DIGEST_MAX_PER_MANAGER]:
+            lines.append(f"• {d['name']} ({d['position']}" + (f", {d['nfl_team']})" if d.get("nfl_team") else ")"))
         if len(ds) > DIGEST_MAX_PER_MANAGER:
-            players.append(f"{len(ds) - DIGEST_MAX_PER_MANAGER} more")
-        lines.append(f"{manager} just added {_and_list(players)} to the Trading Block.")
-    lines[0] = "Gooncocks Trading Lab AI: " + lines[0]
-    lines.append(f"Check out the Trading Lab: {url}")
-    return "\n".join(lines)
+            lines.append(f"• +{len(ds) - DIGEST_MAX_PER_MANAGER} more")
+        parts.append("\n".join(lines))
+    parts.append(f"Check out the Trading Lab:\n{url}")
+    return "\n\n".join(parts)
 
 
 def normalize_phone(raw):

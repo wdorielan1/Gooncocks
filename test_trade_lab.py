@@ -515,10 +515,11 @@ save(gapp, g_will, g_wcsrf, [{"player_key": "470.p.1", "status": "available", "w
                              {"player_key": "470.p.2", "status": "available", "wants": []}])
 clock.t += 60
 d = body(digest())
-check("new listings since the last check come back as one ready-to-send text, a line per manager",
-      d == {"count": 3, "text": "Gooncocks Trading Lab AI: Sam just added Tee Higgins (WR, KC) to the Trading Block.\n"
-                                "Will just added Amon-Ra St. Brown (WR, KC) and Jared Goff (QB, KC) to the Trading Block.\n"
-                                "Check out the Trading Lab: https://stats.gooncocks.com/trade-lab.html"}, d)
+check("new listings since the last check come back as one ready-to-send text, a section per manager",
+      d == {"count": 3, "text": "🦚 Gooncocks Trading Lab AI\n\n"
+                                "Sam added to the Trading Block:\n• Tee Higgins (WR, KC)\n\n"
+                                "Will added to the Trading Block:\n• Amon-Ra St. Brown (WR, KC)\n• Jared Goff (QB, KC)\n\n"
+                                "Check out the Trading Lab:\nhttps://stats.gooncocks.com/trade-lab.html"}, d)
 check("...and only once", body(digest())["count"] == 0)
 cur = [l for l in body(gapp.handle(event("GET", "/listings")))["listings"] if l["player_key"] == "470.p.4"][0]
 clock.t += 60
@@ -529,7 +530,8 @@ check("preview shows the last week without moving the marker",
       p["count"] == 4 and p["preview"] is True and body(digest())["count"] == 0, p)
 many = [{"name": f"P{i}", "position": "WR", "nfl_team": "", "manager": "Sam", "created_at": i} for i in range(7)]
 check("a big dump is capped per manager",
-      trade_lab.digest_text(many, "u") == "Gooncocks Trading Lab AI: Sam just added P0 (WR), P1 (WR), P2 (WR), P3 (WR), P4 (WR) and 2 more to the Trading Block.\nCheck out the Trading Lab: u")
+      trade_lab.digest_text(many, "u") == "🦚 Gooncocks Trading Lab AI\n\nSam added to the Trading Block:\n"
+      "• P0 (WR)\n• P1 (WR)\n• P2 (WR)\n• P3 (WR)\n• P4 (WR)\n• +2 more\n\nCheck out the Trading Lab:\nu")
 
 
 class FakeResp:
