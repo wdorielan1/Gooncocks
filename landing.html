@@ -490,7 +490,8 @@
   // Champions confirmed by the commissioner; Yahoo history (history.json via
   // landing.json) replaces this once the "history" action has run.
   var KNOWN_CHAMPIONS = [
-    {season:'2025', champion:'Sam'}, {season:'2024', champion:'Sam'}, {season:'2023', champion:'Gabe'}
+    {season:'2025', champion:'Sam'}, {season:'2024', champion:'Sam'}, {season:'2023', champion:'Gabe'},
+    {season:'2013', champion:'Tamir', runner_up:'Patrick'}
   ];
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -658,7 +659,7 @@
     });
     document.getElementById('champTag').textContent = champs.length + (champs.length === 1 ? ' Champion' : ' Champions');
     document.getElementById('champNote').textContent = fromYahoo
-      ? 'Every season since the league started, straight from Yahoo.'
+      ? 'Every season since the league started, from Yahoo and the commissioner’s records.'
       : 'Pulling the full league history from Yahoo.';
   }
 

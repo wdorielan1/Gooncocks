@@ -146,6 +146,43 @@ MANAGER_NAMES = {
 }
 
 
+# Championships from seasons Yahoo has no record of, confirmed by the
+# commissioner: season -> (champion, runner-up), as named in MANAGER_NAMES.
+# If Yahoo ever has one of these seasons, Yahoo's standings win.
+EXTRA_CHAMPIONS = {
+    "2013": ("Tamir", "Patrick"),
+}
+
+
+def _with_extra_champions(champs):
+    """The Champion Wall list plus EXTRA_CHAMPIONS, newest first."""
+    have = {str(c["season"]) for c in champs}
+    out = list(champs) + [
+        {"season": season, "champion": champ, "champion_team": None, "runner_up": runner, "runner_up_team": None}
+        for season, (champ, runner) in EXTRA_CHAMPIONS.items() if season not in have
+    ]
+    return sorted(out, key=lambda c: int(c["season"]), reverse=True)
+
+
+def _add_extra_standings(history):
+    """Adds EXTRA_CHAMPIONS to the history file's final standings, where the
+    Record Room and Career Center count championships."""
+    ids = {m["name"].lower(): m["id"] for m in history.get("managers", [])}
+    standings = history.setdefault("standings", {})
+    for season, names in EXTRA_CHAMPIONS.items():
+        if season in standings:
+            continue
+        ranks = {}
+        for rank, name in enumerate(names, 1):
+            if name and name.lower() in ids:
+                ranks[ids[name.lower()]] = rank
+            elif name:
+                print(f"  {season}: {name} isn't in the league history, so that finish isn't counted.")
+        if ranks:
+            standings[season] = {"finished": True, "teams": None, "ranks": ranks, "source": "commissioner"}
+    return history
+
+
 def _name_key(value):
     return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
 
@@ -353,6 +390,7 @@ def _action_history(event):
         }
         champions.append(entry)
         print(f"  {entry['season']}: {entry['champion']} ({entry['champion_team']}), runner-up {entry['runner_up']}")
+    champions = _with_extra_champions(champions)
     if not champions:
         print("No finished seasons found - this looks like the league's first season on Yahoo.")
 
@@ -589,6 +627,7 @@ def _refresh_rivalry(s3, bucket, yahoo, league_key, deadline, rediscover=False, 
     game_keys = {}
     history = league_history.build_history(seasons, current, resolve, index["seasons"][current].get("name") or "",
                                            standings=index["seasons"], excluded=_excluded, game_keys=game_keys)
+    _add_extra_standings(history)
     _put(s3, bucket, league_history.PUBLIC_KEY, json.dumps(history, separators=(",", ":")), "application/json")
     _put(s3, bucket, RIVALRY_PAGE_KEY, _rivalry_page_html(), "text/html")
     _put(s3, bucket, CAREER_PAGE_KEY, _career_page_html(), "text/html")
@@ -636,7 +675,7 @@ def _action_rivalry_history(event, context=None):
         _upload_art(s3, bucket)  # the Rivalry Center and Record Room banners
     except Exception:
         traceback.print_exc()
-    champs = league_history.champions(index, lambda t: resolve(t) or t.get("manager"))
+    champs = _with_extra_champions(league_history.champions(index, lambda t: resolve(t) or t.get("manager")))
     if champs:
         _put(s3, bucket, "history.json", json.dumps(champs), "application/json")
         landing = _load_json(s3, bucket, "landing.json", None)

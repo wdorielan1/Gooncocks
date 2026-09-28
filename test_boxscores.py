@@ -201,6 +201,22 @@ check("trade_lab_live saves boxscores/live.json with who has played",
       out == {"season": 2026, "week": 4, "players_played": 1} and len(put_calls) == 1
       and put_calls[0][0] == "boxscores/live.json" and put_calls[0][1]["teams"]["t.2"][0][5] == 0, (out, put_calls))
 
+# ---------- championships from seasons Yahoo doesn't have
+walls = lambda_function._with_extra_champions([
+    {"season": "2025", "champion": "Sam", "champion_team": "T", "runner_up": "Gabe", "runner_up_team": "U"}])
+check("the Champion Wall gets 2013 (Tamir, runner-up Patrick), newest first",
+      [c["season"] for c in walls] == ["2025", "2013"] and walls[1]["champion"] == "Tamir" and walls[1]["runner_up"] == "Patrick", walls)
+check("Yahoo's record wins if it has the season",
+      lambda_function._with_extra_champions([{"season": "2013", "champion": "Gabe"}]) == [{"season": "2013", "champion": "Gabe"}])
+hist = lambda_function._add_extra_standings({"managers": [{"id": "tamir", "name": "Tamir"}, {"id": "patrick", "name": "Patrick"}],
+                                             "standings": {"2025": {"finished": True, "teams": 10, "ranks": {"sam": 1}}}})
+check("the history file's standings get 2013 for the Record Room and Career Center",
+      hist["standings"]["2013"] == {"finished": True, "teams": None, "ranks": {"tamir": 1, "patrick": 2}, "source": "commissioner"}
+      and hist["standings"]["2025"]["ranks"] == {"sam": 1}, hist)
+kept = lambda_function._add_extra_standings({"managers": [{"id": "tamir", "name": "Tamir"}],
+                                             "standings": {"2013": {"finished": True, "ranks": {"gabe": 1}}}})
+check("...but never over Yahoo's own standings for that season", kept["standings"]["2013"]["ranks"] == {"gabe": 1})
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed: {', '.join(failures)}")

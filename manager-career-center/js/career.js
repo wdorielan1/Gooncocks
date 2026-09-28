@@ -184,6 +184,15 @@
         c.winnings.missing.push(ln.season);
       }
     });
+    // Finishes from seasons with no game records (confirmed by the commissioner).
+    Object.keys(data.standings || {}).map(Number).sort(function (a, b) { return a - b; }).forEach(function (s) {
+      var st = data.standings[s], rank = st && st.ranks ? st.ranks[id] : null;
+      if (allSeasons.indexOf(s) >= 0 || !inScope(s, scope) || !st.finished || rank == null) return;
+      if (rank === 1) c.titles.push(s);
+      if (rank === 2) c.runnerUps.push(s);
+      if (rank === 3) c.thirds.push(s);
+    });
+    [c.titles, c.runnerUps, c.thirds].forEach(function (a) { a.sort(function (x, y) { return x - y; }); });
     c.regPct = pct(c.reg.w, c.reg.l, c.reg.t);
     c.poPct = pct(c.po.w, c.po.l, c.po.t);
     if (!c.winnings.seasons) c.winnings = null;
