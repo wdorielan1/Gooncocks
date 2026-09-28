@@ -78,6 +78,12 @@ Drive it with the "Test" button in the Lambda console, using a test event
   Re-publish an old week quietly (no Discord post), e.g. after a page
   design change:
     {"action": "publish", "week": 2, "discord": false}
+
+  Trade Lab's in-progress week (run by schedule Sunday evening, Sunday
+  midnight and Monday midnight): points so far for players whose games have
+  started, saved as boxscores/live.json. Tuesday's rivalry_history or
+  publish run records the final week, which then replaces it.
+    {"action": "trade_lab_live"}
 """
 import base64
 import datetime
@@ -501,6 +507,30 @@ def _refresh_boxscores(s3, bucket, yahoo, seasons, game_keys, current, deadline)
         if not box["complete"] and year != current:
             pending.append(year)
     return pending
+
+
+def _action_trade_lab_live(event, context=None):
+    bucket = _require_env("S3_BUCKET")
+    league_key = event.get("league_key") or _require_env("LEAGUE_KEY")
+    s3 = boto3.client("s3")
+    token = _get_access_token()
+    scoreboard_json = get_scoreboard(token, league_key)
+    raw = parse_matchups(scoreboard_json)
+    week = league_history.live_week_number(scoreboard_week(scoreboard_json), raw)
+    team_keys = sorted({m[side]["team_key"] for m in raw for side in ("team_a", "team_b") if m[side].get("team_key")})
+    if not week or not team_keys:
+        raise RuntimeError("Yahoo's scoreboard had no current week or teams - nothing to snapshot.")
+    index = _rivalry_store(s3, bucket).load(league_history.INDEX_KEY, None) or {}
+    season = index.get("current_season") or time.strftime("%Y")
+    with ThreadPoolExecutor(max_workers=3) as pool:  # gentle: Yahoo rate limits bursts
+        rosters = dict(zip(team_keys, pool.map(lambda k: get_team_roster(token, k, week), team_keys)))
+    keys = sorted({p["player_key"] for r in rosters.values() for p in r if p.get("player_key")})
+    points = get_player_points(token, league_key, keys, week)
+    live = league_history.live_week(season, week, rosters, points, time.time())
+    _put(s3, bucket, league_history.LIVE_PUBLIC_KEY, json.dumps(live, separators=(",", ":")), "application/json")
+    played = sum(r[5] for rows in live["teams"].values() for r in rows)
+    print(f"Trade Lab live week: {season} week {week}, {played} of {sum(len(r) for r in live['teams'].values())} players have played.")
+    return {"season": live["season"], "week": week, "players_played": played}
 
 
 def _rivalry_store(s3, bucket):
@@ -1035,6 +1065,8 @@ def lambda_handler(event, context):
         return _action_rivalry_history(event, context)
     if action == "recap":
         return _action_recap(event)
+    if action == "trade_lab_live":
+        return _action_trade_lab_live(event, context)
     if action == "publish":
         return _action_publish(event, context)
     raise RuntimeError(f"Unknown action: {action!r}")

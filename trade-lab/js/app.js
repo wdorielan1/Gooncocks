@@ -593,15 +593,17 @@
   function loadLeague() {
     if (S.leagueLoad) return S.leagueLoad;
     var yr = season();
-    S.leagueLoad = Promise.all([api.rosters(), api.boxscores(yr), api.boxscores(yr - 1)]).then(function (res) {
-      var ro = res[0], cur = res[1] || { games: {} }, prev = res[2] || { games: {} };
-      var cw = L.playerWeeks(cur), pw = L.playerWeeks(prev), cache = {};
+    S.leagueLoad = Promise.all([api.rosters(), api.boxscores(yr), api.boxscores(yr - 1), api.liveWeek()]).then(function (res) {
+      var ro = res[0], cur = res[1] || { games: {} }, prev = res[2] || { games: {} }, live = res[3];
+      // The in-progress week counts until the final box scores include it.
+      if (!live || live.season !== yr || weeksIn(cur).indexOf(live.week) >= 0) live = null;
+      var cw = L.playerWeeks(cur, live), pw = L.playerWeeks(prev), cache = {};
       function rate(p) {
         var k = p.name + '|' + p.position;
         return cache[k] || (cache[k] = L.playerRating(cw, pw, p));
       }
       var slots = (ro.slots && ro.slots.length) ? ro.slots : L.slotsFromBox(Object.keys(cur.games).length ? cur : prev);
-      S.league = { rosters: ro, slots: slots, cur: cur, prev: prev, yr: yr, rate: rate,
+      S.league = { rosters: ro, slots: slots, cur: cur, prev: prev, yr: yr, rate: rate, live: live,
                    weeksPlayed: weeksIn(cur), scout: L.scouting(ro.teams, slots, rate) };
       S.leagueError = null;
       return S.league;
@@ -636,10 +638,14 @@
   var PLURAL = { QB: 'QBs', RB: 'RBs', WR: 'WRs', TE: 'TEs', FLEX: 'flex', K: 'kicker', DEF: 'defense' };
   function gradeTag(c, big) { return h('span', { class: 'grade ' + c.label + (big ? ' big' : ''), text: gradeText(c.grade) }); }
   function ordinal(n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+  function liveTime(ts) {
+    return new Date(ts * 1000).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  }
   function methodNote(lg) {
     var w = lg.weeksPlayed;
     return 'Ratings are points per week in Yahoo league scoring from this site’s box scores' +
       (w.length ? ' (' + lg.yr + ' weeks ' + w[0] + (w.length > 1 ? '–' + w[w.length - 1] : '') + ')' : ' (no ' + lg.yr + ' weeks yet)') +
+      (lg.live ? ', plus week ' + lg.live.week + ' so far (games through ' + liveTime(lg.live.updated) + '; players who haven’t played yet this week count once they do)' : '') +
       ', with last season’s average counting as ' + L.PRIOR_WEEKS + ' extra weeks. Each team is scored by its best lineup from its current Yahoo roster; injured-reserve players don’t count. No projections.';
   }
   function teamSelect(sel, keep) {

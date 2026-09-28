@@ -229,6 +229,8 @@ def get_team_roster(access_token, team_key, week=None):
                 "position": p.get("display_position") or "",
                 "nfl_team": (p.get("editorial_team_abbr") or "").upper(),
                 "headshot": headshot_url(p),
+                # 0 once his game has started (Yahoo locks the spot); None if Yahoo doesn't say.
+                "editable": p.get("is_editable"),
             }
         )
     return players

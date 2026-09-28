@@ -73,6 +73,17 @@ check('side totals skip players with no scored weeks and count them', () => {
   const t = L.sideTotals([L.playerStats(w, { name: 'Jared Goff', position: 'QB' }), L.playerStats(w, { name: 'Nobody', position: 'K' })]);
   assert.deepStrictEqual([t.total, t.ppg, t.missing, t.games], [50, 25, 1, 2]);
 });
+check('the in-progress week counts only players who have played, until the final week is in', () => {
+  const live = { season: 2026, week: 4, updated: 0, teams: { t1: [
+    ['WR', 'Amon-Ra St. Brown', 'WR', 'DET', 30, 1], ['QB', 'Jared Goff', 'QB', 'DET', 0, 0], ['BN', 'Breece Hall', 'RB', 'NYJ', 0, 1]] } };
+  const w = L.playerWeeks(box, live);
+  const s = L.playerStats(w, { name: 'Amon-Ra St. Brown', position: 'WR' });
+  assert.deepStrictEqual([s.games, s.total], [4, 78]);
+  assert.strictEqual(L.playerStats(w, { name: 'Jared Goff', position: 'QB' }).games, 2);  // hasn't played: not a zero
+  assert.strictEqual(L.playerStats(w, { name: 'Breece Hall', position: 'RB' }).games, 2);  // played and scored 0: counts
+  const done = L.playerWeeks(box, Object.assign({}, live, { week: 3 }));  // week 3 is already final
+  assert.strictEqual(L.playerStats(done, { name: 'Amon-Ra St. Brown', position: 'WR' }).total, 48);
+});
 check('relative times', () => {
   assert.strictEqual(L.ago(1000, 1030), 'just now');
   assert.strictEqual(L.ago(1000, 1000 + 35 * 60), '35 min ago');

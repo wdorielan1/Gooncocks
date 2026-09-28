@@ -423,6 +423,42 @@ def fetch_boxscores(yahoo, season_file, saved, deadline, log=print):
     return info, changed, busy
 
 
+LIVE_PUBLIC_KEY = "boxscores/live.json"
+
+
+def live_week_number(week, matchups):
+    """The week to snapshot for Trade Lab: Yahoo's current week once any of
+    its games has started, else the week before (Yahoo moves on to the next
+    week soon after Monday night)."""
+    week = int(week or 0)
+    if week > 1 and matchups and all(m.get("status") == "preevent" for m in matchups):
+        return week - 1
+    return week
+
+
+def live_week(season, week, rosters, points, updated):
+    """Trade Lab's in-progress week: {"season", "week", "updated", "teams":
+    {team key: [[slot, name, position, NFL team, points, played], ...]}}.
+    played is 1 once Yahoo has locked the player because his game started;
+    where Yahoo doesn't say, once he has points. Players who haven't played
+    yet are listed with played 0 so the page leaves them out of the week
+    instead of counting a zero."""
+    teams = {}
+    for key, roster in rosters.items():
+        rows = []
+        for p in roster:
+            pts = points.get(p.get("player_key"))
+            editable = p.get("editable")
+            if editable is None or editable == "":
+                played = pts is not None and pts != 0
+            else:
+                played = str(editable).lower() in ("0", "false")
+            rows.append([p.get("slot") or "", p.get("name") or "", p.get("position") or "", p.get("nfl_team") or "",
+                         pts, 1 if played and pts is not None else 0])
+        teams[key] = rows
+    return {"season": int(season), "week": int(week), "updated": int(updated), "teams": teams}
+
+
 def public_boxscores(year, box, game_keys):
     """The public box score file for one season: {"season", "games": {game
     id: {"a": lineup, "b": lineup}}}, where a lineup is [[slot, name,

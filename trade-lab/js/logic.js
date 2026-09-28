@@ -81,12 +81,16 @@
   // league scoring, as recorded in each week's lineups). Players are
   // matched by name and position; weeks a player wasn't on any league
   // roster aren't recorded, so the sample is "weeks on a roster".
-  function playerWeeks(boxscores) {
-    var by = {};
+  // `live` is the in-progress week (boxscores/live.json): it adds only
+  // players whose games have started, and only while that week isn't in
+  // the final box scores yet.
+  function playerWeeks(boxscores, live) {
+    var by = {}, finished = {};
     Object.keys((boxscores && boxscores.games) || {}).forEach(function (id) {
       var m = /-w(\d+)-/.exec(id);
       if (!m) return;
       var week = Number(m[1]), g = boxscores.games[id];
+      finished[week] = 1;
       [g.a, g.b].forEach(function (lineup) {
         (lineup || []).forEach(function (p) {
           if (typeof p[4] !== 'number') return;
@@ -95,6 +99,15 @@
         });
       });
     });
+    if (live && live.teams && live.week && !finished[live.week]) {
+      Object.keys(live.teams).forEach(function (t) {
+        live.teams[t].forEach(function (p) {
+          if (!p[5] || typeof p[4] !== 'number') return;
+          var key = norm(p[1]) + '|' + String(p[2] || '').split(',')[0];
+          (by[key] = by[key] || {})[live.week] = p[4];
+        });
+      });
+    }
     return by;
   }
   function playerStats(weeksByPlayer, player, recentN) {

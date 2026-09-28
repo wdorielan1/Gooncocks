@@ -93,4 +93,13 @@
   var d = new Date(), cur = d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear();
   window.TRADE_LAB_SAMPLE.boxscores[cur - 1] = seasonBox(cur - 1, 17);
   window.TRADE_LAB_SAMPLE.boxscores[cur] = seasonBox(cur, 3);
+  // Week 4 in progress: Sunday's games are in, Monday night players (KC, PHI here) haven't played.
+  var liveTeams = {};
+  names.forEach(function (n) {
+    liveTeams[T[n]] = lineup(T[n], cur, 4).map(function (r) {
+      var monday = r[3] === 'KC' || r[3] === 'PHI';
+      return r.concat([monday ? 0 : 1]).map(function (v, i) { return i === 4 && monday ? 0 : v; });
+    });
+  });
+  window.TRADE_LAB_SAMPLE.live = { season: cur, week: 4, updated: Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 20, 2).getTime() / 1000), teams: liveTeams };
 })();

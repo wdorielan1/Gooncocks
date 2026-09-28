@@ -151,6 +151,56 @@ check("weekly page includes the pop-up", "window.BoxScore" in html and "Records<
 demo = webpage.render_html(4, real, is_sample=True)
 check("demo page has no box scores", "data-box=" not in demo)
 
+# ---------- Trade Lab's in-progress week
+check("live week: Yahoo's current week once it has started",
+      league_history.live_week_number(4, [{"status": "midevent"}, {"status": "preevent"}]) == 4)
+check("live week: the week before once Yahoo has moved on to an unplayed week",
+      league_history.live_week_number(5, [{"status": "preevent"}, {"status": "preevent"}]) == 4
+      and league_history.live_week_number(1, [{"status": "preevent"}]) == 1)
+rosters = {"t.1": [
+    {"player_key": "p1", "name": "Jalen Hurts", "slot": "QB", "position": "QB", "nfl_team": "PHI", "editable": 0},
+    {"player_key": "p2", "name": "Monday Guy", "slot": "WR", "position": "WR", "nfl_team": "KC", "editable": 1},
+    {"player_key": "p3", "name": "Zero Kicker", "slot": "K", "position": "K", "nfl_team": "DAL", "editable": "0"},
+    {"player_key": "p4", "name": "Unknown Played", "slot": "BN", "position": "RB", "nfl_team": "NYJ"},
+    {"player_key": "p5", "name": "Unknown Not Yet", "slot": "BN", "position": "TE", "nfl_team": "SF"},
+]}
+live = league_history.live_week("2026", 4, rosters, {"p1": 24.5, "p2": 0.0, "p3": 0.0, "p4": 7.2, "p5": 0.0}, 1790000000.9)
+check("live week file: season, week, time and each lineup with who has played",
+      live == {"season": 2026, "week": 4, "updated": 1790000000, "teams": {"t.1": [
+          ["QB", "Jalen Hurts", "QB", "PHI", 24.5, 1],
+          ["WR", "Monday Guy", "WR", "KC", 0.0, 0],        # game hasn't started: left out, not a zero
+          ["K", "Zero Kicker", "K", "DAL", 0.0, 1],        # played and scored zero: counts
+          ["BN", "Unknown Played", "RB", "NYJ", 7.2, 1],   # Yahoo didn't say: points mean he played
+          ["BN", "Unknown Not Yet", "TE", "SF", 0.0, 0]]}}, live)
+check("live week: a player with no points from Yahoo never counts",
+      league_history.live_week(2026, 4, {"t": [{"player_key": "x", "editable": 0}]}, {}, 0)["teams"]["t"][0][5] == 0)
+
+# the Lambda action, end to end with a fake Yahoo and S3
+saved_fns = {n: getattr(lambda_function, n) for n in
+             ("get_scoreboard", "parse_matchups", "scoreboard_week", "get_team_roster", "get_player_points",
+              "_get_access_token", "_rivalry_store", "_put")}
+put_calls = []
+try:
+    lambda_function.get_scoreboard = lambda token, lk, week=None: {"sb": True}
+    lambda_function.parse_matchups = lambda sb: [{"status": "midevent", "team_a": {"team_key": "t.1"}, "team_b": {"team_key": "t.2"}}]
+    lambda_function.scoreboard_week = lambda sb: 4
+    lambda_function.get_team_roster = lambda token, k, week: [{"player_key": k + ".p", "name": k, "slot": "QB", "position": "QB",
+                                                               "nfl_team": "X", "editable": 0 if k == "t.1" else 1}]
+    lambda_function.get_player_points = lambda token, lk, keys, week: {k: 10.0 for k in keys}
+    lambda_function._get_access_token = lambda: "tok"
+    lambda_function._rivalry_store = lambda s3, bucket: type("S", (), {"load": lambda self, k, d: {"current_season": "2026"}})()
+    lambda_function._put = lambda s3, bucket, key, body, ctype: put_calls.append((key, json.loads(body)))
+    import os
+    os.environ.setdefault("S3_BUCKET", "test-bucket")
+    os.environ.setdefault("LEAGUE_KEY", "470.l.1")
+    out = lambda_function.lambda_handler({"action": "trade_lab_live"}, None)
+finally:
+    for n, f in saved_fns.items():
+        setattr(lambda_function, n, f)
+check("trade_lab_live saves boxscores/live.json with who has played",
+      out == {"season": 2026, "week": 4, "players_played": 1} and len(put_calls) == 1
+      and put_calls[0][0] == "boxscores/live.json" and put_calls[0][1]["teams"]["t.2"][0][5] == 0, (out, put_calls))
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed: {', '.join(failures)}")

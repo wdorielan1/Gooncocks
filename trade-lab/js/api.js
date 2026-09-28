@@ -41,6 +41,9 @@
   };
   LiveApi.prototype.signInUrl = function () { return BASE + '/login'; };
   LiveApi.prototype.signOut = function () { return this.call('POST', '/logout', {}); };
+  LiveApi.prototype.liveWeek = function () {
+    return fetch('/boxscores/live.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
+  };
   LiveApi.prototype.boxscores = function (season) {
     return fetch('/boxscores/' + season + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
   };
@@ -98,6 +101,7 @@
   PreviewApi.prototype.signInUrl = function () { return null; };
   PreviewApi.prototype.signIn = function () { this.signedIn = true; };
   PreviewApi.prototype.signOut = function () { this.signedIn = false; return later({ signed_in: false }); };
+  PreviewApi.prototype.liveWeek = function () { return later(this.s.live || null); };
   PreviewApi.prototype.boxscores = function (season) { return later((this.s.boxscores || {})[season] || null); };
 
   window.TradeApi = window.TRADE_LAB_PREVIEW && window.TRADE_LAB_SAMPLE ? new PreviewApi(window.TRADE_LAB_SAMPLE) : new LiveApi();
