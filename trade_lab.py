@@ -239,21 +239,27 @@ DIGEST_PREVIEW_DAYS = 7
 DIGEST_MAX_PER_MANAGER = 5
 
 
+def _and_list(items):
+    """"A", "A and B", "A, B and C"."""
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
 def digest_text(listings, url):
-    """One group-chat text for new listings: a line per manager, in the
+    """One group-chat text for new listings: a sentence per manager, in the
     order they listed, then the link. Empty when there's nothing new."""
     if not listings:
         return ""
     by_manager = {}
     for d in sorted(listings, key=lambda d: d["created_at"]):
         by_manager.setdefault(d.get("manager") or "A manager", []).append(d)
-    lines = ["Trade Lab - new on the trading block:"]
+    lines = []
     for manager, ds in by_manager.items():
         players = [f"{d['name']} ({d['position']}" + (f", {d['nfl_team']})" if d.get("nfl_team") else ")")
                    for d in ds[:DIGEST_MAX_PER_MANAGER]]
         if len(ds) > DIGEST_MAX_PER_MANAGER:
-            players.append(f"+{len(ds) - DIGEST_MAX_PER_MANAGER} more")
-        lines.append(f"{manager}: {', '.join(players)}")
+            players.append(f"{len(ds) - DIGEST_MAX_PER_MANAGER} more")
+        lines.append(f"{manager} just added {_and_list(players)} to the Trading Block.")
+    lines[0] = "Gooncocks Trade Lab AI: " + lines[0]
     lines.append(url)
     return "\n".join(lines)
 
