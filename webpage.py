@@ -665,8 +665,8 @@ def _rivalry_banner(week, season, matchups, history):
     sa, sb = (m.team_a_score, m.team_b_score) if _mid(m.team_a_manager) == a["id"] else (m.team_b_score, m.team_a_score)
     won = a["name"] if sa > sb else b["name"] if sb > sa else None
     win_a, win_b = (" win" if sa > sb else ""), (" win" if sb > sa else "")
-    result = (f'<b class="gold">{escape(won)}</b> won <b class="gold">{_pts(max(sa, sb))}</b>–{_pts(min(sa, sb))} this week' if won
-              else f"A {_pts(sa)} tie this week")
+    result = (f'<b class="gold">{escape(won)}</b> won <b class="gold">{_pts(max(sa, sb))}</b>–{_pts(min(sa, sb))} in Week {week}' if won
+              else f"A {_pts(sa)} tie in Week {week}")
     lead = (f"{escape(card['leader'])} leads the series." if card["leader"] else "The series is dead even.")
     box = _box_data(m, season, week)
     box_btn = (f'<button type="button" class="bn-link" data-box="{escape(json.dumps(box), quote=True)}">Box score</button>'
@@ -677,7 +677,7 @@ def _rivalry_banner(week, season, matchups, history):
     <article class="bn rw" aria-labelledby="rw-title">
       <h2 class="bn-title" id="rw-title"><span class="bn-crown" aria-hidden="true"></span>RIVALRY WATCH<span class="bn-crown" aria-hidden="true"></span></h2>
       <div class="rw-art{size}">
-        <span class="rw-tag">GAME OF THE WEEK</span>
+        <span class="rw-tag">WEEK {week} · GAME OF THE WEEK</span>
         <span class="rw-name a{win_a}">{escape(a["name"])}</span><span class="rw-vs">VS</span><span class="rw-name b{win_b}">{escape(b["name"])}</span>
       </div>
       <div class="bn-stats">

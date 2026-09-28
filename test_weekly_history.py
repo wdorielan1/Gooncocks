@@ -96,6 +96,7 @@ webpage._season = lambda today=None: 2024
 html = webpage.render_html(1, week_games, is_sample=False, history=real)
 check("both banners render", 'class="bn rw"' in html and 'class="bn nr' in html)
 check("rivalry banner picks the closest rivalry this week", "rivalries.html#cy-vs-di" in html)
+check("rivalry banner says which week it is", "WEEK 1 · GAME OF THE WEEK" in html and " in Week 1." in html)
 rw = html[html.index('class="bn rw"'):html.index('class="bn nr')]
 import re as _re
 series_spans = _re.findall(r'<span class="([^"]*)">\d+</span>', rw)
