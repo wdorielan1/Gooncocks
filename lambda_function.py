@@ -79,6 +79,10 @@ Drive it with the "Test" button in the Lambda console, using a test event
   design change:
     {"action": "publish", "week": 2, "discord": false}
 
+  The league's scoring rules, as Yahoo has them (for checking that stats
+  from other sources can be scored the same way):
+    {"action": "scoring"}
+
   Trade Lab's in-progress week (run by schedule Sunday evening, Sunday
   midnight and Monday midnight): points so far for players whose games have
   started, saved as boxscores/live.json. Tuesday's rivalry_history or
@@ -114,6 +118,7 @@ from yahoo_client import (
     get_team_roster,
     get_transactions,
     get_league_season,
+    get_league_scoring,
     get_user_leagues,
     parse_matchups,
     refresh_access_token,
@@ -545,6 +550,16 @@ def _refresh_boxscores(s3, bucket, yahoo, seasons, game_keys, current, deadline)
         if not box["complete"] and year != current:
             pending.append(year)
     return pending
+
+
+def _action_scoring(event):
+    league_key = event.get("league_key") or _require_env("LEAGUE_KEY")
+    rules = get_league_scoring(_get_access_token(), league_key)
+    print(f"{len(rules)} scoring rules for {league_key}:")
+    for r in rules:
+        extra = "".join(f", +{b['points']:g} at {b['target']:g}" for b in r["bonuses"])
+        print(f"  {r['stat_id']:>3}  {r['position_type'] or '-':<3} {r['name']} ({r['display']}): {r['points']:g}{extra}")
+    return {"rules": rules}
 
 
 def _action_trade_lab_live(event, context=None):
@@ -1104,6 +1119,8 @@ def lambda_handler(event, context):
         return _action_rivalry_history(event, context)
     if action == "recap":
         return _action_recap(event)
+    if action == "scoring":
+        return _action_scoring(event)
     if action == "trade_lab_live":
         return _action_trade_lab_live(event, context)
     if action == "publish":

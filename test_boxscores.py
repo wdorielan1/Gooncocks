@@ -217,6 +217,20 @@ kept = lambda_function._add_extra_standings({"managers": [{"id": "tamir", "name"
                                              "standings": {"2013": {"finished": True, "ranks": {"gabe": 1}}}})
 check("...but never over Yahoo's own standings for that season", kept["standings"]["2013"]["ranks"] == {"gabe": 1})
 
+# ---------- the league's scoring rules from Yahoo's settings
+import yahoo_client
+settings = {"fantasy_content": {"league": [{"league_key": "470.l.1"}, {"settings": [{
+    "stat_categories": {"stats": [{"stat": {"stat_id": 4, "name": "Passing Yards", "display_name": "Pass Yds", "position_type": "O"}},
+                                  {"stat": {"stat_id": 11, "name": "Receptions", "display_name": "Rec", "position_type": "O"}}]},
+    "stat_modifiers": {"stats": [{"stat": {"stat_id": 11, "value": "0.5"}},
+                                 {"stat": {"stat_id": 4, "value": "0.04", "bonuses": [{"bonus": {"target": "300", "points": "3"}}]}}]}}]}]}}
+check("scoring rules: every scored stat with its name, points and bonuses",
+      yahoo_client.parse_scoring(settings) == [
+          {"stat_id": 4, "name": "Passing Yards", "display": "Pass Yds", "position_type": "O", "points": 0.04,
+           "bonuses": [{"target": 300.0, "points": 3.0}]},
+          {"stat_id": 11, "name": "Receptions", "display": "Rec", "position_type": "O", "points": 0.5, "bonuses": []}],
+      yahoo_client.parse_scoring(settings))
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed: {', '.join(failures)}")

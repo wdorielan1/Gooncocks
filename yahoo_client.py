@@ -294,6 +294,41 @@ def get_league_positions(access_token, league_key):
     return positions
 
 
+def parse_scoring(settings_json):
+    """The league's scoring rules from its settings response:
+    [{"stat_id", "name", "display", "position_type", "points", "bonuses"}],
+    one per stat the league scores. bonuses is [{"target", "points"}]."""
+    names = {}
+    for cats in _find_values(settings_json, "stat_categories"):
+        for entry in (cats.get("stats") or []) if isinstance(cats, dict) else []:
+            st = entry.get("stat") if isinstance(entry, dict) else None
+            if isinstance(st, dict) and st.get("stat_id") is not None:
+                names[str(st["stat_id"])] = st
+    rules = []
+    for mods in _find_values(settings_json, "stat_modifiers"):
+        for entry in (mods.get("stats") or []) if isinstance(mods, dict) else []:
+            st = entry.get("stat") if isinstance(entry, dict) else None
+            if not isinstance(st, dict) or st.get("stat_id") is None:
+                continue
+            sid = str(st["stat_id"])
+            meta = names.get(sid, {})
+            bonuses = []
+            for b in st.get("bonuses") or []:
+                b = b.get("bonus") if isinstance(b, dict) and "bonus" in b else b
+                if isinstance(b, dict):
+                    bonuses.append({"target": float(b.get("target") or 0), "points": float(b.get("points") or 0)})
+            rules.append({"stat_id": int(sid), "name": meta.get("name") or "", "display": meta.get("display_name") or "",
+                          "position_type": meta.get("position_type") or "", "points": float(st.get("value") or 0),
+                          "bonuses": bonuses})
+    return sorted(rules, key=lambda r: r["stat_id"])
+
+
+def get_league_scoring(access_token, league_key):
+    """The league's scoring rules - see parse_scoring."""
+    url = f"{FANTASY_BASE}/league/{league_key}/settings?format=json"
+    return parse_scoring(_request(url, headers={"Authorization": f"Bearer {access_token}"}))
+
+
 def get_player_points(access_token, league_key, player_keys, week):
     """{player_key: fantasy points that week}, fetched 25 at a time (Yahoo's
     per-request cap on player collections)."""
