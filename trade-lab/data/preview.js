@@ -86,7 +86,9 @@
     listing('Chris', 'Mark Andrews', 'available', ['RB'], '<b>not bold</b> - notes show as plain text', 600),
     listing('Patrick', 'Rashee Rice', 'available', ['RB', 'QB'], '', 1300)
   ];
-  window.TRADE_LAB_SAMPLE = { league_key: L, now: now, me: T.Will, teams: teams, managerOf: managerOf, rosters: rosters, listings: listings,
+  var needs = [{ team_key: T.Gabe, manager: 'Gabe', wants: ['RB'], note: 'Need a RB2 - will pay for one.', updated_at: now - 5000 },
+               { team_key: T.Patrick, manager: 'Patrick', wants: ['WR', 'TE'], note: '', updated_at: now - 9000 }];
+  window.TRADE_LAB_SAMPLE = { league_key: L, now: now, me: T.Will, teams: teams, managerOf: managerOf, rosters: rosters, listings: listings, needs: needs,
                               positions: ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'], slots: SLOTS,
                               boxscores: {} };
   // This season has 3 weeks played; last season all 17 (seasons follow the page's own clock).

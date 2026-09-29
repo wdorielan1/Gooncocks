@@ -133,6 +133,10 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .needs { width: 100%; border-collapse: collapse; margin-top: 12px; }
 .needs th { text-align: left; font: 600 11px/1 var(--body); letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); padding: 8px 4px; border-bottom: 1px solid var(--line-2); }
 .needs td { padding: 10px 4px; border-bottom: 1px solid var(--line); font-weight: 600; }
+.needs .need-note { display: block; margin-top: 6px; font-weight: 400; font-size: 13px; color: #cfd6e4; }
+.needs-hint { font-size: 13px; }
+.form input.need-text { width: 100%; padding: 10px; border: 1px solid var(--line-2); border-radius: 3px; background: #081226; color: inherit; font: inherit; }
+.form input.need-text:focus-visible { outline: 3px solid var(--gold); }
 .av { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--blue); color: #fff; font: 400 16px/1 var(--display); margin-right: 10px; vertical-align: middle; }
 
 /* editor */

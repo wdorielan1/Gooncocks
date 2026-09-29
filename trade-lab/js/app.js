@@ -155,7 +155,7 @@
   function signOut() {
     api.signOut().then(function () {
       S.me = { signed_in: false }; S.mine = null; resetEditor();
-      renderAccount(); renderEditor(); renderBlock(); toast('Signed out.');
+      renderAccount(); renderEditor(); renderBlock(); if (S.data) renderNeeds(); toast('Signed out.');
     }, function (e) { toast(e.message); });
   }
   function loadMe(fromPreviewSignIn) {
@@ -163,7 +163,7 @@
     renderEditor();
     return api.me().then(function (m) {
       S.me = m;
-      renderAccount(); renderBlock();
+      renderAccount(); renderBlock(); if (S.data) renderNeedsEdit();
       if (m.signed_in && m.can_edit) loadMine(); else renderEditor();
       if (fromPreviewSignIn) toast('Signed in as ' + m.manager + ' (preview).');
       if (!$('panel-match').hidden) renderMatch();
@@ -256,20 +256,84 @@
     var r = S.league.rate(p);
     return r.value === null ? null : h('span', { class: 'rate', title: 'Rating: points per week (see Scouting for how it’s worked out)', text: fmt(r.value) + ' pts/wk' });
   }
+  function teamNeeds() { return (S.data && S.data.needs) || []; }
   function renderNeeds() {
-    var t = clear($('needs')), rows = L.needs(listingsAll(), teams());
+    var t = clear($('needs')), rows = L.needs(listingsAll(), teams(), teamNeeds());
     t.appendChild(h('caption', { class: 'sr-only', text: 'Positions each manager is looking for' }));
     if (!rows.length) {
       t.appendChild(h('tbody', {}, [h('tr', {}, [h('td', { class: 'fine', text: 'No one has said what they’re looking for yet.' })])]));
+    } else {
+      t.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', text: 'Manager' }), h('th', { scope: 'col', text: 'Looking for' })])]));
+      t.appendChild(h('tbody', {}, rows.map(function (n) {
+        return h('tr', {}, [
+          h('td', {}, [h('span', { class: 'av', 'aria-hidden': 'true', text: (n.manager || '?').charAt(0).toUpperCase() }), n.manager]),
+          h('td', {}, [h('span', { class: 'pmeta', style: 'margin:0' }, n.wants.map(posBadge)),
+            n.note ? h('span', { class: 'need-note', text: '“' + n.note + '”' }) : null])
+        ]);
+      })));
+    }
+    renderNeedsEdit();
+  }
+
+  // Tell the league what you're looking for, without listing anyone.
+  function myNeeds() { var k = myKey(); return teamNeeds().filter(function (n) { return n.team_key === k; })[0] || null; }
+  function renderNeedsEdit() {
+    var box = clear($('needsEdit')), mine = myNeeds();
+    if (!S.needsOpen) {
+      box.appendChild(h('button', { type: 'button', class: 'btn gold', 'data-k': 'needs-open',
+        text: mine ? 'Edit what you need' : 'What are you looking for?',
+        onclick: function () { S.needsOpen = true; S.needsDraft = null; renderNeedsEdit(); var f = $('needsEdit').querySelector('input'); if (f) f.focus(); } }));
+      box.appendChild(h('p', { class: 'fine needs-hint', text: 'Tell the league what positions you need. You don’t have to put anyone on the block.' }));
       return;
     }
-    t.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', text: 'Manager' }), h('th', { scope: 'col', text: 'Looking for' })])]));
-    t.appendChild(h('tbody', {}, rows.map(function (n) {
-      return h('tr', {}, [
-        h('td', {}, [h('span', { class: 'av', 'aria-hidden': 'true', text: (n.manager || '?').charAt(0).toUpperCase() }), n.manager]),
-        h('td', {}, [h('span', { class: 'pmeta', style: 'margin:0' }, n.wants.map(posBadge))])
-      ]);
-    })));
+    var form = h('div', { class: 'form' });
+    box.appendChild(form);
+    if (!S.me || !S.me.signed_in) {
+      form.appendChild(h('p', { text: 'Sign in with the Yahoo account that runs your team to tell the league what you need.' }));
+      form.appendChild(signInControl());
+      form.appendChild(h('button', { type: 'button', class: 'linkbtn', text: 'Cancel', onclick: function () { S.needsOpen = false; renderNeedsEdit(); } }));
+      return;
+    }
+    if (!myKey()) {
+      form.appendChild(h('p', { class: 'msg err', text: 'This Yahoo account doesn’t manage a team in our league.' }));
+      return;
+    }
+    var d = S.needsDraft = S.needsDraft || { wants: mine ? mine.wants.slice() : [], note: mine ? mine.note : '' };
+    var positions = (S.data && S.data.positions) || [], dis = !!S.needsBusy;
+    form.appendChild(h('h3', { text: 'What are you looking for?' }));
+    form.appendChild(h('fieldset', {}, [h('legend', { text: 'Positions' }), h('div', { class: 'choices' }, positions.map(function (p) {
+      return h('label', {}, [h('input', { type: 'checkbox', value: p, checked: d.wants.indexOf(p) >= 0, disabled: dis,
+        onchange: function (e) {
+          var i = d.wants.indexOf(p);
+          if (e.target.checked && i < 0) d.wants.push(p);
+          if (!e.target.checked && i >= 0) d.wants.splice(i, 1);
+          d.wants.sort(function (a, b) { return positions.indexOf(a) - positions.indexOf(b); });
+        } }), p]);
+    }))]));
+    form.appendChild(h('label', {}, [h('span', { class: 'fine', text: 'Anything else? (optional)' }),
+      h('input', { type: 'text', class: 'need-text', maxlength: '200', value: d.note, disabled: dis, placeholder: 'e.g. Need a RB2, will pay for one',
+        oninput: function (e) { d.note = e.target.value; } })]));
+    if (S.needsMsg) form.appendChild(h('p', { class: 'msg err', role: 'alert', text: S.needsMsg }));
+    form.appendChild(h('div', { class: 'form-actions' }, [
+      h('button', { type: 'button', class: 'btn gold', disabled: dis, text: S.needsBusy ? 'Saving…' : 'Save', onclick: function () { saveNeeds(d.wants, d.note.trim()); } }),
+      h('button', { type: 'button', class: 'btn ghost', disabled: dis, text: 'Cancel', onclick: function () { S.needsOpen = false; S.needsMsg = null; renderNeedsEdit(); } })
+    ]));
+    if (mine) form.appendChild(h('button', { type: 'button', class: 'linkbtn', disabled: dis, text: 'Clear what I’m looking for', onclick: function () { saveNeeds([], ''); } }));
+  }
+  function saveNeeds(wants, note) {
+    S.needsBusy = true; S.needsMsg = null; renderNeedsEdit();
+    api.saveNeeds(wants, note).then(function (res) {
+      S.needsBusy = false; S.needsOpen = false;
+      var k = myKey();
+      S.data.needs = teamNeeds().filter(function (n) { return n.team_key !== k; }).concat(res.needs ? [res.needs] : []);
+      renderNeeds();
+      if (!$('panel-match').hidden) renderMatch();
+      toast(res.needs ? 'Saved. The league can see what you’re looking for.' : 'Cleared.');
+    }, function (e) {
+      S.needsBusy = false;
+      if (e.status === 401) { S.me = { signed_in: false }; renderAccount(); }
+      S.needsMsg = e.message; renderNeedsEdit();
+    });
   }
 
   // ---------- listing detail ----------
@@ -782,7 +846,7 @@
       });
       $('matchNote').textContent = 'Only players marked “On the block” have been listed; everyone else is a suggestion to ask about. ' + methodNote(lg);
       // Matches from what managers typed on their listings.
-      var old = L.matchmaker(listingsAll(), key), lm = clear($('listMatches'));
+      var old = L.matchmaker(listingsAll(), key, teamNeeds()), lm = clear($('listMatches'));
       $('listMatchWrap').hidden = !old.matches.length;
       old.matches.forEach(function (m) {
         var text = who === 'You' ? m.text : m.text.replace(/^You’re looking for/, who + ' is looking for').replace(/which you have listed/, 'which ' + who + ' has listed').replace(/you haven’t listed/, who + ' hasn’t listed');

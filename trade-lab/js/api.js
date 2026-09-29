@@ -35,6 +35,7 @@
   LiveApi.prototype.listings = function () { return this.call('GET', '/listings'); };
   LiveApi.prototype.rosters = function () { return this.call('GET', '/rosters'); };
   LiveApi.prototype.myRoster = function () { return this.call('GET', '/roster'); };
+  LiveApi.prototype.saveNeeds = function (wants, note) { return this.call('PUT', '/needs', { wants: wants, note: note }); };
   LiveApi.prototype.save = function (items) { return this.call('PUT', '/listings', { items: items }); };
   LiveApi.prototype.remove = function (playerKey, version) {
     return this.call('DELETE', '/listings/' + encodeURIComponent(playerKey) + '?version=' + encodeURIComponent(version));
@@ -60,7 +61,7 @@
   };
   PreviewApi.prototype.listings = function () {
     var s = this.s;
-    return later({ league_key: s.league_key, listings: s.listings.slice().sort(function (a, b) { return b.updated_at - a.updated_at; }),
+    return later({ league_key: s.league_key, listings: s.listings.slice().sort(function (a, b) { return b.updated_at - a.updated_at; }), needs: s.needs || [],
                    positions: s.positions, teams: s.teams, rosters_checked_at: s.now - 240, rosters_stale: false, preview: true });
   };
   PreviewApi.prototype.rosters = function () {
@@ -92,6 +93,14 @@
       saved.push(l); results.push({ player_key: it.player_key, ok: true });
     });
     return later({ results: results, listings: saved, _status: results.every(function (r) { return r.ok; }) ? 200 : 409 });
+  };
+  PreviewApi.prototype.saveNeeds = function (wants, note) {
+    var s = this.s, me = s.me;
+    s.needs = (s.needs || []).filter(function (n) { return n.team_key !== me; });
+    if (!wants.length && !note) return later({ needs: null });
+    var n = { team_key: me, manager: s.managerOf[me], wants: wants.slice(), note: note, updated_at: Math.floor(Date.now() / 1000) };
+    s.needs.push(n);
+    return later({ needs: n });
   };
   PreviewApi.prototype.remove = function (playerKey) {
     var s = this.s;

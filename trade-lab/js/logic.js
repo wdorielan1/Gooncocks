@@ -26,14 +26,23 @@
   }
 
   // Each manager's wanted positions, from their own listings.
-  function needs(listings, teams) {
+  // What each manager is looking for: what they said for their team
+  // (teamNeeds: [{team_key, manager, wants, note}]) plus the positions on
+  // their listings.
+  function needs(listings, teams, teamNeeds) {
     var by = {};
+    function row(k, manager) { return by[k] = by[k] || { team_key: k, manager: manager, wants: [], note: '' }; }
+    (teamNeeds || []).forEach(function (t) {
+      var n = row(t.team_key, t.manager);
+      n.note = t.note || '';
+      (t.wants || []).forEach(function (w) { if (n.wants.indexOf(w) < 0) n.wants.push(w); });
+    });
     listings.forEach(function (l) {
-      var n = by[l.team_key] = by[l.team_key] || { team_key: l.team_key, manager: l.manager, wants: [] };
+      var n = row(l.team_key, l.manager);
       l.wants.forEach(function (w) { if (n.wants.indexOf(w) < 0) n.wants.push(w); });
     });
     var order = (teams || []).map(function (t) { return t.team_key; });
-    return Object.keys(by).map(function (k) { return by[k]; }).filter(function (n) { return n.wants.length; })
+    return Object.keys(by).map(function (k) { return by[k]; }).filter(function (n) { return n.wants.length || n.note; })
       .sort(function (a, b) { return (order.indexOf(a.team_key) - order.indexOf(b.team_key)) || a.manager.localeCompare(b.manager); });
   }
 
@@ -46,16 +55,18 @@
   // Trade partners for one team, from published listings only. A partner
   // must have a listed player at a position this team wants; it's mutual
   // when this team has a listed player at a position the partner wants.
-  function matchmaker(listings, teamKey) {
+  function matchmaker(listings, teamKey, teamNeeds) {
     var mine = listings.filter(function (l) { return l.team_key === teamKey; });
-    var myWants = [];
+    var said = {};
+    (teamNeeds || []).forEach(function (t) { said[t.team_key] = t.wants || []; });
+    var myWants = (said[teamKey] || []).slice();
     mine.forEach(function (l) { l.wants.forEach(function (w) { if (myWants.indexOf(w) < 0) myWants.push(w); }); });
     var byTeam = {};
     listings.forEach(function (l) { if (l.team_key !== teamKey) (byTeam[l.team_key] = byTeam[l.team_key] || []).push(l); });
     var out = [];
     Object.keys(byTeam).forEach(function (k) {
       var theirs = byTeam[k], manager = theirs[0].manager;
-      var theirWants = [];
+      var theirWants = (said[k] || []).slice();
       theirs.forEach(function (l) { l.wants.forEach(function (w) { if (theirWants.indexOf(w) < 0) theirWants.push(w); }); });
       var canGet = theirs.filter(function (l) { return myWants.indexOf(l.position) >= 0; });
       if (!canGet.length) return;

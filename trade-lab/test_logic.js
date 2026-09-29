@@ -84,6 +84,20 @@ check('the in-progress week counts only players who have played, until the final
   const done = L.playerWeeks(box, Object.assign({}, live, { week: 3 }));  // week 3 is already final
   assert.strictEqual(L.playerStats(done, { name: 'Amon-Ra St. Brown', position: 'WR' }).total, 48);
 });
+check('who needs what includes what managers said without listing anyone', () => {
+  const rows = L.needs([{ team_key: 't.1', manager: 'Will', wants: ['RB'] }],
+    [{ team_key: 't.1' }, { team_key: 't.2' }],
+    [{ team_key: 't.2', manager: 'Sam', wants: ['WR'], note: 'Need a WR1' }, { team_key: 't.1', manager: 'Will', wants: ['TE'], note: '' }]);
+  assert.deepStrictEqual(rows.map(r => [r.manager, r.wants, r.note]), [['Will', ['TE', 'RB'], ''], ['Sam', ['WR'], 'Need a WR1']]);
+  assert.strictEqual(L.needs([], [], [{ team_key: 't.3', manager: 'Gabe', wants: [], note: 'Anything for a QB' }])[0].note, 'Anything for a QB');
+});
+check('listing matches use what a team said it wants, not just its listings', () => {
+  const ls = [{ team_key: 't.2', manager: 'Sam', name: 'Breece Hall', position: 'RB', wants: [], player_key: 'p1' }];
+  assert.strictEqual(L.matchmaker(ls, 't.1').matches.length, 0);
+  const m = L.matchmaker(ls, 't.1', [{ team_key: 't.1', wants: ['RB'] }]);
+  assert.strictEqual(m.matches.length, 1);
+  assert.deepStrictEqual(m.wants, ['RB']);
+});
 check('relative times', () => {
   assert.strictEqual(L.ago(1000, 1030), 'just now');
   assert.strictEqual(L.ago(1000, 1000 + 35 * 60), '35 min ago');

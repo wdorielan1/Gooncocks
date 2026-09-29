@@ -15,6 +15,7 @@ are first-party on stats.gooncocks.com.
   GET  /api/trade-lab/digest?key=...     new listings as one ready-to-send text,
                                          for the commissioner's iPhone Shortcut
   PUT  /api/trade-lab/listings           add or update your listings
+  PUT  /api/trade-lab/needs              say what positions your team is looking for
   DELETE /api/trade-lab/listings/<player_key>?version=N
 
 Who you are comes only from Yahoo: the sign-in exchanges Yahoo's one-time
@@ -428,6 +429,9 @@ class TradeLab:
     def _lk(self):
         return f"LISTING#{self.league}"
 
+    def _nk(self):
+        return f"NEEDS#{self.league}"
+
     def _rk(self):
         return f"ROSTER#{self.league}"
 
@@ -635,7 +639,10 @@ class TradeLab:
         names = {t["team_key"]: _manager_name(t) for t in info["teams"]}
         active = [self._public(i, names) for i in self.store.query(self._lk()) if i["data"]["status"] in STATUSES]
         active.sort(key=lambda l: -l["updated_at"])
-        return _json(200, {"league_key": self.league, "listings": active, "positions": info["positions"],
+        needs = [{"team_key": i["sk"], "manager": names.get(i["sk"]) or i["data"].get("manager") or "",
+                  "wants": i["data"]["wants"], "note": i["data"].get("note", ""), "updated_at": i["data"]["updated_at"]}
+                 for i in self.store.query(self._nk())]
+        return _json(200, {"league_key": self.league, "listings": active, "needs": needs, "positions": info["positions"],
                            "teams": [{"team_key": t["team_key"], "manager": names[t["team_key"]], "name": t["name"]}
                                      for t in info["teams"]],
                            "rosters_checked_at": refreshed, "rosters_stale": stale})
@@ -749,6 +756,28 @@ class TradeLab:
             self.alert_new(names.get(sess["team_key"]) or sess.get("manager") or "A manager", fresh)
         status = 200 if all(r["ok"] for r in results) else 409
         return _json(status, {"results": results, "listings": saved})
+
+    def set_needs(self, event, cookies):
+        """What the signed-in manager's team is looking for, without listing
+        anyone: positions plus an optional note. The team comes only from
+        the session; saving nothing clears it."""
+        sess = self._require_editor(event, cookies)
+        body = _body(event)
+        wants = body.get("wants") or []
+        positions = set(self._positions())
+        if not isinstance(wants, list) or any(w not in positions for w in wants) or len(set(wants)) != len(wants):
+            raise HttpError(400, "bad_wants", "Pick positions from the league's list.")
+        note = clean_note(body.get("note"))
+        if not wants and not note:
+            try:
+                self.store.delete(self._nk(), sess["team_key"])
+            except Conflict:
+                pass
+            return _json(200, {"needs": None})
+        manager = self.team_names().get(sess["team_key"]) or sess.get("manager") or ""
+        data = {"wants": wants, "note": note, "manager": manager, "updated_at": self.now()}
+        self.store.put(self._nk(), sess["team_key"], data, 1)
+        return _json(200, {"needs": {"team_key": sess["team_key"], "manager": manager, **{k: data[k] for k in ("wants", "note", "updated_at")}}})
 
     def remove(self, event, cookies, player_key):
         sess = self._require_editor(event, cookies)
@@ -944,6 +973,8 @@ class TradeLab:
                 return self.my_roster(event, cookies)
             if method == "GET" and route == "/digest":
                 return self.digest(event)
+            if method == "PUT" and route == "/needs":
+                return self.set_needs(event, cookies)
             if method == "PUT" and route == "/listings":
                 return self.save(event, cookies)
             m = re.fullmatch(r"/listings/([0-9]+\.p\.[0-9]+)", route)

@@ -325,6 +325,34 @@ check("unknown endpoints 404", app.handle(event("GET", "/nope"))["statusCode"] =
 r = app.handle(event("PUT", "/listings", cookies=sam, body=None, headers={"x-csrf-token": sam_csrf}))
 check("responses never cache personal data", r["headers"]["Cache-Control"] == "no-store")
 
+# ---------------------------------------------------------------- team needs (no listing required)
+clock = Clock()
+napp = TradeLab(MemoryStore(clock), FakeYahoo(), ENV, clock)
+n_sam, n_csrf, _ = sign_in(napp, "code-sam")
+n_out, n_out_csrf, _ = sign_in(napp, "code-outsider")
+
+
+def needs(app, cookies, csrf, payload, headers=None):
+    h = {"x-csrf-token": csrf}
+    h.update(headers or {})
+    return app.handle(event("PUT", "/needs", cookies=cookies, body=payload, headers=h))
+
+
+check("needs: signed out can't save", needs(napp, {}, "", {"wants": ["RB"]})["statusCode"] == 401)
+check("needs: a wrong CSRF token is refused", needs(napp, n_sam, "nope", {"wants": ["RB"]})["statusCode"] == 403)
+check("needs: another site can't save", needs(napp, n_sam, n_csrf, {"wants": ["RB"]}, {"origin": "https://evil.example"})["statusCode"] == 403)
+check("needs: an account outside the league can't save", needs(napp, n_out, n_out_csrf, {"wants": ["RB"]})["statusCode"] == 403)
+check("needs: only the league's positions", needs(napp, n_sam, n_csrf, {"wants": ["XX"]})["statusCode"] == 400
+      and needs(napp, n_sam, n_csrf, {"wants": ["RB", "RB"]})["statusCode"] == 400)
+r = needs(napp, n_sam, n_csrf, {"wants": ["RB", "TE"], "note": "  Need a  RB2 <b>now</b> ", "team_key": WILL})
+got = body(napp.handle(event("GET", "/listings")))["needs"]
+check("needs: saved for the signed-in manager's own team (a team_key in the request is ignored), shown publicly",
+      r["statusCode"] == 200 and len(got) == 1 and got[0]["team_key"] == SAM and got[0]["manager"]
+      and got[0]["wants"] == ["RB", "TE"] and got[0]["note"] == "Need a RB2 <b>now</b>", got)
+check("needs: saving nothing clears it", body(needs(napp, n_sam, n_csrf, {"wants": [], "note": ""}))["needs"] is None
+      and body(napp.handle(event("GET", "/listings")))["needs"] == [])
+check("needs: clearing twice is fine", needs(napp, n_sam, n_csrf, {"wants": []})["statusCode"] == 200)
+
 # ---------------------------------------------------------------- text alerts
 class FakeSms:
     def __init__(self):
