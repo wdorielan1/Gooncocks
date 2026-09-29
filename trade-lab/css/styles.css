@@ -292,8 +292,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .detail-head .pname { font-size: 28px; }
 .stats { margin-top: 16px; }
 .stats h3 { font: 400 20px/1.1 var(--headline); text-transform: uppercase; letter-spacing: .5px; }
-.st-chart { list-style: none; margin: 14px 0 0; padding: 0 0 4px; display: flex; gap: 2px; overflow-x: auto; }
-.st-col { flex: 1 0 26px; display: grid; grid-template-rows: auto 90px auto; justify-items: center; gap: 4px; }
+.st-chart { list-style: none; margin: 14px 0 0; padding: 0 0 4px; display: flex; gap: 4px; overflow-x: auto; }
+.st-col { flex: 1 0 34px; display: grid; grid-template-rows: auto 90px auto; justify-items: center; gap: 4px; }
 .st-val { font-size: 11px; font-weight: 600; color: #cfd6e4; font-variant-numeric: tabular-nums; }
 .st-track { width: 100%; max-width: 22px; height: 90px; display: flex; align-items: flex-end; border-bottom: 1px solid var(--line-2); }
 .st-bar { width: 100%; background: var(--blue-hi); border-radius: 4px 4px 0 0; }

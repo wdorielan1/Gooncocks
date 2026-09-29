@@ -377,6 +377,11 @@
     ]));
     lastFocus = opener || document.activeElement;
     $('detail').hidden = false;
+    var chart = body.querySelector('.st-chart');
+    if (chart) {
+      chart.scrollLeft = chart.scrollWidth;  // open on the latest weeks; earlier ones scroll left
+      if (chart.scrollWidth > chart.clientWidth + 2) chart.insertAdjacentElement('afterend', h('p', { class: 'fine st-hint', text: '← Swipe or scroll for earlier weeks' }));
+    }
     $('detailClose').focus();
   }
   // Weekly fantasy points (league scoring) for a listed player: one bar per
