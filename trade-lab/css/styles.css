@@ -310,10 +310,22 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .pa tbody th b { color: var(--text); }
 .pa-sort { background: none; border: 0; color: var(--muted); font: 600 12px/1 var(--body); letter-spacing: 1px; cursor: pointer; padding: 6px 4px; min-width: 36px; min-height: 32px; }
 .pa-sort.on { color: var(--gold); }
-.pa td { font-size: 15px; font-weight: 600; color: #fff; border-radius: 3px; }
+.pa td { font-size: 15px; font-weight: 600; color: #fff; border-radius: 3px; padding: 0; }
+.pa-cell { width: 100%; min-height: 36px; padding: 8px 6px; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
+.pa-cell:hover, .pa-cell:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; border-radius: 3px; }
+.pa-sub { margin-top: 6px; color: #cfd6e4; }
+.pa-games { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
+.pa-games > li { background: #0c1831; border: 1px solid var(--line-2); border-radius: 3px; padding: 10px 12px; }
+.pa-gh { display: flex; justify-content: space-between; gap: 10px; }
+.pa-gt { color: var(--gold); font-weight: 700; }
+.pa-games ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.pa-games ul li { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.pa-pn { display: block; font-weight: 600; }
+.pa-pl { display: block; font-size: 13px; color: var(--muted); }
+.pa-pp { font-variant-numeric: tabular-nums; }
 .pa td.on { outline: 1px solid #ffffff55; outline-offset: -1px; }
 .pa-t0 { background: #0f1d36; } .pa-t1 { background: #15294a; } .pa-t2 { background: #1d3a68; } .pa-t3 { background: #264f8c; } .pa-t4 { background: #3264b3; }
-@media (max-width: 640px) { .pa-name { display: none; } .pa th, .pa td { padding: 7px 3px; } .pa td { font-size: 14px; } }
+@media (max-width: 640px) { .pa-name { display: none; } .pa th { padding: 7px 3px; } .pa-cell { padding: 7px 2px; } .pa td { font-size: 14px; } }
 .stats { margin-top: 16px; }
 .stats h3 { font: 400 20px/1.1 var(--headline); text-transform: uppercase; letter-spacing: .5px; }
 .st-chart { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }

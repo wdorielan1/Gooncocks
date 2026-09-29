@@ -329,6 +329,13 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.ok(rb.every((v, i) => i === 0 || rb[i - 1] >= v), 'sorted by RB');
     assert.strictEqual(await phone.getAttribute('#paTable th[aria-sort="descending"] button', 'aria-label'), 'Sort by points allowed to RB');
     assert.ok(await phone.$$eval('#paTable td', tds => tds.every(td => /^pa-t[0-4]/.test(td.className) && / most\)$/.test(td.title))));
+    await phone.click('#paTable tbody tr:first-child td:nth-of-type(2) button');  // RB column, top team
+    await phone.waitForSelector('#detail:not([hidden]) .pa-games');
+    assert.match(await phone.textContent('#detailTitle'), / defense vs RBs$/);
+    assert.strictEqual(await phone.$$eval('.pa-games > li', ls => ls.length), 3);
+    assert.match(await phone.textContent('.pa-games > li:first-child'), /^Week 3 vs [A-Z]+.*pts.*RB1.*car/);
+    assert.ok(await noOverflow(phone));
+    await phone.click('#detailClose');
     await phone.click('#paLast4');
     assert.strictEqual(await phone.getAttribute('#paLast4', 'aria-pressed'), 'true');
     assert.match(await phone.textContent('#paNote'), /last 4 games.*nflverse/);

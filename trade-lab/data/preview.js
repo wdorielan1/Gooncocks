@@ -127,7 +127,19 @@
         weeks[w][p] = v; sum[p] = (sum[p] || 0) + v;
       });
     });
-    paTeams[t] = { weeks: weeks, games: 3 };
+    var who = {};
+    [1, 2, 3].forEach(function (w) {
+      var opp = NFLT[(NFLT.indexOf(t) + w * 7) % 32];
+      who[w] = {
+        QB: [[opp + ' QB', opp, weeks[w].QB, '22/31, 264 yds, 2 TD, 1 INT; 4 car, 18 yds']],
+        RB: [[opp + ' RB1', opp, Math.round(weeks[w].RB * 70) / 100, '16 car, 82 yds, 1 TD; 3 rec, 21 yds'], [opp + ' RB2', opp, Math.round(weeks[w].RB * 30) / 100, '6 car, 24 yds; 2 rec, 11 yds']],
+        WR: [[opp + ' WR1', opp, Math.round(weeks[w].WR * 60) / 100, '7 rec, 104 yds, 1 TD'], [opp + ' WR2', opp, Math.round(weeks[w].WR * 40) / 100, '5 rec, 61 yds']],
+        TE: [[opp + ' TE', opp, weeks[w].TE, '5 rec, 48 yds']],
+        K: [[opp + ' K', opp, weeks[w].K, 'FG 2/2 (long 47), PAT 3/3']],
+        DEF: [[opp + ' D/ST', opp, weeks[w].DEF, '3 sacks, 1 INT, 1 FR; 17 pts allowed']]
+      };
+    });
+    paTeams[t] = { weeks: weeks, games: 3, who: who };
     Object.keys(PAB).forEach(function (p) { paTeams[t][p] = Math.round(sum[p] / 3 * 100) / 100; });
   });
   window.TRADE_LAB_SAMPLE.pointsAgainst = { season: cur, weeks: [1, 2, 3], updated: now - 7200, teams: paTeams };

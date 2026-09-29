@@ -127,6 +127,51 @@ def def_points(row, points_allowed, rules):
                      if r["position_type"] == "DT" and r["stat_id"] in DEF_STATS), 2)
 
 
+def _n(v):
+    return int(v) if float(v).is_integer() else round(v, 1)
+
+
+def stat_line(row, position):
+    """A short box-score line for a player's week, e.g. "24/35, 287 yds,
+    2 TD, 1 INT; 6 car, 44 yds, 1 TD" for a QB."""
+    g = lambda *c: _num(row, *c)
+    rush = f"{_n(g('carries'))} car, {_n(g('rushing_yards'))} yds" + (f", {_n(g('rushing_tds'))} TD" if g("rushing_tds") else "")
+    rec = f"{_n(g('receptions'))} rec, {_n(g('receiving_yards'))} yds" + (f", {_n(g('receiving_tds'))} TD" if g("receiving_tds") else "")
+    parts = []
+    if position == "QB":
+        parts.append(f"{_n(g('completions'))}/{_n(g('attempts'))}, {_n(g('passing_yards'))} yds, "
+                     f"{_n(g('passing_tds'))} TD, {_n(g('passing_interceptions'))} INT")
+        if g("carries") or g("rushing_yards") or g("rushing_tds"):
+            parts.append(rush)
+    elif position == "RB":
+        parts.append(rush)
+        if g("receptions") or g("targets"):
+            parts.append(rec)
+    elif position in ("WR", "TE"):
+        parts.append(rec)
+        if g("carries") or g("rushing_yards") or g("rushing_tds"):
+            parts.append(rush)
+    elif position == "K":
+        parts.append(f"FG {_n(g('fg_made'))}/{_n(g('fg_att'))}" + (f" (long {_n(g('fg_long'))})" if g("fg_made") else "")
+                     + f", PAT {_n(g('pat_made'))}/{_n(g('pat_att'))}")
+    if position != "K":
+        if g("special_teams_tds"):
+            parts.append(f"{_n(g('special_teams_tds'))} return TD")
+        lost = g("sack_fumbles_lost", "rushing_fumbles_lost", "receiving_fumbles_lost")
+        if lost:
+            parts.append(f"{_n(lost)} fumble lost")
+    return "; ".join(parts)
+
+
+def def_line(row, points_allowed):
+    g = lambda *c: _num(row, *c)
+    bits = [f"{_n(g('def_sacks'))} sacks", f"{_n(g('def_interceptions'))} INT", f"{_n(g('fumble_recovery_opp'))} FR"]
+    tds = g("def_tds") + min(g("fumble_recovery_tds"), g("fumble_recovery_opp")) + g("special_teams_tds")
+    if tds:
+        bits.append(f"{_n(tds)} TD")
+    return ", ".join(bits) + f"; {points_allowed} pts allowed"
+
+
 def team_code(code):
     code = (code or "").upper()
     return TEAM_CODES.get(code, code)
@@ -179,7 +224,7 @@ def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
         p = players.setdefault(r["player_id"], {"id": r["player_id"], "name": r.get("player_display_name") or r.get("player_name"),
                                                 "position": r["position"], "team": team_code(r["team"]), "weeks": {}})
         p["team"] = team_code(r["team"])  # the latest team he played for
-        p["weeks"][int(r["week"])] = [player_points(r, rules), team_code(r.get("opponent_team"))]
+        p["weeks"][int(r["week"])] = [player_points(r, rules), team_code(r.get("opponent_team")), stat_line(r, r["position"])]
     defenses = {}
     for r in _csv(team_csv):
         if r.get("season_type") not in ("REG", None, ""):
@@ -188,35 +233,46 @@ def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
         if (team, wk) not in allowed:
             continue
         r["_fourth_down_stops"] = (stops or {}).get((team, wk), 0)
-        defenses.setdefault(team, {})[wk] = [def_points(r, allowed[(team, wk)], rules), team_code(r.get("opponent_team"))]
+        defenses.setdefault(team, {})[wk] = [def_points(r, allowed[(team, wk)], rules), team_code(r.get("opponent_team")),
+                                             def_line(r, allowed[(team, wk)])]
     return {"season": int(season), "players": list(players.values()), "defenses": defenses}
 
 
 def points_against(points):
     """Fantasy points each NFL defense gives up, by position: {team: {"QB":
     avg per game, ..., "DEF": avg, "games": n, "weeks": {week: {"QB": pts,
-    ...}}}}. DEF is the points opposing fantasy defenses scored against that
-    team's offense. The weeks let a page average any range (e.g. last 4)."""
+    ...}}, "who": {week: {"QB": [[name, team, pts, stat line], ...]}}}}.
+    DEF is the points opposing fantasy defenses scored against that team's
+    offense. The weeks let a page average any range (e.g. last 4); "who"
+    names the players behind each week's points, most first."""
     sums = {}   # (defense team, week, pos) -> points scored against it
     games = {}  # defense team -> set(weeks)
+    who = {}    # (defense team, week, pos) -> [[name, team, pts, line]]
     for p in points["players"]:
-        for wk, (pts, opp) in p["weeks"].items():
+        for wk, w in p["weeks"].items():
+            pts, opp = w[0], w[1]
             if opp:
                 key = (opp, wk, p["position"])
                 sums[key] = sums.get(key, 0.0) + pts
                 games.setdefault(opp, set()).add(wk)
+                if pts:
+                    who.setdefault(key, []).append([p["name"], p["team"], pts, w[2] if len(w) > 2 else ""])
     for team, weeks in points["defenses"].items():
-        for wk, (pts, opp) in weeks.items():
+        for wk, w in weeks.items():
+            pts, opp = w[0], w[1]
             if opp:
                 # Points `team`'s defense scored are points `opp`'s offense gave up.
                 sums[(opp, wk, "DEF")] = sums.get((opp, wk, "DEF"), 0.0) + pts
                 games.setdefault(opp, set()).add(wk)
+                who.setdefault((opp, wk, "DEF"), []).append([team + " D/ST", team, pts, w[2] if len(w) > 2 else ""])
     out = {}
     for team, weeks in games.items():
         n = len(weeks)
         out[team] = {pos: round(sum(sums.get((team, wk, pos), 0.0) for wk in weeks) / n, 2) for pos in POSITIONS}
         out[team]["games"] = n
         out[team]["weeks"] = {wk: {pos: round(sums.get((team, wk, pos), 0.0), 2) for pos in POSITIONS} for wk in sorted(weeks)}
+        out[team]["who"] = {wk: {pos: sorted(who.get((team, wk, pos), []), key=lambda x: -x[2])[:6] for pos in POSITIONS}
+                            for wk in sorted(weeks)}
     return out
 
 
@@ -236,11 +292,11 @@ def check(points, box):
     exact matches (within 0.05), the average miss, and the biggest misses."""
     ours = {}
     for p in points["players"]:
-        for wk, (pts, _opp) in p["weeks"].items():
-            ours[(name_key(p["name"]), p["position"], wk)] = pts
+        for wk, w in p["weeks"].items():
+            ours[(name_key(p["name"]), p["position"], wk)] = w[0]
     for team, weeks in points["defenses"].items():
-        for wk, (pts, _opp) in weeks.items():
-            ours[(team, "DEF", wk)] = pts
+        for wk, w in weeks.items():
+            ours[(team, "DEF", wk)] = w[0]
     by_pos, misses = {}, []
     for wk, w in (box.get("weeks") or {}).items():
         for lineup in ((w or {}).get("teams") or {}).values():

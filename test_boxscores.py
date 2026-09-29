@@ -253,15 +253,15 @@ TCSV = ("team,season,week,season_type,opponent_team,def_sacks,def_interceptions,
 GCSV = "season,game_type,week,away_team,away_score,home_team,home_score\n2025,REG,1,BAL,24,BUF,17\n2025,REG,1,SF,17,LA,14\n"
 pts = nfl_points.season_points(2025, R, PCSV, TCSV, GCSV)
 by = {p["name"]: p for p in pts["players"]}
-check("nflverse: a QB week in league scoring, with the 300-yard bonus (Josh Allen, 60.26)", by["Josh Allen"]["weeks"][1] == [60.26, "BAL"], by["Josh Allen"])
-check("nflverse: RB with rushing bonus, catches and a lost fumble", by["Kenneth Walker III"]["weeks"][1] == [10.4 + 5 + 3 + 2 - 2, "SF"], by["Kenneth Walker III"])
-check("nflverse: kickers - 50-59 and 60+ both count as 50+", by["Brandon Aubrey"]["weeks"][1] == [14.0, "PHI"])
+check("nflverse: a QB week in league scoring, with the 300-yard bonus (Josh Allen, 60.26)", by["Josh Allen"]["weeks"][1][:2] == [60.26, "BAL"], by["Josh Allen"])
+check("nflverse: RB with rushing bonus, catches and a lost fumble", by["Kenneth Walker III"]["weeks"][1][:2] == [10.4 + 5 + 3 + 2 - 2, "SF"], by["Kenneth Walker III"])
+check("nflverse: kickers - 50-59 and 60+ both count as 50+", by["Brandon Aubrey"]["weeks"][1][:2] == [14.0, "PHI"])
 check("nflverse: playoff games are left out", len(by["Josh Allen"]["weeks"]) == 1)
 check("nflverse: defenses score sacks, INTs and points allowed from the final score",
-      pts["defenses"]["BAL"][1] == [3 + 2 + 6, "BUF"], pts["defenses"])
+      pts["defenses"]["BAL"][1][:2] == [3 + 2 + 6, "BUF"], pts["defenses"])
 R.append({"stat_id": 35, "position_type": "DT", "points": 6, "name": "TD", "bonuses": []})
 check("nflverse: a fumble returned for a TD counts as a defensive TD",
-      nfl_points.season_points(2025, R, PCSV, TCSV, GCSV)["defenses"]["BUF"][1] == [2 + 4 + 6, "BAL"])
+      nfl_points.season_points(2025, R, PCSV, TCSV, GCSV)["defenses"]["BUF"][1][:2] == [2 + 4 + 6, "BAL"])
 R.pop()
 check("nflverse: every one of the league's stats is covered", nfl_points.unsupported(R) == []
       and nfl_points.unsupported([{"stat_id": 999, "position_type": "O", "points": 1, "name": "Odd stat", "bonuses": []}]) == [(999, "Odd stat")])
@@ -269,11 +269,16 @@ PBP = io.StringIO("season_type,week,defteam,fourth_down_failed\nREG,1,BAL,1\nREG
 stops = nfl_points.fourth_down_stops(PBP)
 check("nflverse: 4th down stops from play-by-play", stops == {("BAL", 1): 2, ("LAR", 1): 1}, stops)
 check("nflverse: stops score for the defense that made them",
-      nfl_points.season_points(2025, R, PCSV, TCSV, GCSV, stops)["defenses"]["BAL"][1] == [3 + 2 + 6 + 2, "BUF"])
+      nfl_points.season_points(2025, R, PCSV, TCSV, GCSV, stops)["defenses"]["BAL"][1][:2] == [3 + 2 + 6 + 2, "BUF"])
 check("nflverse: team codes match Yahoo's (LA -> LAR)", nfl_points.team_code("LA") == "LAR" and nfl_points.team_code("buf") == "BUF")
 pa = nfl_points.points_against(pts)
 check("points against: points each defense gave up, by position", pa["BAL"]["QB"] == 60.26 and pa["SF"]["RB"] == 18.4
       and pa["BUF"]["DEF"] == 11.0 and pa["BAL"]["games"] == 1 and pa["BAL"]["weeks"][1]["QB"] == 60.26, pa)
+check("points against: who scored it, with stat lines",
+      pa["BAL"]["who"][1]["QB"] == [["Josh Allen", "BUF", 60.26, "33/46, 394 yds, 2 TD, 0 INT; 0 car, 30 yds, 2 TD"]]
+      and pa["SF"]["who"][1]["RB"][0][3] == "0 car, 104 yds; 3 rec, 20 yds; 1 fumble lost"
+      and pa["PHI"]["who"][1]["K"][0][3].startswith("FG ")
+      and pa["BUF"]["who"][1]["DEF"][0][:3] == ["BAL D/ST", "BAL", 11.0] and pa["BUF"]["who"][1]["DEF"][0][3].endswith("17 pts allowed"), pa["BAL"]["who"])
 box = {"weeks": {"1": {"teams": {"t.1": [["QB", "Josh Allen", "QB", "BUF", 60.26], ["RB", "Kenneth Walker III", "RB", "SEA", 17.0],
                                          ["DEF", "Baltimore", "DEF", "BAL", 11.0], ["BN", "Nobody Known", "WR", "NYJ", 5.0]]}}}}
 ck = nfl_points.check(pts, box)

@@ -966,14 +966,44 @@
       return h('tr', {}, [h('th', { scope: 'row' }, [h('b', { text: r.code }), h('span', { class: 'pa-name', text: ' ' + (NFL[r.code] || '') })])]
         .concat(PA_POS.map(function (p) {
           var i = rank[r.code][p], tier = Math.min(4, Math.floor(i / n * 5));
-          return h('td', { class: 'pa-t' + (4 - tier) + (p === sortPos ? ' on' : ''),
-            title: (NFL[r.code] || r.code) + ' allow ' + fmt(r.avg[p]) + ' pts/game to ' + p + ' (' + ordinal(i + 1) + ' most)', text: fmt(r.avg[p]) });
+          var label = (NFL[r.code] || r.code) + ' allow ' + fmt(r.avg[p]) + ' pts/game to ' + p + ' (' + ordinal(i + 1) + ' most)';
+          return h('td', { class: 'pa-t' + (4 - tier) + (p === sortPos ? ' on' : ''), title: label }, [
+            h('button', { type: 'button', class: 'pa-cell', text: fmt(r.avg[p]), 'aria-label': label + '. Show who scored it.',
+              onclick: function (e) { openPaDetail(r.code, p, e.currentTarget); } })]);
         })));
     })));
     var wks = S.pa.weeks || [];
     $('paNote').textContent = S.pa.season + (wks.length ? ' weeks ' + wks[0] + (wks.length > 1 ? '–' + wks[wks.length - 1] : '') : '') +
       (last4 ? ', each team’s last 4 games' : '') + '. Regular season, points per game in our league’s scoring (checked against Yahoo). ' +
       (S.pa.updated ? 'Updated ' + L.ago(S.pa.updated, now()) + '. ' : '') + 'Stats: nflverse.';
+  }
+
+  // Who scored the points behind one number: each game, newest first.
+  var PA_WHO = { QB: 'QBs', RB: 'RBs', WR: 'WRs', TE: 'TEs', K: 'kickers', DEF: 'fantasy defenses' };
+  function openPaDetail(code, pos, opener) {
+    var t = S.pa && S.pa.teams[code];
+    if (!t) return;
+    var wks = Object.keys(t.weeks || {}).map(Number).sort(function (a, b) { return a - b; });
+    if (S.paLast4) wks = wks.slice(-4);
+    var total = wks.reduce(function (sum, w) { return sum + ((t.weeks[w] || {})[pos] || 0); }, 0);
+    var team = NFL[code] || code, body = clear($('detailBody'));
+    body.appendChild(h('h2', { class: 'pname', id: 'detailTitle', text: pos === 'DEF' ? team + ' offense vs defenses' : team + ' defense vs ' + PA_WHO[pos] }));
+    body.appendChild(h('p', { class: 'pa-sub', text: fmt(wks.length ? total / wks.length : t[pos]) + ' pts allowed per game' +
+      (S.paLast4 ? ' over the last ' + plural(wks.length, 'game') : '') + ', in our league’s scoring.' }));
+    body.appendChild(h('ol', { class: 'pa-games' }, wks.slice().reverse().map(function (w) {
+      var who = ((t.who || {})[w] || {})[pos] || [], opp = who.length ? who[0][1] : '';
+      return h('li', {}, [
+        h('div', { class: 'pa-gh' }, [h('b', { text: 'Week ' + w + (opp ? ' vs ' + opp : '') }), h('span', { class: 'pa-gt', text: fmt((t.weeks[w] || {})[pos] || 0) + ' pts' })]),
+        who.length ? h('ul', {}, who.map(function (p) {
+          return h('li', {}, [h('div', {}, [h('span', { class: 'pa-pn', text: p[0] }), p[3] ? h('span', { class: 'pa-pl', text: p[3] }) : null]),
+            h('b', { class: 'pa-pp', text: fmt(p[2]) })]);
+        })) : h('p', { class: 'fine', text: 'No points scored.' })
+      ]);
+    })));
+    body.appendChild(h('p', { class: 'fine', text: 'Stats: nflverse, scored with our league’s Yahoo settings.' }));
+    lastFocus = opener || document.activeElement;
+    $('detail').hidden = false;
+    $('detailClose').focus();
   }
 
   // ---------- trade calculator ----------
