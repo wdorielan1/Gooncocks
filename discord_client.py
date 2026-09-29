@@ -7,6 +7,7 @@ Integrations -> Webhooks -> New Webhook, then copy its URL. Keep that URL
 secret - anyone with it can post into that channel.
 """
 import json
+import re
 import urllib.request
 
 
@@ -38,16 +39,29 @@ def post_message(webhook_url, content, username=None, mentions=True):
         resp.read()
 
 
+def _md(text):
+    """Plain text for Discord: markdown characters escaped, so a team name
+    like "*Goon_Squad*" shows as typed."""
+    return re.sub(r"([\\*_~`|>#\[\]()@:-])", r"\\\1", str(text or ""))
+
+
+def _who(award):
+    """'Will (Team Name)', or just the team name if the manager isn't known."""
+    team = f"*{_md(award['team'])}*"
+    return f"**{_md(award['manager'])}** ({team})" if award.get("manager") else f"**{_md(award['team'])}**"
+
+
 def build_teaser(week, awards, page_url=None):
-    """A short, shareable message for the chat - the headline award plus
-    a link to the full recap page, not the whole recap dumped as text."""
+    """A short, shareable message for the chat - the two headline awards,
+    each on its own lines, plus a link to the full recap page, not the
+    whole recap dumped as text."""
     g = awards["goon"]
     c = awards["cock"]
-    lines = [
-        f"Week {week} recap is up.",
-        f"Goon of the Week: {g['team']} ({g['score']:.2f} pts, +$50)",
-        f"Cock of the Week: {c['team']} ({c['score']:.2f} pts)",
+    parts = [
+        f"🦚 **Gooncocks · Week {week} Recap**",
+        f"🏆 **Goon of the Week**\n{_who(g)}\n{g['score']:.2f} pts · +$50",
+        f"🐓 **Cock of the Week**\n{_who(c)}\n{c['score']:.2f} pts",
     ]
     if page_url:
-        lines.append(page_url)
-    return "\n".join(lines)
+        parts.append(f"Full recap:\n{page_url}")
+    return "\n\n".join(parts)

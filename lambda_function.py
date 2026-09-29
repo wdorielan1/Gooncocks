@@ -1057,7 +1057,7 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if webhook_url and is_latest and notify:
         teaser = build_teaser(week, compute_awards(matchups), page_url=page_url)
-        post_message(webhook_url, teaser)
+        post_message(webhook_url, teaser, mentions=False)
         print("Posted teaser to Discord.")
 
     return page_url, archive_url
