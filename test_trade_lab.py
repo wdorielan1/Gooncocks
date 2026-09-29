@@ -477,9 +477,11 @@ with contextlib.redirect_stdout(log):
                                    {"player_key": "470.p.4", "status": "listening", "wants": []}])
 check("new listings post once in Discord, naming the manager, players and the link",
       r["statusCode"] == 200 and len(disc.posts) == 1
-      and disc.posts[0][0] == "**Sam** put 2 players on the trading block:\n"
-                             "- Breece Hall (RB, KC) - available, wants WR\n"
-                             "- Tee Higgins (WR, KC) - listening to offers\n"
+      and disc.posts[0][0] == "🦚 **Gooncocks Trading Lab AI**\n\n"
+                             "**Sam** added to the Trading Block:\n"
+                             "• Breece Hall (RB, KC)\n"
+                             "• Tee Higgins (WR, KC)\n\n"
+                             "Check out the Trading Lab:\n"
                              "https://stats.gooncocks.com/trade-lab.html", disc.posts)
 check("listing posts can never ping anyone", disc.posts[0][1] is False)
 check("the Discord post is logged", "Discord posted" in log.getvalue(), log.getvalue())
@@ -496,10 +498,10 @@ check("a failed Discord post never breaks the save", r["statusCode"] == 200 and 
 disc.fail = False
 check("Discord markdown in names is escaped",
       trade_lab.discord_alert("*Sam*", [{"name": "A_B", "position": "RB", "nfl_team": "", "status": "available"}], "u")
-      == "**\\*Sam\\*** put a player on the trading block:\n- A\\_B (RB) - available\nu")
+      == "🦚 **Gooncocks Trading Lab AI**\n\n**\\*Sam\\*** added to the Trading Block:\n• A\\_B (RB)\n\nCheck out the Trading Lab:\nu")
 many = [{"name": f"P{i}", "position": "WR", "nfl_team": "X", "status": "available"} for i in range(12)]
-check("big listings are capped at 10 lines", trade_lab.discord_alert("Sam", many, "u").count("\n- P") == 10
-      and "- +2 more" in trade_lab.discord_alert("Sam", many, "u"))
+check("big listings are capped at 10 lines", trade_lab.discord_alert("Sam", many, "u").count("\n• P") == 10
+      and "• +2 more" in trade_lab.discord_alert("Sam", many, "u"))
 with contextlib.redirect_stdout(io.StringIO()):
     st = dapp.admin({"action": "alerts_status"})
 check("status says Discord is on", st["discord_on"] is True and st["alerts_on"] is False)

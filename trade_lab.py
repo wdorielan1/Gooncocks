@@ -200,21 +200,17 @@ def _md(text):
 
 
 def discord_alert(manager, fresh, url):
-    """The Discord post for new listings: who, each player, and the link.
-    Everything but the link is escaped, and the post can't ping anyone."""
-    what = "a player" if len(fresh) == 1 else f"{len(fresh)} players"
-    lines = [f"**{_md(manager)}** put {what} on the trading block:"]
+    """The Discord post for new listings, laid out like the text digest: a
+    heading, who listed, one player per line, then the link, with blank
+    lines between. Everything but the link is escaped, and the post can't
+    ping anyone."""
+    lines = [f"**{_md(manager)}** added to the Trading Block:"]
     for d in fresh[:10]:
-        line = f"- {_md(d['name'])} ({_md(d['position'])}"
-        line += f", {_md(d['nfl_team'])})" if d.get("nfl_team") else ")"
-        line += f" - {WANT_WORDS.get(d.get('status'), 'available')}"
-        if d.get("wants"):
-            line += ", wants " + "/".join(_md(w) for w in d["wants"])
-        lines.append(line)
+        line = f"• {_md(d['name'])} ({_md(d['position'])}"
+        lines.append(line + (f", {_md(d['nfl_team'])})" if d.get("nfl_team") else ")"))
     if len(fresh) > 10:
-        lines.append(f"- +{len(fresh) - 10} more")
-    lines.append(url)
-    return "\n".join(lines)
+        lines.append(f"• +{len(fresh) - 10} more")
+    return "\n\n".join(["🦚 **Gooncocks Trading Lab AI**", "\n".join(lines), f"Check out the Trading Lab:\n{url}"])
 
 
 class DiscordPoster:
