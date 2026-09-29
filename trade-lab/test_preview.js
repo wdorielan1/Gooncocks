@@ -368,6 +368,27 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     await tp.click('#detailClose');
     await tp.click('#paStats');
     assert.strictEqual(await tp.$$eval('#paTable thead th', ths => ths.length), 4);
+    // signed out: the table as is, plus a sign-in prompt; signed in: your players
+    await tp.click('#paPos button:has-text("RB")');
+    assert.match(await tp.textContent('#paMe'), /Sign in to see where your players land/);
+    assert.strictEqual(await tp.$$eval('.pa-mine-chip', e => e.length), 0);
+    await tp.click('#paMe button:has-text("Sign in")');
+    await tp.waitForSelector('.pa-mine-list li');
+    assert.match(await tp.textContent('.pa-mine h4'), /^Your RBs · Week 4$/);
+    const mine = await tp.$$eval('.pa-mine-list li', ls => ls.map(l => [parseInt(l.querySelector('.pa-mine-rank').textContent.slice(1)), l.querySelector('b').textContent, l.querySelector('.pa-mine-sub').textContent]));
+    assert.ok(mine.length >= 1 && mine.every((m, i) => i === 0 || mine[i - 1][0] <= m[0]), JSON.stringify(mine));  // best matchup first
+    // each player's opponent row in the table is marked with his name, at the same rank
+    for (const [rank, name, sub] of mine) {
+      const opp = sub.split(' vs ')[1];
+      const row = await tp.$eval('#paTable tbody tr:nth-child(' + rank + ')', t => [t.querySelector('th b').textContent, t.querySelector('.pa-mine-chip').textContent]);
+      assert.ok(row[0] === opp && row[1].includes(name), JSON.stringify([rank, name, sub, row]));
+    }
+    await tp.click('#paPos button:has-text("QB")');
+    assert.match(await tp.textContent('.pa-mine h4'), /^Your QBs/);
+    assert.ok(await noOverflow(tp));
+    await tp.click('.pa-mine .linkbtn:has-text("Sign out")');
+    await tp.waitForSelector('.pa-me-in');
+    assert.strictEqual(await tp.$$eval('.pa-mine-chip', e => e.length), 0);
     await tp.click('#paLast4');
     assert.strictEqual(await tp.getAttribute('#paLast4', 'aria-pressed'), 'true');
     assert.match(await tp.textContent('#paNote'), /last 4 games.*nflverse/);

@@ -122,6 +122,8 @@
     cols = order.map(function (i) { return cols[i]; });
     rows.forEach(function (r) { r.avg = order.map(function (i) { return r.avg[i]; }); });
     var keep = cols.map(function (c, i) { return showStats && rows.some(function (r) { return Math.abs(r.avg[i]) >= 0.05; }); });
+    var mine = myMatchups(pos, rows, nextWk), mineAt = {};
+    (mine || []).forEach(function (m) { if (m.opp) (mineAt[m.opp] = mineAt[m.opp] || []).push(m.p.name); });
     var tbl = clear($('paTable')), n = rows.length;
     tbl.className = 'pa pa-full' + (showStats ? '' : ' pa-slim');
     tbl.appendChild(h('caption', { class: 'sr-only', text: 'Fantasy points allowed per game to ' + PA_WHO[pos] + ' by each NFL defense, easiest matchup first' }));
@@ -131,16 +133,95 @@
       .concat(cols.filter(function (c, i) { return keep[i]; }).map(function (c) { return h('th', { scope: 'col', class: 'pa-stat', text: c }); })))]));
     tbl.appendChild(h('tbody', {}, rows.map(function (r, i) {
       var tier = Math.min(4, Math.floor(i / n * 5)), opp = nextWk ? (S.pa.schedule[r.code] || {})[nextWk] : null;
-      return h('tr', {}, [h('td', { class: 'pa-rank', text: String(i + 1) }),
+      return h('tr', { class: mineAt[r.code] ? 'pa-mine-row' : null }, [h('td', { class: 'pa-rank', text: String(i + 1) }),
         h('th', { scope: 'row' }, [h('button', { type: 'button', class: 'pa-team', onclick: function (e) { openPaDetail(r.code, pos, e.currentTarget); } },
-          [h('b', { text: r.code }), h('span', { class: 'pa-name', text: ' ' + (NFL[r.code] || '') })])]),
+          [h('b', { text: r.code }), h('span', { class: 'pa-name', text: ' ' + (NFL[r.code] || '') })]),
+          mineAt[r.code] ? h('span', { class: 'pa-mine-chip', text: '★ ' + mineAt[r.code].join(', ') }) : null]),
         h('td', { class: 'pa-pts pa-t' + (4 - tier) }, [h('button', { type: 'button', class: 'pa-cell', text: fmt(r.pts),
           'aria-label': (NFL[r.code] || r.code) + ' allow ' + fmt(r.pts) + ' pts/game to ' + PA_WHO[pos] + ', ' + ordinal(i + 1) + ' most. Show who scored it.',
           onclick: function (e) { openPaDetail(r.code, pos, e.currentTarget); } })]),
         nextWk ? h('td', { class: 'pa-next-opp' + (opp ? '' : ' bye'), text: opp || 'BYE' }) : null]
         .concat(r.avg.filter(function (v, i) { return keep[i]; }).map(function (v) { return h('td', { class: 'pa-stat', text: fmt(v) }); })));
     })));
+    renderMine(pos, mine, rows.length, nextWk);
     paNote(last4);
+  }
+
+  // ---------- your players (signed in with Yahoo) ----------
+  // The roster comes from the Trade Lab API, which checks with Yahoo which
+  // team the signed-in account manages. Signed out, the page is unchanged.
+  var TEAM_FIX = { JAC: 'JAX', WSH: 'WAS', LA: 'LAR', LVR: 'LV', OAK: 'LV', SD: 'LAC', STL: 'LAR' };
+  function nflCode(t) { t = String(t || '').toUpperCase(); return TEAM_FIX[t] || t; }
+  var MY_WHO = { QB: 'QBs', RB: 'RBs', WR: 'WRs', TE: 'TEs', K: 'kicker', DEF: 'defense' };
+  var MATCH = ['Great matchup', 'Good matchup', 'Average', 'Tough', 'Toughest'];
+  // Each of my players at this position: who they play next and where that
+  // opponent ranks in the table (0 = gives up the most), best first.
+  function myMatchups(pos, rows, nextWk) {
+    if (!S.mine) return null;
+    var rank = {};
+    rows.forEach(function (r, i) { rank[r.code] = i; });
+    return S.mine.filter(function (p) { return p.position === pos; }).map(function (p) {
+      var team = nflCode(p.nfl_team), opp = nextWk ? ((S.pa.schedule || {})[team] || {})[nextWk] || null : null;
+      return { p: p, team: team, opp: opp, i: opp && rank[opp] !== undefined ? rank[opp] : null };
+    }).sort(function (a, b) { return (a.i === null ? 99 : a.i) - (b.i === null ? 99 : b.i) || a.p.name.localeCompare(b.p.name); });
+  }
+  function signInControl() {
+    if (api.preview) return h('button', { type: 'button', class: 'btn gold small', text: 'Sign in (preview)', onclick: function () { api.signIn(); loadMe(); } });
+    return h('a', { class: 'btn gold small', href: api.signInUrl('tools'), text: 'Sign in with Yahoo' });
+  }
+  function signOut() {
+    api.signOut().then(function () { S.me = { signed_in: false }; S.mine = null; S.mineErr = null; renderTools(); },
+      function (e) { S.mineErr = e.message; renderTools(); });
+  }
+  function renderMine(pos, mine, n, nextWk) {
+    var box = clear($('paMe'));
+    if (S.signinMsg) box.appendChild(h('p', { class: 'banner-msg' + (S.signinMsg[1] ? ' ' + S.signinMsg[1] : ''), text: S.signinMsg[0] }));
+    if (!S.me) return;
+    if (!S.me.signed_in) {
+      box.appendChild(h('div', { class: 'pa-me-in' }, [h('span', { text: 'Sign in to see where your players land this week.' }), signInControl()]));
+      return;
+    }
+    var acct = h('p', { class: 'pa-me-acct' }, (S.me.can_edit ? ['Signed in as ', h('b', { text: S.me.manager || 'your team' })] : ['Signed in · not in our league'])
+      .concat([' · ', h('button', { type: 'button', class: 'linkbtn', text: 'Sign out', onclick: signOut })]));
+    if (!S.me.can_edit || S.mineErr || !mine) {
+      box.appendChild(acct);
+      if (S.mineErr) box.appendChild(h('p', { class: 'fine', text: S.mineErr }));
+      else if (S.me.can_edit) box.appendChild(h('p', { class: 'fine', text: 'Loading your roster…' }));
+      return;
+    }
+    var card = h('section', { class: 'pa-mine', 'aria-label': 'Your ' + MY_WHO[pos] }, [
+      h('div', { class: 'pa-mine-h' }, [h('h4', { text: 'Your ' + MY_WHO[pos] + (nextWk ? ' · Week ' + nextWk : '') }), acct])]);
+    if (!mine.length) card.appendChild(h('p', { class: 'fine', text: 'No ' + pos + ' on your roster right now.' }));
+    else if (!nextWk) card.appendChild(h('p', { class: 'fine', text: 'No regular-season games left.' }));
+    else card.appendChild(h('ol', { class: 'pa-mine-list' }, mine.map(function (m) {
+      var slot = m.p.slot === 'BN' ? 'Bench' : m.p.slot === 'IR' ? 'IR' : '';
+      if (m.i === null) {
+        return h('li', { class: 'bye' }, [h('span', { class: 'pa-mine-rank', text: '—' }),
+          h('div', {}, [h('b', { text: m.p.name }), h('span', { class: 'pa-mine-sub', text: m.team + (m.opp ? ' vs ' + m.opp : ' · BYE week') + (slot ? ' · ' + slot : '') })]),
+          h('span', { class: 'pa-mine-tag', text: m.opp ? '' : 'Bye' })]);
+      }
+      var tier = Math.min(4, Math.floor(m.i / n * 5));
+      return h('li', {}, [h('span', { class: 'pa-mine-rank pa-t' + (4 - tier), text: '#' + (m.i + 1), 'aria-label': 'Opponent ranked ' + ordinal(m.i + 1) + ' of ' + n }),
+        h('div', {}, [h('b', { text: m.p.name }), h('span', { class: 'pa-mine-sub', text: m.team + ' vs ' + m.opp + (slot ? ' · ' + slot : '') })]),
+        h('span', { class: 'pa-mine-tag t' + tier, text: MATCH[tier] })]);
+    })));
+    box.appendChild(card);
+  }
+  var SIGNIN = {
+    ok: null,
+    cancelled: ['Sign-in was cancelled. You can keep browsing.', 'warn'],
+    expired: ['That sign-in attempt expired. Please sign in again.', 'warn'],
+    error: ['Yahoo sign-in didn’t finish. Try again in a minute.', 'warn'],
+    'not-in-league': ['That Yahoo account doesn’t manage a team in our league, so there are no players to show.', 'warn']
+  };
+  function loadMe() {
+    api.me().then(function (m) {
+      S.me = m; S.mine = null; S.mineErr = null;
+      if (S.pa) renderTools();
+      if (m.signed_in && m.can_edit) {
+        return api.myRoster().then(function (r) { S.mine = r.players || []; }, function (e) { S.mineErr = e.message; });
+      }
+    }, function () { S.me = null; }).then(function () { if (S.pa) renderTools(); });
   }
   function paNote(last4) {
     var wks = S.pa.weeks || [];
@@ -211,6 +292,12 @@
   $('detail').addEventListener('keydown', function (e) { trapFocus($('detail'), e); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDetail(); });
   if (api.preview) $('previewFlag').hidden = false;
+  var sm = /[?&]signin=([a-z-]+)/.exec(location.search);
+  if (sm) {
+    S.signinMsg = SIGNIN[sm[1]] || null;
+    try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* ignore */ }
+  }
+  loadMe();
   var m = /^#(qb|rb|wr|te|k|def)$/i.exec(location.hash);
   if (m) S.paView = m[1].toUpperCase();
   renderTools();

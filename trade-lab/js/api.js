@@ -40,7 +40,7 @@
   LiveApi.prototype.remove = function (playerKey, version) {
     return this.call('DELETE', '/listings/' + encodeURIComponent(playerKey) + '?version=' + encodeURIComponent(version));
   };
-  LiveApi.prototype.signInUrl = function () { return BASE + '/login'; };
+  LiveApi.prototype.signInUrl = function (next) { return BASE + '/login' + (next ? '?next=' + encodeURIComponent(next) : ''); };
   LiveApi.prototype.signOut = function () { return this.call('POST', '/logout', {}); };
   LiveApi.prototype.pointsAgainst = function (season) {
     return fetch('/nfl/points_against_' + season + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });

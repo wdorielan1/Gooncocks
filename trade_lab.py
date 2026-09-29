@@ -5,7 +5,7 @@ A separate Lambda from the weekly awards job (handler: trade_lab.handler),
 reached through the site's CloudFront at /api/trade-lab/* so its cookies
 are first-party on stats.gooncocks.com.
 
-  GET  /api/trade-lab/login              start Yahoo sign-in
+  GET  /api/trade-lab/login              start Yahoo sign-in (?next=tools returns to the Tools page)
   GET  /api/trade-lab/callback           Yahoo sends the manager back here
   GET  /api/trade-lab/me                 who's signed in (and a CSRF token)
   POST /api/trade-lab/logout
@@ -63,6 +63,9 @@ import yahoo_client
 from trade_lab_store import Conflict, DynamoStore
 
 PREFIX = "/api/trade-lab"
+# Pages sign-in may return to, by name (?next=tools). Anything else goes to
+# the Trade Lab page, so the sign-in link can't send anyone off the site.
+RETURN_PAGES = {"tools": "/tools.html"}
 SESSION_COOKIE = "__Host-tl_session"
 STATE_COOKIE = "__Host-tl_state"
 SESSION_TTL = 3 * 24 * 3600
@@ -577,7 +580,8 @@ class TradeLab:
     # ---------------- routes
     def login(self, event, cookies):
         state = secrets.token_urlsafe(32)
-        self.store.put("STATE", _hash(state), {"created": self.now()}, 1, expect=0,
+        nxt = str((event.get("queryStringParameters") or {}).get("next") or "")
+        self.store.put("STATE", _hash(state), {"created": self.now(), "next": nxt if nxt in RETURN_PAGES else ""}, 1, expect=0,
                        expires=self.now() + STATE_TTL)
         return _redirect(self.yahoo.authorize_url(state, self.redirect_uri),
                          [_cookie(STATE_COOKIE, state, STATE_TTL)])
@@ -585,8 +589,11 @@ class TradeLab:
     def callback(self, event, cookies):
         q = event.get("queryStringParameters") or {}
         clear = _cookie(STATE_COOKIE, "", 0)
-        back = self.page + "?signin="
         state, cookie_state = q.get("state") or "", cookies.get(STATE_COOKIE) or ""
+        # The page to return to was saved with this browser's own state at login.
+        rec = (self.store.get("STATE", _hash(state))
+               if state and cookie_state and hmac.compare_digest(state, cookie_state) else None)
+        back = RETURN_PAGES.get((rec or {}).get("data", {}).get("next"), self.page) + "?signin="
         # Every outcome is logged with a plain reason (never a code, state or
         # token) so a failed sign-in can be diagnosed from the Lambda logs.
         if q.get("error"):

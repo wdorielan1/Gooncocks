@@ -324,6 +324,25 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .pa-pos-b.on { background: var(--gold); border-color: var(--gold); color: #141005; }
 .pa-full { max-width: none; }
 .pa-slim { max-width: 560px; }
+.pa-me { max-width: 560px; }
+.pa-me .banner-msg { margin: 14px 0 0; }
+.pa-me-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 12px 14px; border: 1px dashed var(--line-2); border-radius: 3px; color: #cfd6e4; }
+.pa-me-in .btn { width: auto; margin: 0; }
+.pa-me-acct { margin-top: 14px; font-size: 14px; color: var(--muted); }
+.pa-mine { margin-top: 14px; padding: 12px 14px; background: #0c1831; border: 1px solid var(--gold); border-radius: 3px; }
+.pa-mine-h { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
+.pa-mine-h h4 { margin: 0; font: 400 20px/1.1 var(--headline); text-transform: uppercase; letter-spacing: .5px; color: var(--gold); }
+.pa-mine-h .pa-me-acct { margin: 0; font-size: 13px; }
+.pa-mine-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.pa-mine-list li { display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 10px; }
+.pa-mine-rank { text-align: center; padding: 6px 0; border-radius: 3px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+.pa-mine-list li.bye .pa-mine-rank { color: var(--muted); border: 1px solid var(--line-2); }
+.pa-mine-list b { display: block; }
+.pa-mine-sub { display: block; font-size: 13px; color: var(--muted); }
+.pa-mine-tag { font-size: 13px; font-weight: 600; color: #cfd6e4; text-align: right; }
+.pa-mine-tag.t0, .pa-mine-tag.t1 { color: #5fd08f; } .pa-mine-tag.t3, .pa-mine-tag.t4 { color: #f08a80; }
+.pa-mine-chip { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--gold); white-space: normal; }
+.pa tr.pa-mine-row th, .pa tr.pa-mine-row td.pa-rank { background: #1a2238; }
 .pa-full th, .pa-full td { padding: 8px 6px; }
 .pa-full td.pa-stat { color: #cfd6e4; font-weight: 400; font-size: 14px; background: none; }
 .pa-full thead th.pa-stat, .pa-full thead th.pa-ptsh { color: var(--muted); font: 600 11px/1.2 var(--body); letter-spacing: .5px; text-transform: uppercase; white-space: normal; min-width: 44px; }

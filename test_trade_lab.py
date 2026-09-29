@@ -162,6 +162,17 @@ check("Yahoo's error code is passed to the page, cleaned", r["headers"]["Locatio
 r = app.handle(event("GET", "/callback", cookies={STATE_COOKIE: "x"}, query={"state": "x", "error": "<b>bad</b> & more"}))
 check("an odd error code can't inject into the page URL", r["headers"]["Location"].endswith("&reason=bbadbmore"), r["headers"]["Location"])
 
+# sign-in can return to the Tools page, and only to pages on the list
+def login_to(app, nxt, code=None, error=None):
+    r = app.handle(event("GET", "/login", query={"next": nxt}))
+    st = urllib.parse.parse_qs(urllib.parse.urlparse(r["headers"]["Location"]).query)["state"][0]
+    q = {"state": st, "error": error} if error else {"state": st, "code": code}
+    return app.handle(event("GET", "/callback", cookies={STATE_COOKIE: parse_cookies(r)[STATE_COOKIE][0]}, query=q))["headers"]["Location"]
+check("sign-in from the Tools page returns there", login_to(app, "tools", "code-will").startswith("/tools.html?signin=ok"))
+check("a cancelled Tools sign-in returns there too", login_to(app, "tools", error="access_denied").startswith("/tools.html?signin=cancelled"))
+check("an unknown return page falls back to the Trade Lab",
+      all(login_to(app, n, "code-will").startswith("/trade-lab.html?signin=ok") for n in ("https://evil.example", "//evil.example", "/tools.html", "")))
+
 # every sign-in outcome is logged with a reason, never a state, code or token
 log = io.StringIO()
 with contextlib.redirect_stdout(log):
