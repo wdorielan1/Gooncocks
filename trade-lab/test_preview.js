@@ -332,10 +332,25 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     await phone.click('#paTable tbody tr:first-child td:nth-of-type(2) button');  // RB column, top team
     await phone.waitForSelector('#detail:not([hidden]) .pa-games');
     assert.match(await phone.textContent('#detailTitle'), / defense vs RBs$/);
-    assert.strictEqual(await phone.$$eval('.pa-games > li', ls => ls.length), 3);
-    assert.match(await phone.textContent('.pa-games > li:first-child'), /^Week 3 vs [A-Z]+.*pts.*RB1.*car/);
+    assert.strictEqual(await phone.$$eval('.pa-games:not(.pa-next) > li', ls => ls.length), 3);  // weeks played
+    assert.strictEqual(await phone.$$eval('.pa-next > li', ls => ls.length), 3);  // up next
+    assert.match(await phone.textContent('.pa-games:not(.pa-next) > li:first-child'), /^Week 3 vs [A-Z]+.*pts.*RB1.*car/);
     assert.ok(await noOverflow(phone));
     await phone.click('#detailClose');
+    // one position: full table with average stats, and a team's next 3 games
+    await phone.click('#paPos button:has-text("QB")');
+    await phone.waitForSelector('#paTable.pa-full tbody tr');
+    assert.strictEqual(await phone.$$eval('#paTable.pa-full tbody tr', r => r.length), 32);
+    const heads = await phone.$$eval('#paTable.pa-full thead th', ths => ths.map(t => t.textContent));
+    assert.ok(heads[2] === 'Pts' && heads.includes('Pass Yds') && !heads.includes('Rec TD'), heads.join('|'));  // Pts first; no empty columns
+    await phone.click('#paTable.pa-full tbody tr:first-child .pa-team');
+    await phone.waitForSelector('#detail:not([hidden]) .pa-next');
+    assert.match(await phone.textContent('#detailBody .pa-sub'), /1st most/);
+    const nextRows = await phone.$$eval('.pa-next > li', ls => ls.map(l => l.textContent));
+    assert.strictEqual(nextRows.length, 3, JSON.stringify(nextRows));
+    assert.ok(nextRows.every(t => /^Week \d+( vs [A-Z]+UpcomingLikely: .*QB1|BYE)$/.test(t)), JSON.stringify(nextRows));
+    await phone.click('#detailClose');
+    await phone.click('#paPos button:has-text("All")');
     await phone.click('#paLast4');
     assert.strictEqual(await phone.getAttribute('#paLast4', 'aria-pressed'), 'true');
     assert.match(await phone.textContent('#paNote'), /last 4 games.*nflverse/);

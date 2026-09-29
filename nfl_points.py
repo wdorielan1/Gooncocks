@@ -172,6 +172,32 @@ def def_line(row, points_allowed):
     return ", ".join(bits) + f"; {points_allowed} pts allowed"
 
 
+# The average-stat columns shown per position (label, nflverse columns
+# summed), like Yahoo's Points Against page.
+_OFF = [("Pass Yds", ("passing_yards",)), ("Pass TD", ("passing_tds",)), ("Int", ("passing_interceptions",)),
+        ("Rush Att", ("carries",)), ("Rush Yds", ("rushing_yards",)), ("Rush TD", ("rushing_tds",)),
+        ("Rec", ("receptions",)), ("Rec Yds", ("receiving_yards",)), ("Rec TD", ("receiving_tds",)), ("Tgt", ("targets",)),
+        ("Ret TD", ("special_teams_tds",)),
+        ("2PT", ("passing_2pt_conversions", "rushing_2pt_conversions", "receiving_2pt_conversions")),
+        ("Fum Lost", ("sack_fumbles_lost", "rushing_fumbles_lost", "receiving_fumbles_lost"))]
+STAT_COLS = {
+    "QB": _OFF, "RB": _OFF, "WR": _OFF, "TE": _OFF,
+    "K": [("FG 0-19", ("fg_made_0_19",)), ("FG 20-29", ("fg_made_20_29",)), ("FG 30-39", ("fg_made_30_39",)),
+          ("FG 40-49", ("fg_made_40_49",)), ("FG 50+", ("fg_made_50_59", "fg_made_60_")), ("FG Miss", ("fg_missed",)),
+          ("PAT", ("pat_made",))],
+    "DEF": [("Sack", ("def_sacks",)), ("Int", ("def_interceptions",)), ("Fum Rec", ("fumble_recovery_opp",)),
+            ("TD", ("_def_tds",)), ("Safety", ("def_safeties",)), ("Blk Kick", ("def_punt_blocks", "def_fg_blocks", "def_pat_blocks")),
+            ("Pts Allow", ("_points_allowed",))],
+}
+# How much a player was used in a game, to tell who a team's starters are.
+USAGE = {"QB": ("attempts",), "RB": ("carries", "targets"), "WR": ("targets",), "TE": ("targets",), "K": ("fg_att", "pat_att")}
+STARTERS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "K": 1}
+
+
+def stat_values(row, position):
+    return [_n(_num(row, *cols)) for _label, cols in STAT_COLS[position]]
+
+
 def team_code(code):
     code = (code or "").upper()
     return TEAM_CODES.get(code, code)
@@ -208,13 +234,21 @@ def fetch_fourth_down_stops(season, opener=urllib.request.urlopen):
 def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
     """Every player's and defense's regular-season weekly points (stops:
     fourth_down_stops' result, for leagues that score them):
-    {"players": [{"id", "name", "position", "team", "weeks": {week: [pts, opp]}}],
-     "defenses": {team: {week: [pts, opp]}}}."""
-    allowed = {}  # (team, week) -> points its opponent scored
+    {"players": [{"id", "name", "position", "team",
+                  "weeks": {week: [pts, opp, stat line, stat columns, usage]}}],
+     "defenses": {team: {week: [pts, opp, stat line, stat columns]}},
+     "schedule": {team: {week: opponent}}} - the schedule has every
+    regular-season week, played or not (a missing week is a bye)."""
+    allowed = {}   # (team, week) -> points its opponent scored
+    schedule = {}  # team -> {week: opponent}, future weeks too
     for g in _csv(games_csv):
-        if g.get("season") != str(season) or g.get("game_type") not in ("REG", None, "") or not g.get("home_score"):
+        if g.get("season") != str(season) or g.get("game_type") not in ("REG", None, ""):
             continue
         wk, home, away = int(g["week"]), team_code(g["home_team"]), team_code(g["away_team"])
+        schedule.setdefault(home, {})[wk] = away
+        schedule.setdefault(away, {})[wk] = home
+        if not g.get("home_score"):
+            continue
         allowed[(home, wk)] = int(float(g["away_score"]))
         allowed[(away, wk)] = int(float(g["home_score"]))
     players = {}
@@ -224,7 +258,8 @@ def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
         p = players.setdefault(r["player_id"], {"id": r["player_id"], "name": r.get("player_display_name") or r.get("player_name"),
                                                 "position": r["position"], "team": team_code(r["team"]), "weeks": {}})
         p["team"] = team_code(r["team"])  # the latest team he played for
-        p["weeks"][int(r["week"])] = [player_points(r, rules), team_code(r.get("opponent_team")), stat_line(r, r["position"])]
+        p["weeks"][int(r["week"])] = [player_points(r, rules), team_code(r.get("opponent_team")), stat_line(r, r["position"]),
+                                      stat_values(r, r["position"]), _n(_num(r, *USAGE[r["position"]]))]
     defenses = {}
     for r in _csv(team_csv):
         if r.get("season_type") not in ("REG", None, ""):
@@ -233,9 +268,29 @@ def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
         if (team, wk) not in allowed:
             continue
         r["_fourth_down_stops"] = (stops or {}).get((team, wk), 0)
+        r["_points_allowed"] = allowed[(team, wk)]
+        r["_def_tds"] = _num(r, "def_tds") + min(_num(r, "fumble_recovery_tds"), _num(r, "fumble_recovery_opp")) + _num(r, "special_teams_tds")
         defenses.setdefault(team, {})[wk] = [def_points(r, allowed[(team, wk)], rules), team_code(r.get("opponent_team")),
-                                             def_line(r, allowed[(team, wk)])]
-    return {"season": int(season), "players": list(players.values()), "defenses": defenses}
+                                             def_line(r, allowed[(team, wk)]), stat_values(r, "DEF")]
+    return {"season": int(season), "players": list(players.values()), "defenses": defenses, "schedule": schedule}
+
+
+def starters(points):
+    """Each team's likely starters, from its most recent game: {team: {"QB":
+    [name], "RB": [2 names], "WR": [3], "TE": [1], "K": [1]}}, by usage
+    (pass attempts, carries + targets, targets, kicks)."""
+    last = {}  # team -> latest week it played
+    for p in points["players"]:
+        for wk in p["weeks"]:
+            last[p["team"]] = max(last.get(p["team"], 0), wk)
+    picks = {}
+    for p in points["players"]:
+        wk = last.get(p["team"])
+        w = p["weeks"].get(wk)
+        if w is not None:
+            picks.setdefault(p["team"], {}).setdefault(p["position"], []).append((w[4] if len(w) > 4 else 0, p["name"]))
+    return {team: {pos: [n for _u, n in sorted(v, key=lambda x: -x[0])[:STARTERS[pos]]] for pos, v in by_pos.items()}
+            for team, by_pos in picks.items()}
 
 
 def points_against(points):
@@ -248,6 +303,12 @@ def points_against(points):
     sums = {}   # (defense team, week, pos) -> points scored against it
     games = {}  # defense team -> set(weeks)
     who = {}    # (defense team, week, pos) -> [[name, team, pts, line]]
+    stats = {}  # (defense team, week, pos) -> summed stat columns
+
+    def add_stats(key, values):
+        cur = stats.setdefault(key, [0] * len(values))
+        for i, v in enumerate(values):
+            cur[i] += v
     for p in points["players"]:
         for wk, w in p["weeks"].items():
             pts, opp = w[0], w[1]
@@ -257,6 +318,8 @@ def points_against(points):
                 games.setdefault(opp, set()).add(wk)
                 if pts:
                     who.setdefault(key, []).append([p["name"], p["team"], pts, w[2] if len(w) > 2 else ""])
+                if len(w) > 3:
+                    add_stats(key, w[3])
     for team, weeks in points["defenses"].items():
         for wk, w in weeks.items():
             pts, opp = w[0], w[1]
@@ -265,6 +328,8 @@ def points_against(points):
                 sums[(opp, wk, "DEF")] = sums.get((opp, wk, "DEF"), 0.0) + pts
                 games.setdefault(opp, set()).add(wk)
                 who.setdefault((opp, wk, "DEF"), []).append([team + " D/ST", team, pts, w[2] if len(w) > 2 else ""])
+                if len(w) > 3:
+                    add_stats((opp, wk, "DEF"), w[3])
     out = {}
     for team, weeks in games.items():
         n = len(weeks)
@@ -273,6 +338,8 @@ def points_against(points):
         out[team]["weeks"] = {wk: {pos: round(sums.get((team, wk, pos), 0.0), 2) for pos in POSITIONS} for wk in sorted(weeks)}
         out[team]["who"] = {wk: {pos: sorted(who.get((team, wk, pos), []), key=lambda x: -x[2])[:6] for pos in POSITIONS}
                             for wk in sorted(weeks)}
+        out[team]["stats"] = {wk: {pos: [round(v, 1) for v in stats.get((team, wk, pos), [0] * len(STAT_COLS[pos]))]
+                                   for pos in POSITIONS} for wk in sorted(weeks)}
     return out
 
 

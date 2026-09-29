@@ -139,9 +139,25 @@
         DEF: [[opp + ' D/ST', opp, weeks[w].DEF, '3 sacks, 1 INT, 1 FR; 17 pts allowed']]
       };
     });
-    paTeams[t] = { weeks: weeks, games: 3, who: who };
+    var stats = {};
+    [1, 2, 3].forEach(function (w) {
+      var off = [240, 1.8, 0.8, 4, 20, 0.2, 0, 0, 0, 0, 0, 0.1, 0.2], k = [0.2, 0.6, 0.8, 0.6, 0.3, 0.3, 2.5], d = [2.5, 0.8, 0.6, 0.2, 0.05, 0.1, 21];
+      function vary(arr, f) { return arr.map(function (v, i) { return Math.round(v * (1 + 0.6 * wobble(t + w + i + f)) * 10) / 10; }); }
+      stats[w] = { QB: vary(off, 'q'), RB: vary([0, 0, 0, 22, 95, 0.8, 5, 38, 0.2, 6, 0, 0.1, 0.2], 'r'), WR: vary([0, 0, 0, 0.5, 3, 0, 13, 160, 1.1, 20, 0.05, 0.1, 0.1], 'w'),
+                   TE: vary([0, 0, 0, 0, 0, 0, 5, 52, 0.4, 7, 0, 0, 0.05], 't'), K: vary(k, 'k'), DEF: vary(d, 'd') };
+    });
+    paTeams[t] = { weeks: weeks, games: 3, who: who, stats: stats };
     Object.keys(PAB).forEach(function (p) { paTeams[t][p] = Math.round(sum[p] / 3 * 100) / 100; });
   });
-  window.TRADE_LAB_SAMPLE.pointsAgainst = { season: cur, weeks: [1, 2, 3], updated: now - 7200, teams: paTeams };
+  var OFFC = ['Pass Yds', 'Pass TD', 'Int', 'Rush Att', 'Rush Yds', 'Rush TD', 'Rec', 'Rec Yds', 'Rec TD', 'Tgt', 'Ret TD', '2PT', 'Fum Lost'];
+  var schedule = {}, starters = {};
+  NFLT.forEach(function (t, i) {
+    schedule[t] = {};
+    for (var w = 1; w <= 18; w++) if (w !== 5 + (i % 9)) schedule[t][w] = NFLT[(i + w * 7) % 32];
+    starters[t] = { QB: [t + ' QB1'], RB: [t + ' RB1', t + ' RB2'], WR: [t + ' WR1', t + ' WR2', t + ' WR3'], TE: [t + ' TE1'], K: [t + ' K'] };
+  });
+  window.TRADE_LAB_SAMPLE.pointsAgainst = { season: cur, weeks: [1, 2, 3], updated: now - 7200, teams: paTeams, schedule: schedule, starters: starters,
+    cols: { QB: OFFC, RB: OFFC, WR: OFFC, TE: OFFC, K: ['FG 0-19', 'FG 20-29', 'FG 30-39', 'FG 40-49', 'FG 50+', 'FG Miss', 'PAT'],
+            DEF: ['Sack', 'Int', 'Fum Rec', 'TD', 'Safety', 'Blk Kick', 'Pts Allow'] } };
   window.TRADE_LAB_SAMPLE.live = { season: cur, week: 4, updated: Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 20, 2).getTime() / 1000), teams: liveTeams };
 })();

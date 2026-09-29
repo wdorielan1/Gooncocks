@@ -279,6 +279,14 @@ check("points against: who scored it, with stat lines",
       and pa["SF"]["who"][1]["RB"][0][3] == "0 car, 104 yds; 3 rec, 20 yds; 1 fumble lost"
       and pa["PHI"]["who"][1]["K"][0][3].startswith("FG ")
       and pa["BUF"]["who"][1]["DEF"][0][:3] == ["BAL D/ST", "BAL", 11.0] and pa["BUF"]["who"][1]["DEF"][0][3].endswith("17 pts allowed"), pa["BAL"]["who"])
+check("points against: average-stat columns per position (QB passing, rushing, fumbles)",
+      nfl_points.STAT_COLS["QB"][0][0] == "Pass Yds" and pa["BAL"]["stats"][1]["QB"][:6] == [394, 2, 0, 0, 30, 2], pa["BAL"]["stats"][1]["QB"])
+check("points against: DEF columns include points allowed", pa["BUF"]["stats"][1]["DEF"][-1] == 17 and pa["BUF"]["stats"][1]["DEF"][0] == 3)
+G2 = GCSV + "2025,REG,2,BUF,,BAL,\n2025,REG,3,SF,,BUF,\n"
+sch = nfl_points.season_points(2025, R, PCSV, TCSV, G2)["schedule"]
+check("schedule: every week, future ones too (a missing week is a bye)", sch["BUF"] == {1: "BAL", 2: "BAL", 3: "SF"} and sch["LAR"] == {1: "SF"}, sch)
+st = nfl_points.starters(pts)
+check("starters: each team's most-used players from its latest game", st["BUF"]["QB"] == ["Josh Allen"] and st["SEA"]["RB"] == ["Kenneth Walker III"], st)
 box = {"weeks": {"1": {"teams": {"t.1": [["QB", "Josh Allen", "QB", "BUF", 60.26], ["RB", "Kenneth Walker III", "RB", "SEA", 17.0],
                                          ["DEF", "Baltimore", "DEF", "BAL", 11.0], ["BN", "Nobody Known", "WR", "NYJ", 5.0]]}}}}
 ck = nfl_points.check(pts, box)

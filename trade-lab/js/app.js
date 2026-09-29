@@ -936,6 +936,8 @@
       return;
     }
     st.textContent = '';
+    renderPaPos();
+    if (S.paView && S.paView !== 'ALL') return renderPaPosition(S.paView);
     var last4 = !!S.paLast4, sortPos = S.paSort || 'QB';
     $('paSeason').setAttribute('aria-pressed', last4 ? 'false' : 'true'); $('paSeason').classList.toggle('gold', !last4); $('paSeason').classList.toggle('ghost', last4);
     $('paLast4').setAttribute('aria-pressed', last4 ? 'true' : 'false'); $('paLast4').classList.toggle('gold', last4); $('paLast4').classList.toggle('ghost', !last4);
@@ -955,6 +957,7 @@
     });
     rows.sort(function (a, b) { return ((b.avg[sortPos] || 0) - (a.avg[sortPos] || 0)) || a.code.localeCompare(b.code); });
     var tbl = clear($('paTable'));
+    tbl.className = 'pa';
     tbl.appendChild(h('caption', { class: 'sr-only', text: 'Fantasy points allowed per game by each NFL defense, by position' }));
     tbl.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', text: 'Defense' })].concat(PA_POS.map(function (p) {
       var on = p === sortPos;
@@ -972,9 +975,67 @@
               onclick: function (e) { openPaDetail(r.code, p, e.currentTarget); } })]);
         })));
     })));
+    paNote(last4);
+  }
+
+  // Position tabs: "All" (every position's points) or one position's full table.
+  function renderPaPos() {
+    var box = clear($('paPos')), view = S.paView || 'ALL';
+    ['ALL'].concat(PA_POS).forEach(function (p) {
+      box.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (p === view ? ' on' : ''), 'aria-pressed': p === view ? 'true' : 'false',
+        text: p === 'ALL' ? 'All' : p, onclick: function () { S.paView = p; renderTools(); } }));
+    });
+  }
+  function paWeeks(t) {
+    var wks = Object.keys(t.weeks || {}).map(Number).sort(function (a, b) { return a - b; });
+    return S.paLast4 ? wks.slice(-4) : wks;
+  }
+  // One position: every defense ranked by points allowed per game, with the
+  // average stats behind it.
+  function renderPaPosition(pos) {
+    var last4 = !!S.paLast4, cols = (S.pa.cols || {})[pos] || [];
+    $('paSeason').setAttribute('aria-pressed', last4 ? 'false' : 'true'); $('paSeason').classList.toggle('gold', !last4); $('paSeason').classList.toggle('ghost', last4);
+    $('paLast4').setAttribute('aria-pressed', last4 ? 'true' : 'false'); $('paLast4').classList.toggle('gold', last4); $('paLast4').classList.toggle('ghost', !last4);
+    var rows = Object.keys(S.pa.teams).map(function (code) {
+      var t = S.pa.teams[code], wks = paWeeks(t), n = wks.length || 1, avg = cols.map(function () { return 0; }), pts = 0;
+      wks.forEach(function (w) {
+        pts += (t.weeks[w] || {})[pos] || 0;
+        (((t.stats || {})[w] || {})[pos] || []).forEach(function (v, i) { avg[i] += v; });
+      });
+      return { code: code, pts: pts / n, avg: avg.map(function (v) { return v / n; }) };
+    }).sort(function (a, b) { return (b.pts - a.pts) || a.code.localeCompare(b.code); });
+    // The columns that matter for the position first; then only columns with
+    // something in them (no receiving columns for QBs, etc.).
+    var FIRST = { RB: ['Rush Att', 'Rush Yds', 'Rush TD', 'Rec', 'Rec Yds', 'Rec TD', 'Tgt'], WR: ['Rec', 'Rec Yds', 'Rec TD', 'Tgt'], TE: ['Rec', 'Rec Yds', 'Rec TD', 'Tgt'] }[pos] || [];
+    var order = cols.map(function (c, i) { return i; }).sort(function (a, b) {
+      var ia = FIRST.indexOf(cols[a]), ib = FIRST.indexOf(cols[b]);
+      return (ia < 0 ? 99 + a : ia) - (ib < 0 ? 99 + b : ib);
+    });
+    cols = order.map(function (i) { return cols[i]; });
+    rows.forEach(function (r) { r.avg = order.map(function (i) { return r.avg[i]; }); });
+    var keep = cols.map(function (c, i) { return rows.some(function (r) { return Math.abs(r.avg[i]) >= 0.05; }); });
+    var tbl = clear($('paTable')), n = rows.length;
+    tbl.className = 'pa pa-full';
+    tbl.appendChild(h('caption', { class: 'sr-only', text: 'Points and average stats allowed per game to ' + PA_WHO[pos] + ' by each NFL defense' }));
+    tbl.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', class: 'pa-rank', text: '#' }), h('th', { scope: 'col', text: 'Team' }),
+      h('th', { scope: 'col', class: 'pa-ptsh', text: 'Pts', 'aria-sort': 'descending' })]
+      .concat(cols.filter(function (c, i) { return keep[i]; }).map(function (c) { return h('th', { scope: 'col', class: 'pa-stat', text: c }); })))]));
+    tbl.appendChild(h('tbody', {}, rows.map(function (r, i) {
+      var tier = Math.min(4, Math.floor(i / n * 5));
+      return h('tr', {}, [h('td', { class: 'pa-rank', text: String(i + 1) }),
+        h('th', { scope: 'row' }, [h('button', { type: 'button', class: 'pa-team', onclick: function (e) { openPaDetail(r.code, pos, e.currentTarget); } },
+          [h('b', { text: r.code }), h('span', { class: 'pa-name', text: ' ' + (NFL[r.code] || '') })])]),
+        h('td', { class: 'pa-pts pa-t' + (4 - tier) }, [h('button', { type: 'button', class: 'pa-cell', text: fmt(r.pts),
+          'aria-label': (NFL[r.code] || r.code) + ' allow ' + fmt(r.pts) + ' pts/game to ' + pos + '. Show who scored it.',
+          onclick: function (e) { openPaDetail(r.code, pos, e.currentTarget); } })])]
+        .concat(r.avg.filter(function (v, i) { return keep[i]; }).map(function (v) { return h('td', { class: 'pa-stat', text: fmt(v) }); })));
+    })));
+    paNote(last4);
+  }
+  function paNote(last4) {
     var wks = S.pa.weeks || [];
     $('paNote').textContent = S.pa.season + (wks.length ? ' weeks ' + wks[0] + (wks.length > 1 ? '–' + wks[wks.length - 1] : '') : '') +
-      (last4 ? ', each team’s last 4 games' : '') + '. Regular season, points per game in our league’s scoring (checked against Yahoo). ' +
+      (last4 ? ', each team’s last 4 games' : '') + '. Regular season, per game, in our league’s scoring (checked against Yahoo). ' +
       (S.pa.updated ? 'Updated ' + L.ago(S.pa.updated, now()) + '. ' : '') + 'Stats: nflverse.';
   }
 
@@ -987,10 +1048,34 @@
     if (S.paLast4) wks = wks.slice(-4);
     var total = wks.reduce(function (sum, w) { return sum + ((t.weeks[w] || {})[pos] || 0); }, 0);
     var team = NFL[code] || code, body = clear($('detailBody'));
+    var perGame = function (c) { var tt = S.pa.teams[c], ww = paWeeks(tt); return ww.length ? ww.reduce(function (s2, w) { return s2 + ((tt.weeks[w] || {})[pos] || 0); }, 0) / ww.length : 0; };
+    var rankN = 1 + Object.keys(S.pa.teams).filter(function (c) { return perGame(c) > perGame(code); }).length;
     body.appendChild(h('h2', { class: 'pname', id: 'detailTitle', text: pos === 'DEF' ? team + ' offense vs defenses' : team + ' defense vs ' + PA_WHO[pos] }));
     body.appendChild(h('p', { class: 'pa-sub', text: fmt(wks.length ? total / wks.length : t[pos]) + ' pts allowed per game' +
-      (S.paLast4 ? ' over the last ' + plural(wks.length, 'game') : '') + ', in our league’s scoring.' }));
-    body.appendChild(h('ol', { class: 'pa-games' }, wks.slice().reverse().map(function (w) {
+      (S.paLast4 ? ' over the last ' + plural(wks.length, 'game') : '') + ', ' + ordinal(rankN) + ' most in the league, in our scoring.' }));
+    // The next 3 weeks on their schedule (a missing week is a bye), with who they'd face.
+    var sched = (S.pa.schedule || {})[code] || {}, played = Object.keys(t.weeks || {}).map(Number), lastPlayed = Math.max.apply(null, played.concat([0]));
+    var next = [];
+    for (var w2 = lastPlayed + 1; w2 <= 18 && next.length < 3; w2++) next.push(w2);
+    if (next.length && Object.keys(sched).length) {
+      body.appendChild(h('h3', { class: 'pa-h3', text: 'Up next' }));
+      body.appendChild(h('ol', { class: 'pa-games pa-next' }, next.map(function (w) {
+        var opp = sched[w];
+        if (!opp) return h('li', { class: 'bye' }, [h('div', { class: 'pa-gh' }, [h('b', { text: 'Week ' + w }), h('span', { class: 'pa-gt', text: 'BYE' })])]);
+        var likely = pos === 'DEF' ? [opp + ' D/ST'] : (((S.pa.starters || {})[opp] || {})[pos] || []);
+        return h('li', {}, [h('div', { class: 'pa-gh' }, [h('b', { text: 'Week ' + w + ' vs ' + opp }), h('span', { class: 'pa-up', text: 'Upcoming' })]),
+          likely.length ? h('p', { class: 'pa-likely', text: (pos === 'DEF' ? 'Facing ' : 'Likely: ') + likely.join(', ') }) : null]);
+      })));
+      body.appendChild(h('h3', { class: 'pa-h3', text: 'Games played' }));
+    }
+    var shown = wks.slice().reverse(), all = [];
+    shown.forEach(function (w, i) {  // byes between played games
+      all.push(w);
+      var nxt = shown[i + 1];
+      for (var b = w - 1; nxt !== undefined && b > nxt; b--) if (!sched[b]) all.push('bye' + b);
+    });
+    body.appendChild(h('ol', { class: 'pa-games' }, all.map(function (w) {
+      if (typeof w === 'string') return h('li', { class: 'bye' }, [h('div', { class: 'pa-gh' }, [h('b', { text: 'Week ' + w.slice(3) }), h('span', { class: 'pa-gt', text: 'BYE' })])]);
       var who = ((t.who || {})[w] || {})[pos] || [], opp = who.length ? who[0][1] : '';
       return h('li', {}, [
         h('div', { class: 'pa-gh' }, [h('b', { text: 'Week ' + w + (opp ? ' vs ' + opp : '') }), h('span', { class: 'pa-gt', text: fmt((t.weeks[w] || {})[pos] || 0) + ' pts' })]),

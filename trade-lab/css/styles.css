@@ -298,6 +298,12 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .news { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; font-size: 14px; }
 .news a { color: var(--blue-hi); font-weight: 600; }
 .news-new { background: var(--gold); color: #141005; font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 3px; }
+.tool-nav { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.tool-b { display: grid; gap: 4px; text-align: left; min-width: 220px; max-width: 320px; padding: 12px 14px; border: 1px solid var(--line-2); border-radius: 3px; background: #0c1831; color: #cfd6e4; cursor: pointer; }
+.tool-b b { font: 400 20px/1 var(--headline); text-transform: uppercase; letter-spacing: .5px; color: var(--text); }
+.tool-b span { font-size: 13px; }
+.tool-b.on { border: 2px solid var(--gold); }
+.tool-h { margin-top: 22px; font: 400 clamp(26px, 3vw, 34px)/1 var(--headline); text-transform: uppercase; letter-spacing: .5px; }
 .pa-intro { margin-top: 10px; color: #cfd6e4; max-width: 70ch; }
 .pa-range { display: flex; gap: 8px; margin-top: 14px; }
 .pa-range .btn { width: auto; margin: 0; }
@@ -314,6 +320,23 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .pa-cell { width: 100%; min-height: 36px; padding: 8px 6px; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
 .pa-cell:hover, .pa-cell:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; border-radius: 3px; }
 .pa-sub { margin-top: 6px; color: #cfd6e4; }
+.pa-pos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.pa-pos-b { min-width: 48px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--line-2); border-radius: 3px; background: #0c1831; color: #cfd6e4; font: 600 14px/1 var(--body); cursor: pointer; }
+.pa-pos-b.on { background: var(--gold); border-color: var(--gold); color: #141005; }
+.pa-full { max-width: none; }
+.pa-full th, .pa-full td { padding: 8px 6px; }
+.pa-full td.pa-stat { color: #cfd6e4; font-weight: 400; font-size: 14px; background: none; }
+.pa-full thead th.pa-stat, .pa-full thead th.pa-ptsh { color: var(--muted); font: 600 11px/1.2 var(--body); letter-spacing: .5px; text-transform: uppercase; white-space: normal; min-width: 44px; }
+.pa-full thead th.pa-ptsh { color: var(--gold); }
+.pa-full td.pa-pts { padding: 0; min-width: 60px; }
+.pa-rank { color: var(--muted); font-size: 13px; }
+.pa-full tbody th, .pa-full thead th:nth-child(2) { position: sticky; left: 0; background: var(--bg, #07101f); z-index: 1; text-align: left; }
+.pa-team { background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.pa-team b { color: var(--blue-hi); text-decoration: underline; text-underline-offset: 3px; }
+.pa-h3 { margin-top: 16px; font: 400 18px/1.1 var(--headline); text-transform: uppercase; letter-spacing: .5px; color: #cfd6e4; }
+.pa-games > li.bye { padding: 8px 12px; opacity: .8; }
+.pa-up { font-size: 12px; font-weight: 700; color: #141005; background: var(--gold); padding: 2px 8px; border-radius: 3px; }
+.pa-likely { margin-top: 6px; font-size: 14px; color: #cfd6e4; }
 .pa-games { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
 .pa-games > li { background: #0c1831; border: 1px solid var(--line-2); border-radius: 3px; padding: 10px 12px; }
 .pa-gh { display: flex; justify-content: space-between; gap: 10px; }
