@@ -132,8 +132,8 @@
       recentWeeks: recent, first: weeks[0] || null, last: weeks[weeks.length - 1] || null
     };
   }
-  // One player's weekly points for the stats panel: {week: points}, plus the
-  // season summary numbers.
+  // One player's weekly points for the stats panel: {week: points}, plus his
+  // best week.
   function weekLine(weeksByPlayer, player) {
     var w = weeksByPlayer[norm(player.name) + '|' + String(player.position || '').split(',')[0]] || {};
     var best = null;
