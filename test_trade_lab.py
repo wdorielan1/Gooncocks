@@ -556,6 +556,19 @@ check("edits aren't reported as new", body(digest())["count"] == 0)
 p = body(digest(preview="1"))
 check("preview shows the last week without moving the marker",
       p["count"] == 4 and p["preview"] is True and body(digest())["count"] == 0, p)
+clock.t += 60
+g_sam2 = sign_in(gapp, "code-sam")
+gapp.handle(event("PUT", "/needs", cookies=g_sam2[0], body={"wants": ["RB", "WR"], "note": "Need a RB2"}, headers={"x-csrf-token": g_sam2[1]}))
+clock.t += 60
+d = body(digest())
+check("digest: a manager saying what they're looking for goes in the text too",
+      d["count"] == 1 and "Sam is looking for: RB, WR\n\"Need a RB2\"\n\nCheck out the Trading Lab:" in d["text"], d)
+check("digest: ...once", body(digest())["count"] == 0)
+clock.t += 60
+gapp.handle(event("PUT", "/needs", cookies=g_sam2[0], body={"wants": ["TE"], "note": ""}, headers={"x-csrf-token": g_sam2[1]}))
+clock.t += 60
+d = body(digest())
+check("digest: no note, no note line", d["text"].endswith("Sam is looking for: TE\n\nCheck out the Trading Lab:\nhttps://stats.gooncocks.com/trade-lab.html"), d)
 many = [{"name": f"P{i}", "position": "WR", "nfl_team": "", "manager": "Sam", "created_at": i} for i in range(7)]
 check("a big dump is capped per manager",
       trade_lab.digest_text(many, "u") == "🦚 Gooncocks Trading Lab AI\n\nSam added to the Trading Block:\n"

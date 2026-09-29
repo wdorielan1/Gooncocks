@@ -240,11 +240,12 @@ DIGEST_PREVIEW_DAYS = 7
 DIGEST_MAX_PER_MANAGER = 5
 
 
-def digest_text(listings, url):
+def digest_text(listings, url, needs=()):
     """One text for new listings: a heading, then a section per manager (in
-    the order they listed) with one player per line, then the link, with
-    blank lines between so it's easy to read. Empty when there's nothing new."""
-    if not listings:
+    the order they listed) with one player per line, then what managers
+    newly said they're looking for, then the link, with blank lines between
+    so it's easy to read. Empty when there's nothing new."""
+    if not listings and not needs:
         return ""
     by_manager = {}
     for d in sorted(listings, key=lambda d: d["created_at"]):
@@ -257,6 +258,10 @@ def digest_text(listings, url):
         if len(ds) > DIGEST_MAX_PER_MANAGER:
             lines.append(f"• +{len(ds) - DIGEST_MAX_PER_MANAGER} more")
         parts.append("\n".join(lines))
+    for n in sorted(needs, key=lambda n: n["updated_at"]):
+        wants = ", ".join(n.get("wants") or [])
+        line = f"{n.get('manager') or 'A manager'} is looking for" + (f": {wants}" if wants else ":")
+        parts.append(line + (f"\n\"{n['note']}\"" if n.get("note") else ""))
     parts.append(f"Check out the Trading Lab:\n{url}")
     return "\n\n".join(parts)
 
@@ -931,10 +936,12 @@ class TradeLab:
         now = int(self.now())
         url = self.origin + self.page
         active = [i["data"] for i in self.store.query(self._lk()) if i["data"]["status"] in STATUSES]
+        said = [i["data"] for i in self.store.query(self._nk())]
         if q.get("preview") in ("1", "true", "yes"):
             since = now - DIGEST_PREVIEW_DAYS * 24 * 3600
             new = [d for d in active if d["created_at"] > since]
-            return _json(200, {"count": len(new), "text": digest_text(new, url), "preview": True})
+            wants = [n for n in said if n["updated_at"] > since]
+            return _json(200, {"count": len(new) + len(wants), "text": digest_text(new, url, wants), "preview": True})
         pk = f"DIGEST#{self.league}"
         cursor = self.store.get(pk, "cursor")
         try:
@@ -948,7 +955,8 @@ class TradeLab:
                                "note": "Started. Players listed from now on will show up here."})
         through = cursor["data"]["through"]
         new = [d for d in active if through < d["created_at"] <= now]
-        return _json(200, {"count": len(new), "text": digest_text(new, url)})
+        wants = [n for n in said if through < n["updated_at"] <= now]
+        return _json(200, {"count": len(new) + len(wants), "text": digest_text(new, url, wants)})
 
     # ---------------- dispatch
     def handle(self, event):
