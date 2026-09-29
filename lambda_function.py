@@ -86,7 +86,8 @@ Drive it with the "Test" button in the Lambda console, using a test event
   Every NFL player's and defense's weekly points in league scoring, from
   nflverse's public stats, checked against Yahoo's own points for players
   on league rosters, plus the Points Against table (points each NFL
-  defense gives up by position). "season" defaults to the current one.
+  defense gives up by position). 4th down stops come from nflverse's
+  play-by-play file. "season" defaults to the current one.
     {"action": "nfl_points"}
 
   Trade Lab's in-progress week (run by schedule Sunday evening, Sunday
@@ -576,9 +577,11 @@ def _action_nfl_points(event):
     index = _rivalry_store(s3, bucket).load(league_history.INDEX_KEY, None) or {}
     season = str(event.get("season") or index.get("current_season") or time.strftime("%Y"))
     rules = get_league_scoring(_get_access_token(), league_key)
+    stops = (nfl_points.fetch_fourth_down_stops(season)
+             if any(r["stat_id"] == 67 and r["points"] for r in rules) else None)
     pts = nfl_points.season_points(season, rules, nfl_points.fetch(nfl_points.PLAYER_URL.format(season=season)),
                                    nfl_points.fetch(nfl_points.TEAM_URL.format(season=season)),
-                                   nfl_points.fetch(nfl_points.GAMES_URL))
+                                   nfl_points.fetch(nfl_points.GAMES_URL), stops)
     against = nfl_points.points_against(pts)
     weeks = sorted({wk for p in pts["players"] for wk in p["weeks"]})
     _put(s3, bucket, f"nfl/points_{season}.json", json.dumps(pts, separators=(",", ":")), "application/json")

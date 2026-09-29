@@ -6,6 +6,7 @@ Yahoo won't return), the public per-season files, the Lambda's Yahoo
 adapter, the page bundling, and the weekly page's clickable games.
 Exits non-zero if anything is wrong.
 """
+import io
 import json
 import sys
 import time
@@ -247,7 +248,8 @@ PCSV = ("player_id,player_display_name,position,season,week,season_type,team,opp
         "r1,Kenneth Walker III,RB,2025,1,REG,SEA,SF,0,0,0,0,0,104,0,3,20,0,1,0,0,0\n"
         "k1,Brandon Aubrey,K,2025,1,REG,DAL,PHI,0,0,0,0,0,0,0,0,0,0,0,1,1,2\n"
         "q1,Josh Allen,QB,2025,1,POST,BUF,BAL,99,99,999,9,0,0,0,0,0,0,0,0,0,0\n")
-TCSV = "team,season,week,season_type,opponent_team,def_sacks,def_interceptions\nBAL,2025,1,REG,BUF,3,1\nBUF,2025,1,REG,BAL,2,0\n"
+TCSV = ("team,season,week,season_type,opponent_team,def_sacks,def_interceptions,def_tds,fumble_recovery_opp,fumble_recovery_tds\n"
+        "BAL,2025,1,REG,BUF,3,1,0,0,0\nBUF,2025,1,REG,BAL,2,0,0,1,1\n")
 GCSV = "season,game_type,week,away_team,away_score,home_team,home_score\n2025,REG,1,BAL,24,BUF,17\n2025,REG,1,SF,17,LA,14\n"
 pts = nfl_points.season_points(2025, R, PCSV, TCSV, GCSV)
 by = {p["name"]: p for p in pts["players"]}
@@ -256,8 +258,18 @@ check("nflverse: RB with rushing bonus, catches and a lost fumble", by["Kenneth 
 check("nflverse: kickers - 50-59 and 60+ both count as 50+", by["Brandon Aubrey"]["weeks"][1] == [14.0, "PHI"])
 check("nflverse: playoff games are left out", len(by["Josh Allen"]["weeks"]) == 1)
 check("nflverse: defenses score sacks, INTs and points allowed from the final score",
-      pts["defenses"]["BAL"][1] == [3 + 2 + 6, "BUF"] and pts["defenses"]["BUF"][1] == [2 + 4, "BAL"], pts["defenses"])
-check("nflverse: stats it doesn't have are listed", nfl_points.unsupported(R) == [(67, "4 Dwn Stops")])
+      pts["defenses"]["BAL"][1] == [3 + 2 + 6, "BUF"], pts["defenses"])
+R.append({"stat_id": 35, "position_type": "DT", "points": 6, "name": "TD", "bonuses": []})
+check("nflverse: a fumble returned for a TD counts as a defensive TD",
+      nfl_points.season_points(2025, R, PCSV, TCSV, GCSV)["defenses"]["BUF"][1] == [2 + 4 + 6, "BAL"])
+R.pop()
+check("nflverse: every one of the league's stats is covered", nfl_points.unsupported(R) == []
+      and nfl_points.unsupported([{"stat_id": 999, "position_type": "O", "points": 1, "name": "Odd stat", "bonuses": []}]) == [(999, "Odd stat")])
+PBP = io.StringIO("season_type,week,defteam,fourth_down_failed\nREG,1,BAL,1\nREG,1,BAL,0\nREG,1,LA,1\nREG,1,BAL,1\nPOST,1,BAL,1\n")
+stops = nfl_points.fourth_down_stops(PBP)
+check("nflverse: 4th down stops from play-by-play", stops == {("BAL", 1): 2, ("LAR", 1): 1}, stops)
+check("nflverse: stops score for the defense that made them",
+      nfl_points.season_points(2025, R, PCSV, TCSV, GCSV, stops)["defenses"]["BAL"][1] == [3 + 2 + 6 + 2, "BUF"])
 check("nflverse: team codes match Yahoo's (LA -> LAR)", nfl_points.team_code("LA") == "LAR" and nfl_points.team_code("buf") == "BUF")
 pa = nfl_points.points_against(pts)
 check("points against: points each defense gave up, by position", pa["BAL"]["QB"] == 60.26 and pa["SF"]["RB"] == 18.4

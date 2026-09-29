@@ -6,11 +6,13 @@ gives up to each position.
 
 The scoring rules come from Yahoo (yahoo_client.get_league_scoring), so
 this module only knows how to read each Yahoo stat out of nflverse's
-columns. Stats nflverse doesn't have (e.g. 4th down stops) are listed in
-`unsupported` and score 0, and check() compares the result with Yahoo's
-own weekly points for players on league rosters, so any gap shows up.
+columns (4th down stops come from its play-by-play file). Stats nflverse
+doesn't have are listed in `unsupported` and score 0, and check() compares
+the result with Yahoo's own weekly points for players on league rosters,
+so any gap shows up.
 """
 import csv
+import gzip
 import io
 import re
 import urllib.request
@@ -19,6 +21,7 @@ BASE = "https://github.com/nflverse/nflverse-data/releases/download"
 PLAYER_URL = BASE + "/stats_player/stats_player_week_{season}.csv"
 TEAM_URL = BASE + "/stats_team/stats_team_week_{season}.csv"
 GAMES_URL = BASE + "/schedules/games.csv"
+PBP_URL = BASE + "/pbp/play_by_play_{season}.csv.gz"
 POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"]
 
 # nflverse team codes that differ from Yahoo's.
@@ -76,7 +79,9 @@ DEF_STATS = {
     32: lambda r, pa: _num(r, "def_sacks"),
     33: lambda r, pa: _num(r, "def_interceptions"),
     34: lambda r, pa: _num(r, "fumble_recovery_opp"),
-    35: lambda r, pa: _num(r, "def_tds"),
+    # Defensive TDs, plus fumble-return TDs after taking the ball away
+    # (nflverse counts those separately from def_tds).
+    35: lambda r, pa: _num(r, "def_tds") + min(_num(r, "fumble_recovery_tds"), _num(r, "fumble_recovery_opp")),
     36: lambda r, pa: _num(r, "def_safeties"),
     37: lambda r, pa: _num(r, "def_punt_blocks", "def_fg_blocks", "def_pat_blocks"),
     48: lambda r, pa: _num(r, "punt_return_yards", "kickoff_return_yards"),
@@ -88,6 +93,7 @@ DEF_STATS = {
     54: lambda r, pa: 1.0 if 21 <= pa <= 27 else 0.0,
     55: lambda r, pa: 1.0 if 28 <= pa <= 34 else 0.0,
     56: lambda r, pa: 1.0 if pa >= 35 else 0.0,
+    67: lambda r, pa: _num(r, "_fourth_down_stops"),  # from play-by-play, added by season_points
     68: lambda r, pa: _num(r, "def_tackles_for_loss"),
     82: lambda r, pa: _num(r, "def_2pt_made"),
 }
@@ -136,8 +142,27 @@ def fetch(url, opener=urllib.request.urlopen):
         return resp.read().decode("utf-8")
 
 
-def season_points(season, rules, player_csv, team_csv, games_csv):
-    """Every player's and defense's regular-season weekly points:
+def fourth_down_stops(lines):
+    """{(defense team, week): 4th down stops} from nflverse play-by-play
+    CSV lines (read as a stream - the full-season file is large)."""
+    stops = {}
+    for row in csv.DictReader(lines):
+        if row.get("season_type") in ("REG", None, "") and row.get("fourth_down_failed") == "1" and row.get("defteam"):
+            key = (team_code(row["defteam"]), int(row["week"]))
+            stops[key] = stops.get(key, 0) + 1
+    return stops
+
+
+def fetch_fourth_down_stops(season, opener=urllib.request.urlopen):
+    req = urllib.request.Request(PBP_URL.format(season=season), headers={"User-Agent": "GooncocksFantasy/1.0"})
+    with opener(req, timeout=120) as resp:
+        with gzip.open(resp, "rt", encoding="utf-8", newline="") as lines:
+            return fourth_down_stops(lines)
+
+
+def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
+    """Every player's and defense's regular-season weekly points (stops:
+    fourth_down_stops' result, for leagues that score them):
     {"players": [{"id", "name", "position", "team", "weeks": {week: [pts, opp]}}],
      "defenses": {team: {week: [pts, opp]}}}."""
     allowed = {}  # (team, week) -> points its opponent scored
@@ -162,6 +187,7 @@ def season_points(season, rules, player_csv, team_csv, games_csv):
         team, wk = team_code(r["team"]), int(r["week"])
         if (team, wk) not in allowed:
             continue
+        r["_fourth_down_stops"] = (stops or {}).get((team, wk), 0)
         defenses.setdefault(team, {})[wk] = [def_points(r, allowed[(team, wk)], rules), team_code(r.get("opponent_team"))]
     return {"season": int(season), "players": list(players.values()), "defenses": defenses}
 
