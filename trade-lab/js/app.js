@@ -377,11 +377,6 @@
     ]));
     lastFocus = opener || document.activeElement;
     $('detail').hidden = false;
-    var chart = body.querySelector('.st-chart');
-    if (chart) {
-      chart.scrollLeft = chart.scrollWidth;  // open on the latest weeks; earlier ones scroll left
-      if (chart.scrollWidth > chart.clientWidth + 2) chart.insertAdjacentElement('afterend', h('p', { class: 'fine st-hint', text: '← Swipe or scroll for earlier weeks' }));
-    }
     $('detailClose').focus();
   }
   // Weekly fantasy points (league scoring) for a listed player: one bar per
@@ -396,17 +391,17 @@
     var cols = [];
     for (var wk = 1; wk <= last; wk++) {
       var pts = line.weeks[wk], has = typeof pts === 'number', isLive = lg.live && lg.live.week === wk;
-      cols.push(h('li', { class: 'st-col' + (isLive ? ' live' : ''), title: 'Week ' + wk + ': ' + (has ? fmt(pts) + ' pts' + (isLive ? ' so far' : '') : 'no score') }, [
-        h('span', { class: 'st-val', text: has ? fmt(pts) : '–' }),
-        h('span', { class: 'st-track' }, [has ? h('span', { class: 'st-bar', style: 'height:' + Math.max(3, Math.round(Math.max(0, pts) / top * 100)) + '%' }) : null]),
-        h('span', { class: 'st-wk', text: 'W' + wk })
+      cols.push(h('li', { class: 'st-row' + (isLive ? ' live' : ''), title: 'Week ' + wk + ': ' + (has ? fmt(pts) + ' pts' + (isLive ? ' so far' : '') : 'no score') }, [
+        h('span', { class: 'st-wk', text: 'Wk ' + wk }),
+        h('span', { class: 'st-track' }, [has ? h('span', { class: 'st-bar', style: 'width:' + Math.max(2, Math.round(Math.max(0, pts) / top * 100)) + '%' }) : null]),
+        h('span', { class: 'st-val', text: has ? fmt(pts) + (isLive ? '*' : '') : '–' })
       ]));
     }
     return h('section', { class: 'stats', 'aria-label': 'Weekly fantasy points' }, [
       h('h3', { text: lg.yr + ' fantasy points by week' }),
       h('ol', { class: 'st-chart', 'aria-label': 'Points by week' }, cols),
       h('p', { class: 'fine', text: 'League scoring. “–” means no score that week (bye, injured, or not on a league roster).' +
-        (lg.live ? ' Week ' + lg.live.week + ' (striped) is so far.' : '') })
+        (lg.live ? ' * Week ' + lg.live.week + ' (striped) is so far.' : '') })
     ]);
   }
   function closeDetail() {
