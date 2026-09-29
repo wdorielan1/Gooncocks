@@ -356,10 +356,10 @@
       h('div', { style: 'padding:10px 10px 10px 0' }, [
         h('h2', { class: 'pname', id: 'detailTitle', text: l.name }),
         h('div', { class: 'pmeta' }, [posBadge(l.position), l.nfl_team ? h('span', { class: 'nfl', text: l.nfl_team }) : null,
-          own ? h('span', { class: 'mine-tag', text: 'Your Listing' }) : null]),
-        injuryTag(l.player_key)
+          own ? h('span', { class: 'mine-tag', text: 'Your Listing' }) : null])
       ])
     ]));
+    body.appendChild(h('div', { class: 'status-row' }, [injuryTag(l.player_key), newsLink(l.player_key)]));
     var stats = statsPanel(l);
     if (stats) body.appendChild(stats);
     body.appendChild(h('dl', { class: 'dl' }, [
@@ -382,11 +382,30 @@
   }
   // Yahoo's injury status for a rostered player, e.g. "Questionable · Hamstring".
   function injuryTag(playerKey) {
-    var teamsR = S.league && S.league.rosters && S.league.rosters.teams, inj = null;
-    (teamsR || []).forEach(function (t) { (t.players || []).forEach(function (p) { if (p.player_key === playerKey && p.injury) inj = p.injury; }); });
+    var rp = rosterPlayer(playerKey), inj = rp && rp.injury;
     if (!inj) return null;
     var mild = inj.code === 'Q' || inj.code === 'D';
     return h('p', { class: 'inj ' + (mild ? 'mild' : 'out') }, [h('b', { text: inj.label }), inj.note ? ' · ' + inj.note : '']);
+  }
+
+  // A link to the player's news page on Yahoo (where its short notes live),
+  // flagged when Yahoo says there's a recent note.
+  function newsLink(playerKey) {
+    var id = String(playerKey).split('.p.')[1];
+    if (!id || !/^\d+$/.test(id)) return null;
+    var nw = rosterPlayer(playerKey), n = nw && nw.news;
+    var fresh = n && (n.recent || (n.at && now() - n.at < 3 * 86400));
+    return h('p', { class: 'news' }, [
+      fresh ? h('span', { class: 'news-new', text: 'New note' + (n.at ? ' · ' + L.ago(n.at, now()) : '') }) : null,
+      h('a', { href: 'https://sports.yahoo.com/nfl/players/' + id + '/news/', target: '_blank', rel: 'noopener', text: 'Latest news on Yahoo →' })
+    ]);
+  }
+  function rosterPlayer(playerKey) {
+    var found = null;
+    ((S.league && S.league.rosters && S.league.rosters.teams) || []).forEach(function (t) {
+      (t.players || []).forEach(function (p) { if (p.player_key === playerKey) found = p; });
+    });
+    return found;
   }
 
   // Weekly fantasy points (league scoring) for a listed player: one bar per

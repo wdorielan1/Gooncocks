@@ -331,6 +331,8 @@ check("injury: Yahoo's label and injury note",
       trade_lab.injury({"status": "Q", "status_full": "Questionable", "injury_note": " Hamstring "}) == {"code": "Q", "label": "Questionable", "note": "Hamstring"})
 check("injury: a status Yahoo doesn't spell out still reads as words",
       trade_lab.injury({"status": "O"}) == {"code": "O", "label": "Out", "note": ""})
+check("news: Yahoo's recent-note flag and time", trade_lab.news({"has_recent_player_notes": 1, "player_notes_last_timestamp": "1790000000"}) == {"recent": True, "at": 1790000000}
+      and trade_lab.news({}) is None and trade_lab.news({"player_notes_last_timestamp": "junk"}) is None)
 iy = FakeYahoo()
 _orig_roster = iy.roster
 iy.roster = lambda key: [dict(p, status="D", status_full="Doubtful", injury_note="Ankle") if p["name"] == "Breece Hall" else p for p in _orig_roster(key)]

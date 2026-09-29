@@ -229,6 +229,9 @@ def get_team_roster(access_token, team_key, week=None):
                 # Injury detail when Yahoo has it, e.g. "Questionable" / "Hamstring".
                 "status_full": p.get("status_full") or "",
                 "injury_note": p.get("injury_note") or "",
+                # Yahoo's player-news flags (the note text itself isn't in the API).
+                "has_recent_player_notes": p.get("has_recent_player_notes"),
+                "player_notes_last_timestamp": p.get("player_notes_last_timestamp"),
                 "position": p.get("display_position") or "",
                 "nfl_team": (p.get("editorial_team_abbr") or "").upper(),
                 "headshot": headshot_url(p),

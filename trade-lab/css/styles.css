@@ -290,9 +290,14 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   background: #0c1831; border: 1px solid var(--line-2); border-radius: 3px; overflow: hidden; }
 .detail-head.mine { border: 2px solid var(--gold); }
 .detail-head .pname { font-size: 28px; }
+.status-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
+.status-row .inj, .status-row .news { margin-top: 0; }
 .inj { display: inline-block; margin-top: 8px; padding: 3px 9px; border-radius: 3px; font-size: 13px; color: #fff; }
 .inj.mild { background: #a8521a; }
 .inj.out { background: #b3262d; }
+.news { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; font-size: 14px; }
+.news a { color: var(--blue-hi); font-weight: 600; }
+.news-new { background: var(--gold); color: #141005; font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 3px; }
 .stats { margin-top: 16px; }
 .stats h3 { font: 400 20px/1.1 var(--headline); text-transform: uppercase; letter-spacing: .5px; }
 .st-chart { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }

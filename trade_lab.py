@@ -430,6 +430,18 @@ def injury(player):
     return {"code": code[:8], "label": label[:40], "note": note}
 
 
+def news(player):
+    """Whether Yahoo has a recent news note on a player, and when it was
+    posted: {"recent": bool, "at": unix time or None}, or None if Yahoo
+    says nothing."""
+    recent = str(player.get("has_recent_player_notes") or "").lower() in ("1", "true")
+    try:
+        at = int(player.get("player_notes_last_timestamp") or 0) or None
+    except (TypeError, ValueError):
+        at = None
+    return {"recent": recent, "at": at} if recent or at else None
+
+
 def primary_position(player):
     return (player.get("position") or "").split(",")[0].strip() or "?"
 
@@ -506,7 +518,7 @@ class TradeLab:
         data = {"team_key": team_key, "fetched_at": self.now(), "players": [
             {"player_key": p["player_key"], "name": p.get("name") or "", "position": primary_position(p),
              "positions": p.get("eligible") or [], "nfl_team": p.get("nfl_team") or "", "headshot": p.get("headshot") or "",
-             "slot": p.get("slot") or "", "injury": injury(p)}
+             "slot": p.get("slot") or "", "injury": injury(p), "news": news(p)}
             for p in players if p.get("player_key")]}
         self.store.put(self._rk(), team_key, data, 1)
         self._archive_gone(team_key, {p["player_key"] for p in data["players"]})

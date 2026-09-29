@@ -42,7 +42,8 @@
     rosters[T[n]] = R[n].map(function (r) {
       base[r[1]] = r[4];
       return { player_key: '470.p.' + r[0], name: r[1], position: r[2], positions: [r[2]], nfl_team: r[3], headshot: '', slot: r[5] || '',
-               injury: INJ[r[1]] || (r[5] === 'IR' ? { code: 'IR', label: 'Injured reserve', note: 'Knee' } : null) };
+               injury: INJ[r[1]] || (r[5] === 'IR' ? { code: 'IR', label: 'Injured reserve', note: 'Knee' } : null),
+               news: INJ[r[1]] ? { recent: true, at: now - 5 * 3600 } : null };
     });
   });
 
