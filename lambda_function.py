@@ -83,6 +83,12 @@ Drive it with the "Test" button in the Lambda console, using a test event
   from other sources can be scored the same way):
     {"action": "scoring"}
 
+  Every NFL player's and defense's weekly points in league scoring, from
+  nflverse's public stats, checked against Yahoo's own points for players
+  on league rosters, plus the Points Against table (points each NFL
+  defense gives up by position). "season" defaults to the current one.
+    {"action": "nfl_points"}
+
   Trade Lab's in-progress week (run by schedule Sunday evening, Sunday
   midnight and Monday midnight): points so far for players whose games have
   started, saved as boxscores/live.json. Tuesday's rivalry_history or
@@ -106,6 +112,7 @@ from awards import (
 )
 import league_history
 import weekly_history
+import nfl_points
 from discord_client import build_teaser, post_message
 from sample_data import SAMPLE_MATCHUPS
 from webpage import render_html
@@ -560,6 +567,37 @@ def _action_scoring(event):
         extra = "".join(f", +{b['points']:g} at {b['target']:g}" for b in r["bonuses"])
         print(f"  {r['stat_id']:>3}  {r['position_type'] or '-':<3} {r['name']} ({r['display']}): {r['points']:g}{extra}")
     return {"rules": rules}
+
+
+def _action_nfl_points(event):
+    bucket = _require_env("S3_BUCKET")
+    league_key = event.get("league_key") or _require_env("LEAGUE_KEY")
+    s3 = boto3.client("s3")
+    index = _rivalry_store(s3, bucket).load(league_history.INDEX_KEY, None) or {}
+    season = str(event.get("season") or index.get("current_season") or time.strftime("%Y"))
+    rules = get_league_scoring(_get_access_token(), league_key)
+    pts = nfl_points.season_points(season, rules, nfl_points.fetch(nfl_points.PLAYER_URL.format(season=season)),
+                                   nfl_points.fetch(nfl_points.TEAM_URL.format(season=season)),
+                                   nfl_points.fetch(nfl_points.GAMES_URL))
+    against = nfl_points.points_against(pts)
+    weeks = sorted({wk for p in pts["players"] for wk in p["weeks"]})
+    _put(s3, bucket, f"nfl/points_{season}.json", json.dumps(pts, separators=(",", ":")), "application/json")
+    _put(s3, bucket, f"nfl/points_against_{season}.json",
+         json.dumps({"season": int(season), "weeks": weeks, "teams": against}, separators=(",", ":")), "application/json")
+    box = _rivalry_store(s3, bucket).load(league_history.BOX_KEY.format(season), None) or {}
+    result = nfl_points.check(pts, box)
+    missing = nfl_points.unsupported(rules)
+    print(f"{season}: {len(pts['players'])} players and {len(pts['defenses'])} defenses scored, weeks {weeks[0] if weeks else '-'}-{weeks[-1] if weeks else '-'}.")
+    print("Not in nflverse (scored as 0): " + (", ".join(f"{n} ({i})" for i, n in missing) or "none"))
+    print("Check against Yahoo's points for players on league rosters:")
+    for pos in nfl_points.POSITIONS:
+        s = result["by_position"].get(pos)
+        if s:
+            print(f"  {pos:<3} {s['exact']} of {s['compared']} exact, average miss {s['avg_miss']}"
+                  + (f", {s['not_found']} not found" if s["not_found"] else ""))
+    for m in result["biggest_misses"]:
+        print(f"  week {m['week']} {m['name']} ({m['pos']}): Yahoo {m['yahoo']}, ours {m['ours']} ({m['diff']:+})")
+    return {"season": int(season), "weeks": weeks, "unsupported": missing, "check": result}
 
 
 def _action_trade_lab_live(event, context=None):
@@ -1119,6 +1157,8 @@ def lambda_handler(event, context):
         return _action_rivalry_history(event, context)
     if action == "recap":
         return _action_recap(event)
+    if action == "nfl_points":
+        return _action_nfl_points(event)
     if action == "scoring":
         return _action_scoring(event)
     if action == "trade_lab_live":

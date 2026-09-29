@@ -27,7 +27,7 @@ env:
   FUNCTION_NAME: gooncockfantasy
   TRADE_LAB_FUNCTION: gooncocks-trade-lab
   SITE_BUCKET: gooncocks-recap-891823750306-us-east-2-an
-  LAMBDA_FILES: lambda_function.py awards.py webpage.py yahoo_client.py discord_client.py sample_data.py league_history.py weekly_history.py
+  LAMBDA_FILES: lambda_function.py awards.py webpage.py yahoo_client.py discord_client.py sample_data.py league_history.py weekly_history.py nfl_points.py
 
 jobs:
   deploy:

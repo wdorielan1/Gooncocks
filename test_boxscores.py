@@ -231,6 +231,47 @@ check("scoring rules: every scored stat with its name, points and bonuses",
           {"stat_id": 11, "name": "Receptions", "display": "Rec", "position_type": "O", "points": 0.5, "bonuses": []}],
       yahoo_client.parse_scoring(settings))
 
+# ---------- nflverse stats scored in league scoring, and points against
+import nfl_points
+R = [{"stat_id": sid, "position_type": pt, "points": pts, "name": n, "bonuses": [{"target": t, "points": b} for t, b in bon]}
+     for sid, pt, pts, n, bon in [
+         (2, "O", 0.5, "Comp", []), (4, "O", 0.04, "Pass Yds", [(300, 5), (400, 5)]), (5, "O", 4, "Pass TD", []),
+         (6, "O", -1, "Int", []), (9, "O", 0.1, "Rush Yds", [(100, 5)]), (10, "O", 6, "Rush TD", []), (11, "O", 1, "Rec", []),
+         (12, "O", 0.1, "Rec Yds", []), (13, "O", 6, "Rec TD", []), (18, "O", -2, "Fum Lost", []), (23, "K", 6, "FG 50+", []),
+         (29, "K", 1, "PAT", []), (32, "DT", 1, "Sack", []), (33, "DT", 2, "Int", []), (53, "DT", 6, "PA 14-20", []),
+         (54, "DT", 4, "PA 21-27", []), (67, "DT", 1, "4 Dwn Stops", [])]]
+PCSV = ("player_id,player_display_name,position,season,week,season_type,team,opponent_team,completions,attempts,passing_yards,"
+        "passing_tds,passing_interceptions,rushing_yards,rushing_tds,receptions,receiving_yards,receiving_tds,"
+        "rushing_fumbles_lost,fg_made_50_59,fg_made_60_,pat_made\n"
+        "q1,Josh Allen,QB,2025,1,REG,BUF,BAL,33,46,394,2,0,30,2,0,0,0,0,0,0,0\n"
+        "r1,Kenneth Walker III,RB,2025,1,REG,SEA,SF,0,0,0,0,0,104,0,3,20,0,1,0,0,0\n"
+        "k1,Brandon Aubrey,K,2025,1,REG,DAL,PHI,0,0,0,0,0,0,0,0,0,0,0,1,1,2\n"
+        "q1,Josh Allen,QB,2025,1,POST,BUF,BAL,99,99,999,9,0,0,0,0,0,0,0,0,0,0\n")
+TCSV = "team,season,week,season_type,opponent_team,def_sacks,def_interceptions\nBAL,2025,1,REG,BUF,3,1\nBUF,2025,1,REG,BAL,2,0\n"
+GCSV = "season,game_type,week,away_team,away_score,home_team,home_score\n2025,REG,1,BAL,24,BUF,17\n2025,REG,1,SF,17,LA,14\n"
+pts = nfl_points.season_points(2025, R, PCSV, TCSV, GCSV)
+by = {p["name"]: p for p in pts["players"]}
+check("nflverse: a QB week in league scoring, with the 300-yard bonus (Josh Allen, 60.26)", by["Josh Allen"]["weeks"][1] == [60.26, "BAL"], by["Josh Allen"])
+check("nflverse: RB with rushing bonus, catches and a lost fumble", by["Kenneth Walker III"]["weeks"][1] == [10.4 + 5 + 3 + 2 - 2, "SF"], by["Kenneth Walker III"])
+check("nflverse: kickers - 50-59 and 60+ both count as 50+", by["Brandon Aubrey"]["weeks"][1] == [14.0, "PHI"])
+check("nflverse: playoff games are left out", len(by["Josh Allen"]["weeks"]) == 1)
+check("nflverse: defenses score sacks, INTs and points allowed from the final score",
+      pts["defenses"]["BAL"][1] == [3 + 2 + 6, "BUF"] and pts["defenses"]["BUF"][1] == [2 + 4, "BAL"], pts["defenses"])
+check("nflverse: stats it doesn't have are listed", nfl_points.unsupported(R) == [(67, "4 Dwn Stops")])
+check("nflverse: team codes match Yahoo's (LA -> LAR)", nfl_points.team_code("LA") == "LAR" and nfl_points.team_code("buf") == "BUF")
+pa = nfl_points.points_against(pts)
+check("points against: points each defense gave up, by position", pa["BAL"]["QB"] == 60.26 and pa["SF"]["RB"] == 18.4
+      and pa["BUF"]["DEF"] == 11.0 and pa["BAL"]["games"] == 1, pa)
+box = {"weeks": {"1": {"teams": {"t.1": [["QB", "Josh Allen", "QB", "BUF", 60.26], ["RB", "Kenneth Walker III", "RB", "SEA", 17.0],
+                                         ["DEF", "Baltimore", "DEF", "BAL", 11.0], ["BN", "Nobody Known", "WR", "NYJ", 5.0]]}}}}
+ck = nfl_points.check(pts, box)
+check("check vs Yahoo: exact matches, misses and players not found",
+      ck["by_position"]["QB"]["exact"] == 1 and ck["by_position"]["DEF"]["exact"] == 1
+      and ck["by_position"]["RB"]["exact"] == 0 and ck["biggest_misses"][0]["diff"] == 1.4
+      and ck["by_position"]["WR"]["not_found"] == 1, ck)
+check("names match across sources (suffixes and punctuation)", nfl_points.name_key("Kenneth Walker III") == nfl_points.name_key("Kenneth Walker")
+      and nfl_points.name_key("D.J. Moore") == nfl_points.name_key("DJ Moore") and nfl_points.name_key("Ja'Marr Chase") == "jamarr chase")
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed: {', '.join(failures)}")
