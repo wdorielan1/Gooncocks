@@ -46,7 +46,15 @@
 
   // Made-up weekly scores: each player's typical score plus a fixed wobble.
   function wobble(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100003; return (h % 1000) / 1000 - 0.5; }
-  function points(name, season, week) { return Math.max(0, Math.round(base[name] * (1 + 0.9 * wobble(name + season + '-' + week)) * 100) / 100); }
+  // Week-to-week swings that cancel out over every 3 weeks, so each team's
+  // averages (and the sample's trade story) stay the same.
+  var SWING = [-0.35, 0.4, -0.05], d, cur;
+  function swing(name, season, week) {
+    if (week > (season === cur ? 3 : 15)) return 0;  // only whole 3-week blocks, so they cancel exactly
+    var ph = 0; for (var i = 0; i < name.length; i++) ph += name.charCodeAt(i);
+    return SWING[(week + ph) % 3];
+  }
+  function points(name, season, week) { return Math.max(0, Math.round(base[name] * (1 + 0.9 * wobble(name + season + '-' + week) + swing(name, season, week)) * 100) / 100); }
   function lineup(team, season, week) {
     var ps = rosters[team].filter(function (p) { return !p.slot; }).slice()
       .sort(function (a, b) { return base[b.name] - base[a.name]; }), used = {}, out = [];
@@ -92,7 +100,7 @@
                               positions: ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'], slots: SLOTS,
                               boxscores: {} };
   // This season has 3 weeks played; last season all 17 (seasons follow the page's own clock).
-  var d = new Date(), cur = d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear();
+  d = new Date(); cur = d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear();
   window.TRADE_LAB_SAMPLE.boxscores[cur - 1] = seasonBox(cur - 1, 17);
   window.TRADE_LAB_SAMPLE.boxscores[cur] = seasonBox(cur, 3);
   // Week 4 in progress: Sunday's games are in, Monday night players (KC, PHI here) haven't played.

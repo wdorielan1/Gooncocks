@@ -359,6 +359,8 @@
           own ? h('span', { class: 'mine-tag', text: 'Your Listing' }) : null])
       ])
     ]));
+    var stats = statsPanel(l);
+    if (stats) body.appendChild(stats);
     body.appendChild(h('dl', { class: 'dl' }, [
       h('dt', { text: 'Manager' }), h('dd', { text: l.manager }),
       h('dt', { text: 'Status' }), h('dd', {}, [h('span', { class: 'pill ' + l.status, text: L.STATUS_LABEL[l.status] })]),
@@ -376,6 +378,43 @@
     lastFocus = opener || document.activeElement;
     $('detail').hidden = false;
     $('detailClose').focus();
+  }
+  // Weekly fantasy points (league scoring) for a listed player: four
+  // headline numbers and one bar per week. Missing weeks are a dash, not 0.
+  function statsPanel(p) {
+    var lg = S.league;
+    if (!lg) return null;
+    var cur = L.playerStats(lg.cw, p, 3), prev = L.playerStats(lg.pw, p, 3), line = L.weekLine(lg.cw, p);
+    var last = Math.max.apply(null, lg.weeksPlayed.concat(lg.live ? [lg.live.week] : []).concat([0]));
+    if (!last && !prev.games) return null;
+    function tile(value, label, sub) {
+      return h('div', { class: 'st-tile' }, [h('b', { text: value }), h('span', { text: label }), sub ? h('small', { text: sub }) : null]);
+    }
+    var box = h('section', { class: 'stats', 'aria-label': 'Weekly fantasy points' }, [
+      h('h3', { text: lg.yr + ' fantasy points' }),
+      h('div', { class: 'st-tiles' }, [
+        tile(fmt(cur.ppg), 'Pts/wk', cur.games ? plural(cur.games, 'week') : 'No weeks yet'),
+        tile(fmt(cur.games >= 2 ? cur.recent : null), 'Last 3', cur.games >= 2 ? 'weeks' : ''),
+        tile(line.best ? fmt(line.best.points) : '—', 'Best week', line.best ? 'Week ' + line.best.week : ''),
+        tile(fmt(prev.ppg), (lg.yr - 1) + ' pts/wk', prev.games ? plural(prev.games, 'week') : 'Not rostered')
+      ])
+    ]);
+    if (last) {
+      var top = Math.max.apply(null, Object.keys(line.weeks).map(function (k) { return line.weeks[k]; }).concat([1]));
+      var cols = [];
+      for (var wk = 1; wk <= last; wk++) {
+        var pts = line.weeks[wk], has = typeof pts === 'number', isLive = lg.live && lg.live.week === wk;
+        cols.push(h('li', { class: 'st-col' + (isLive ? ' live' : ''), title: 'Week ' + wk + ': ' + (has ? fmt(pts) + ' pts' + (isLive ? ' so far' : '') : 'no score') }, [
+          h('span', { class: 'st-val', text: has ? fmt(pts) : '–' }),
+          h('span', { class: 'st-track' }, [has ? h('span', { class: 'st-bar', style: 'height:' + Math.max(3, Math.round(Math.max(0, pts) / top * 100)) + '%' }) : null]),
+          h('span', { class: 'st-wk', text: 'W' + wk })
+        ]));
+      }
+      box.appendChild(h('ol', { class: 'st-chart', 'aria-label': 'Points by week' }, cols));
+      box.appendChild(h('p', { class: 'fine', text: 'League scoring. “–” means no score that week (bye, injured, or not on a league roster).' +
+        (lg.live ? ' Week ' + lg.live.week + ' is so far.' : '') }));
+    }
+    return box;
   }
   function closeDetail() {
     if ($('detail').hidden) return;
@@ -667,7 +706,7 @@
         return cache[k] || (cache[k] = L.playerRating(cw, pw, p));
       }
       var slots = (ro.slots && ro.slots.length) ? ro.slots : L.slotsFromBox(Object.keys(cur.games).length ? cur : prev);
-      S.league = { rosters: ro, slots: slots, cur: cur, prev: prev, yr: yr, rate: rate, live: live,
+      S.league = { rosters: ro, slots: slots, cur: cur, prev: prev, yr: yr, rate: rate, live: live, cw: cw, pw: pw,
                    weeksPlayed: weeksIn(cur), scout: L.scouting(ro.teams, slots, rate) };
       S.leagueError = null;
       return S.league;

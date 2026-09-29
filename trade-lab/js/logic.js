@@ -132,6 +132,14 @@
       recentWeeks: recent, first: weeks[0] || null, last: weeks[weeks.length - 1] || null
     };
   }
+  // One player's weekly points for the stats panel: {week: points}, plus the
+  // season summary numbers.
+  function weekLine(weeksByPlayer, player) {
+    var w = weeksByPlayer[norm(player.name) + '|' + String(player.position || '').split(',')[0]] || {};
+    var best = null;
+    Object.keys(w).forEach(function (k) { if (best === null || w[k] > w[best]) best = k; });
+    return { weeks: w, best: best === null ? null : { week: Number(best), points: w[best] } };
+  }
   function sideTotals(stats) {
     var t = { total: 0, ppg: 0, recent: 0, games: 0, missing: 0 };
     stats.forEach(function (s) {
@@ -333,7 +341,7 @@
 
   root.TradeLogic = {
     STATUS_LABEL: STATUS_LABEL, filterListings: filterListings, needs: needs, matchmaker: matchmaker,
-    playerWeeks: playerWeeks, playerStats: playerStats, sideTotals: sideTotals, ago: ago,
+    playerWeeks: playerWeeks, playerStats: playerStats, weekLine: weekLine, sideTotals: sideTotals, ago: ago,
     playerRating: playerRating, slotsFromBox: slotsFromBox, teamReport: teamReport, scouting: scouting,
     tradeFits: tradeFits, fairness: fairness, grade: grade, GROUPS: GROUPS, PRIOR_WEEKS: PRIOR_WEEKS
   };
