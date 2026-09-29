@@ -73,65 +73,37 @@
     }
     st.textContent = '';
     renderPaPos();
-    if (S.paView && S.paView !== 'ALL') return renderPaPosition(S.paView);
-    var last4 = !!S.paLast4, sortPos = S.paSort || 'QB';
-    $('paSeason').setAttribute('aria-pressed', last4 ? 'false' : 'true'); $('paSeason').classList.toggle('gold', !last4); $('paSeason').classList.toggle('ghost', last4);
-    $('paLast4').setAttribute('aria-pressed', last4 ? 'true' : 'false'); $('paLast4').classList.toggle('gold', last4); $('paLast4').classList.toggle('ghost', !last4);
-    var rows = Object.keys(S.pa.teams).map(function (code) {
-      var t = S.pa.teams[code], wks = Object.keys(t.weeks || {}).map(Number).sort(function (a, b) { return a - b; });
-      if (last4) wks = wks.slice(-4);
-      var avg = {};
-      PA_POS.forEach(function (p) {
-        avg[p] = wks.length ? wks.reduce(function (sum, w) { return sum + ((t.weeks[w] || {})[p] || 0); }, 0) / wks.length : (last4 ? null : t[p]);
-      });
-      return { code: code, avg: avg, games: wks.length || t.games };
-    });
-    // Shade by rank within each column: the top fifth (most allowed) darkest.
-    var rank = {};
-    PA_POS.forEach(function (p) {
-      rows.slice().sort(function (a, b) { return (b.avg[p] || 0) - (a.avg[p] || 0); }).forEach(function (r, i) { (rank[r.code] = rank[r.code] || {})[p] = i; });
-    });
-    rows.sort(function (a, b) { return ((b.avg[sortPos] || 0) - (a.avg[sortPos] || 0)) || a.code.localeCompare(b.code); });
-    var tbl = clear($('paTable'));
-    tbl.className = 'pa';
-    tbl.appendChild(h('caption', { class: 'sr-only', text: 'Fantasy points allowed per game by each NFL defense, by position' }));
-    tbl.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', text: 'Defense' })].concat(PA_POS.map(function (p) {
-      var on = p === sortPos;
-      return h('th', { scope: 'col', 'aria-sort': on ? 'descending' : 'none' }, [h('button', { type: 'button', class: 'pa-sort' + (on ? ' on' : ''),
-        text: p + (on ? ' ▼' : ''), 'aria-label': 'Sort by points allowed to ' + p, onclick: function () { S.paSort = p; renderTools(); } })]);
-    })))]));
-    var n = rows.length;
-    tbl.appendChild(h('tbody', {}, rows.map(function (r) {
-      return h('tr', {}, [h('th', { scope: 'row' }, [h('b', { text: r.code }), h('span', { class: 'pa-name', text: ' ' + (NFL[r.code] || '') })])]
-        .concat(PA_POS.map(function (p) {
-          var i = rank[r.code][p], tier = Math.min(4, Math.floor(i / n * 5));
-          var label = (NFL[r.code] || r.code) + ' allow ' + fmt(r.avg[p]) + ' pts/game to ' + p + ' (' + ordinal(i + 1) + ' most)';
-          return h('td', { class: 'pa-t' + (4 - tier) + (p === sortPos ? ' on' : ''), title: label }, [
-            h('button', { type: 'button', class: 'pa-cell', text: fmt(r.avg[p]), 'aria-label': label + '. Show who scored it.',
-              onclick: function (e) { openPaDetail(r.code, p, e.currentTarget); } })]);
-        })));
-    })));
-    paNote(last4);
+    renderPaPosition(S.paView || 'RB');
   }
 
-  // Position tabs: "All" (every position's points) or one position's full table.
+  // Position tabs: one position at a time.
   function renderPaPos() {
-    var box = clear($('paPos')), view = S.paView || 'ALL';
-    ['ALL'].concat(PA_POS).forEach(function (p) {
+    var box = clear($('paPos')), view = S.paView || 'RB';
+    PA_POS.forEach(function (p) {
       box.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (p === view ? ' on' : ''), 'aria-pressed': p === view ? 'true' : 'false',
-        text: p === 'ALL' ? 'All' : p, onclick: function () { S.paView = p; renderTools(); } }));
+        text: p, onclick: function () {
+          S.paView = p; renderTools();
+          try { history.replaceState(null, '', '#' + p.toLowerCase()); } catch (e) { /* file:// or sandboxed */ }
+        } }));
     });
   }
   function paWeeks(t) {
     var wks = Object.keys(t.weeks || {}).map(Number).sort(function (a, b) { return a - b; });
     return S.paLast4 ? wks.slice(-4) : wks;
   }
-  // One position: every defense ranked by points allowed per game, with the
-  // average stats behind it.
+  // The week after the last one scored, if the regular season has one left.
+  function paNextWeek() {
+    var wks = S.pa.weeks || [], w = (wks.length ? Math.max.apply(null, wks) : 0) + 1;
+    return w <= 18 && S.pa.schedule ? w : null;
+  }
+  // One position: every defense ranked from easiest matchup (most points
+  // allowed per game) to toughest, with who it plays next. The average stats
+  // behind the points are one tap away.
   function renderPaPosition(pos) {
-    var last4 = !!S.paLast4, cols = (S.pa.cols || {})[pos] || [];
+    var last4 = !!S.paLast4, showStats = !!S.paStats, cols = (S.pa.cols || {})[pos] || [], nextWk = paNextWeek();
     $('paSeason').setAttribute('aria-pressed', last4 ? 'false' : 'true'); $('paSeason').classList.toggle('gold', !last4); $('paSeason').classList.toggle('ghost', last4);
     $('paLast4').setAttribute('aria-pressed', last4 ? 'true' : 'false'); $('paLast4').classList.toggle('gold', last4); $('paLast4').classList.toggle('ghost', !last4);
+    $('paStats').setAttribute('aria-pressed', showStats ? 'true' : 'false'); $('paStats').textContent = showStats ? 'Hide stats' : 'Show stats';
     var rows = Object.keys(S.pa.teams).map(function (code) {
       var t = S.pa.teams[code], wks = paWeeks(t), n = wks.length || 1, avg = cols.map(function () { return 0; }), pts = 0;
       wks.forEach(function (w) {
@@ -149,21 +121,23 @@
     });
     cols = order.map(function (i) { return cols[i]; });
     rows.forEach(function (r) { r.avg = order.map(function (i) { return r.avg[i]; }); });
-    var keep = cols.map(function (c, i) { return rows.some(function (r) { return Math.abs(r.avg[i]) >= 0.05; }); });
+    var keep = cols.map(function (c, i) { return showStats && rows.some(function (r) { return Math.abs(r.avg[i]) >= 0.05; }); });
     var tbl = clear($('paTable')), n = rows.length;
-    tbl.className = 'pa pa-full';
-    tbl.appendChild(h('caption', { class: 'sr-only', text: 'Points and average stats allowed per game to ' + PA_WHO[pos] + ' by each NFL defense' }));
-    tbl.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', class: 'pa-rank', text: '#' }), h('th', { scope: 'col', text: 'Team' }),
-      h('th', { scope: 'col', class: 'pa-ptsh', text: 'Pts', 'aria-sort': 'descending' })]
+    tbl.className = 'pa pa-full' + (showStats ? '' : ' pa-slim');
+    tbl.appendChild(h('caption', { class: 'sr-only', text: 'Fantasy points allowed per game to ' + PA_WHO[pos] + ' by each NFL defense, easiest matchup first' }));
+    tbl.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', class: 'pa-rank', text: '#' }), h('th', { scope: 'col', text: pos === 'DEF' ? 'Offense' : 'Defense' }),
+      h('th', { scope: 'col', class: 'pa-ptsh', text: 'Pts / game', 'aria-sort': 'descending' }),
+      nextWk ? h('th', { scope: 'col', class: 'pa-nexth', text: 'Wk ' + nextWk + ' vs' }) : null]
       .concat(cols.filter(function (c, i) { return keep[i]; }).map(function (c) { return h('th', { scope: 'col', class: 'pa-stat', text: c }); })))]));
     tbl.appendChild(h('tbody', {}, rows.map(function (r, i) {
-      var tier = Math.min(4, Math.floor(i / n * 5));
+      var tier = Math.min(4, Math.floor(i / n * 5)), opp = nextWk ? (S.pa.schedule[r.code] || {})[nextWk] : null;
       return h('tr', {}, [h('td', { class: 'pa-rank', text: String(i + 1) }),
         h('th', { scope: 'row' }, [h('button', { type: 'button', class: 'pa-team', onclick: function (e) { openPaDetail(r.code, pos, e.currentTarget); } },
           [h('b', { text: r.code }), h('span', { class: 'pa-name', text: ' ' + (NFL[r.code] || '') })])]),
         h('td', { class: 'pa-pts pa-t' + (4 - tier) }, [h('button', { type: 'button', class: 'pa-cell', text: fmt(r.pts),
-          'aria-label': (NFL[r.code] || r.code) + ' allow ' + fmt(r.pts) + ' pts/game to ' + pos + '. Show who scored it.',
-          onclick: function (e) { openPaDetail(r.code, pos, e.currentTarget); } })])]
+          'aria-label': (NFL[r.code] || r.code) + ' allow ' + fmt(r.pts) + ' pts/game to ' + PA_WHO[pos] + ', ' + ordinal(i + 1) + ' most. Show who scored it.',
+          onclick: function (e) { openPaDetail(r.code, pos, e.currentTarget); } })]),
+        nextWk ? h('td', { class: 'pa-next-opp' + (opp ? '' : ' bye'), text: opp || 'BYE' }) : null]
         .concat(r.avg.filter(function (v, i) { return keep[i]; }).map(function (v) { return h('td', { class: 'pa-stat', text: fmt(v) }); })));
     })));
     paNote(last4);
@@ -231,6 +205,7 @@
   // ---------- start ----------
   $('paSeason').addEventListener('click', function () { S.paLast4 = false; renderTools(); });
   $('paLast4').addEventListener('click', function () { S.paLast4 = true; renderTools(); });
+  $('paStats').addEventListener('click', function () { S.paStats = !S.paStats; renderTools(); });
   $('detailClose').addEventListener('click', closeDetail);
   $('detail').addEventListener('click', function (e) { if (e.target === $('detail')) closeDetail(); });
   $('detail').addEventListener('keydown', function (e) { trapFocus($('detail'), e); });

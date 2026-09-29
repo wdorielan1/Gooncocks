@@ -332,38 +332,42 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.strictEqual(await phone.$('#tab-tools'), null);
     assert.ok(await phone.isVisible('.nav a[href$="tools.html"]'));
   });
-  await check('tools page: points against, sortable, season or last 4 weeks, fits a phone', async () => {
+  await check('tools page: points against, one position at a time, easiest first, fits a phone', async () => {
     await tp.waitForSelector('#paTable tbody tr');
-    const rows = await tp.$$eval('#paTable tbody tr', trs => trs.map(t => [t.querySelector('th b').textContent, ...[...t.querySelectorAll('td')].map(td => parseFloat(td.textContent))]));
+    // opens on RBs: no "All" grid, just the position tabs
+    assert.deepStrictEqual(await tp.$$eval('#paPos button', bs => bs.map(b => b.textContent)), ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
+    assert.strictEqual(await tp.getAttribute('#paPos button:has-text("RB")', 'aria-pressed'), 'true');
+    const heads = await tp.$$eval('#paTable thead th', ths => ths.map(t => t.textContent));
+    assert.deepStrictEqual(heads, ['#', 'Defense', 'Pts / game', 'Wk 4 vs'], heads.join('|'));  // stats hidden by default
+    const rows = await tp.$$eval('#paTable tbody tr', trs => trs.map(t => [t.querySelector('.pa-rank').textContent, parseFloat(t.querySelector('.pa-pts').textContent), t.querySelector('.pa-next-opp').textContent]));
     assert.strictEqual(rows.length, 32);
-    assert.ok(rows.every((r, i) => i === 0 || rows[i - 1][1] >= r[1]), 'sorted by QB, most allowed first');
-    await tp.click('#paTable th button:has-text("RB")');
-    const rb = await tp.$$eval('#paTable tbody tr td:nth-of-type(2)', tds => tds.map(td => parseFloat(td.textContent)));
-    assert.ok(rb.every((v, i) => i === 0 || rb[i - 1] >= v), 'sorted by RB');
-    assert.strictEqual(await tp.getAttribute('#paTable th[aria-sort="descending"] button', 'aria-label'), 'Sort by points allowed to RB');
-    assert.ok(await tp.$$eval('#paTable td', tds => tds.every(td => /^pa-t[0-4]/.test(td.className) && / most\)$/.test(td.title))));
-    await tp.click('#paTable tbody tr:first-child td:nth-of-type(2) button');  // RB column, top team
+    assert.ok(rows.every((r, i) => r[0] === String(i + 1) && (i === 0 || rows[i - 1][1] >= r[1])), 'ranked, most allowed first');
+    assert.ok(rows.every(r => /^([A-Z]{2,3}|BYE)$/.test(r[2])), JSON.stringify(rows.map(r => r[2])));
+    assert.ok(await tp.$$eval('#paTable td.pa-pts', tds => tds.every(td => /pa-t[0-4]/.test(td.className))));
+    assert.ok(await noOverflow(tp));
+    await tp.click('#paTable tbody tr:first-child .pa-pts button');
     await tp.waitForSelector('#detail:not([hidden]) .pa-games');
     assert.match(await tp.textContent('#detailTitle'), / defense vs RBs$/);
+    assert.match(await tp.textContent('#detailBody .pa-sub'), /1st most/);
     assert.strictEqual(await tp.$$eval('.pa-games:not(.pa-next) > li', ls => ls.length), 3);  // weeks played
     assert.strictEqual(await tp.$$eval('.pa-next > li', ls => ls.length), 3);  // up next
     assert.match(await tp.textContent('.pa-games:not(.pa-next) > li:first-child'), /^Week 3 vs [A-Z]+.*pts.*RB1.*car/);
     assert.ok(await noOverflow(tp));
     await tp.click('#detailClose');
-    // one position: full table with average stats, and a team's next 3 games
+    // another position, with its stats shown on request
     await tp.click('#paPos button:has-text("QB")');
-    await tp.waitForSelector('#paTable.pa-full tbody tr');
-    assert.strictEqual(await tp.$$eval('#paTable.pa-full tbody tr', r => r.length), 32);
-    const heads = await tp.$$eval('#paTable.pa-full thead th', ths => ths.map(t => t.textContent));
-    assert.ok(heads[2] === 'Pts' && heads.includes('Pass Yds') && !heads.includes('Rec TD'), heads.join('|'));  // Pts first; no empty columns
-    await tp.click('#paTable.pa-full tbody tr:first-child .pa-team');
+    await tp.click('#paStats');
+    assert.strictEqual(await tp.textContent('#paStats'), 'Hide stats');
+    const qHeads = await tp.$$eval('#paTable thead th', ths => ths.map(t => t.textContent));
+    assert.ok(qHeads[2] === 'Pts / game' && qHeads.includes('Pass Yds') && !qHeads.includes('Rec TD'), qHeads.join('|'));  // no empty columns
+    await tp.click('#paTable tbody tr:first-child .pa-team');
     await tp.waitForSelector('#detail:not([hidden]) .pa-next');
-    assert.match(await tp.textContent('#detailBody .pa-sub'), /1st most/);
     const nextRows = await tp.$$eval('.pa-next > li', ls => ls.map(l => l.textContent));
     assert.strictEqual(nextRows.length, 3, JSON.stringify(nextRows));
     assert.ok(nextRows.every(t => /^Week \d+( vs [A-Z]+UpcomingLikely: .*QB1|BYE)$/.test(t)), JSON.stringify(nextRows));
     await tp.click('#detailClose');
-    await tp.click('#paPos button:has-text("All")');
+    await tp.click('#paStats');
+    assert.strictEqual(await tp.$$eval('#paTable thead th', ths => ths.length), 4);
     await tp.click('#paLast4');
     assert.strictEqual(await tp.getAttribute('#paLast4', 'aria-pressed'), 'true');
     assert.match(await tp.textContent('#paNote'), /last 4 games.*nflverse/);
