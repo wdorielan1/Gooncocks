@@ -413,6 +413,23 @@ def clean_note(note):
     return note
 
 
+INJURY_WORDS = {"Q": "Questionable", "D": "Doubtful", "O": "Out", "IR": "Injured reserve", "IR-R": "Injured reserve",
+                "PUP": "PUP list", "PUP-R": "PUP list", "PUP-P": "PUP list", "NFI-R": "Non-football injury",
+                "SUSP": "Suspended", "NA": "Not active"}
+
+
+def injury(player):
+    """Yahoo's injury status for a player as {"code", "label", "note"}, or
+    None when he's healthy, e.g. {"code": "Q", "label": "Questionable",
+    "note": "Hamstring"}."""
+    code = str(player.get("status") or "").strip()
+    if not code:
+        return None
+    label = str(player.get("status_full") or "").strip() or INJURY_WORDS.get(code, code)
+    note = re.sub(r"\s+", " ", str(player.get("injury_note") or "")).strip()[:60]
+    return {"code": code[:8], "label": label[:40], "note": note}
+
+
 def primary_position(player):
     return (player.get("position") or "").split(",")[0].strip() or "?"
 
@@ -489,7 +506,7 @@ class TradeLab:
         data = {"team_key": team_key, "fetched_at": self.now(), "players": [
             {"player_key": p["player_key"], "name": p.get("name") or "", "position": primary_position(p),
              "positions": p.get("eligible") or [], "nfl_team": p.get("nfl_team") or "", "headshot": p.get("headshot") or "",
-             "slot": p.get("slot") or ""}
+             "slot": p.get("slot") or "", "injury": injury(p)}
             for p in players if p.get("player_key")]}
         self.store.put(self._rk(), team_key, data, 1)
         self._archive_gone(team_key, {p["player_key"] for p in data["players"]})

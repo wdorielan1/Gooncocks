@@ -226,6 +226,9 @@ def get_team_roster(access_token, team_key, week=None):
                 "slot": selected.get("position"),
                 "eligible": [e.get("position") for e in eligible if isinstance(e, dict)],
                 "status": p.get("status") or "",
+                # Injury detail when Yahoo has it, e.g. "Questionable" / "Hamstring".
+                "status_full": p.get("status_full") or "",
+                "injury_note": p.get("injury_note") or "",
                 "position": p.get("display_position") or "",
                 "nfl_team": (p.get("editorial_team_abbr") or "").upper(),
                 "headshot": headshot_url(p),

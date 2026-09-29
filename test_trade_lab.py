@@ -325,6 +325,20 @@ check("unknown endpoints 404", app.handle(event("GET", "/nope"))["statusCode"] =
 r = app.handle(event("PUT", "/listings", cookies=sam, body=None, headers={"x-csrf-token": sam_csrf}))
 check("responses never cache personal data", r["headers"]["Cache-Control"] == "no-store")
 
+# ---------------------------------------------------------------- injury status from Yahoo
+check("injury: healthy players have none", trade_lab.injury({"status": ""}) is None and trade_lab.injury({}) is None)
+check("injury: Yahoo's label and injury note",
+      trade_lab.injury({"status": "Q", "status_full": "Questionable", "injury_note": " Hamstring "}) == {"code": "Q", "label": "Questionable", "note": "Hamstring"})
+check("injury: a status Yahoo doesn't spell out still reads as words",
+      trade_lab.injury({"status": "O"}) == {"code": "O", "label": "Out", "note": ""})
+iy = FakeYahoo()
+_orig_roster = iy.roster
+iy.roster = lambda key: [dict(p, status="D", status_full="Doubtful", injury_note="Ankle") if p["name"] == "Breece Hall" else p for p in _orig_roster(key)]
+iapp = TradeLab(MemoryStore(Clock()), iy, ENV, Clock())
+ro = {p["name"]: p.get("injury") for t in body(iapp.handle(event("GET", "/rosters")))["teams"] for p in t["players"]}
+check("injury: rosters sent to the page carry each player's injury status",
+      ro.get("Breece Hall") == {"code": "D", "label": "Doubtful", "note": "Ankle"} and ro.get("Tee Higgins") is None, ro)
+
 # ---------------------------------------------------------------- team needs (no listing required)
 clock = Clock()
 napp = TradeLab(MemoryStore(clock), FakeYahoo(), ENV, clock)

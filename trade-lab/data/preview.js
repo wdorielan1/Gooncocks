@@ -33,6 +33,7 @@
               [66, 'Javonte Williams', 'RB', 'DAL', 8, 'IR']]
   };
   var names = ['Will', 'Sam', 'Chet', 'Chris', 'Gabe', 'Patrick'];
+  var INJ = { 'Breece Hall': { code: 'Q', label: 'Questionable', note: 'Hamstring' }, 'Mark Andrews': { code: 'O', label: 'Out', note: 'Ankle' } };
   var teams = names.map(function (n, i) { return { team_key: L + '.t.' + (i + 1), manager: n, name: n + '’s team' }; });
   var T = {}; teams.forEach(function (t) { T[t.manager] = t.team_key; });
   var managerOf = {}; teams.forEach(function (t) { managerOf[t.team_key] = t.manager; });
@@ -40,7 +41,8 @@
   names.forEach(function (n) {
     rosters[T[n]] = R[n].map(function (r) {
       base[r[1]] = r[4];
-      return { player_key: '470.p.' + r[0], name: r[1], position: r[2], positions: [r[2]], nfl_team: r[3], headshot: '', slot: r[5] || '' };
+      return { player_key: '470.p.' + r[0], name: r[1], position: r[2], positions: [r[2]], nfl_team: r[3], headshot: '', slot: r[5] || '',
+               injury: INJ[r[1]] || (r[5] === 'IR' ? { code: 'IR', label: 'Injured reserve', note: 'Knee' } : null) };
     });
   });
 

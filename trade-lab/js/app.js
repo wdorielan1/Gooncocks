@@ -356,7 +356,8 @@
       h('div', { style: 'padding:10px 10px 10px 0' }, [
         h('h2', { class: 'pname', id: 'detailTitle', text: l.name }),
         h('div', { class: 'pmeta' }, [posBadge(l.position), l.nfl_team ? h('span', { class: 'nfl', text: l.nfl_team }) : null,
-          own ? h('span', { class: 'mine-tag', text: 'Your Listing' }) : null])
+          own ? h('span', { class: 'mine-tag', text: 'Your Listing' }) : null]),
+        injuryTag(l.player_key)
       ])
     ]));
     var stats = statsPanel(l);
@@ -379,6 +380,15 @@
     $('detail').hidden = false;
     $('detailClose').focus();
   }
+  // Yahoo's injury status for a rostered player, e.g. "Questionable · Hamstring".
+  function injuryTag(playerKey) {
+    var teamsR = S.league && S.league.rosters && S.league.rosters.teams, inj = null;
+    (teamsR || []).forEach(function (t) { (t.players || []).forEach(function (p) { if (p.player_key === playerKey && p.injury) inj = p.injury; }); });
+    if (!inj) return null;
+    var mild = inj.code === 'Q' || inj.code === 'D';
+    return h('p', { class: 'inj ' + (mild ? 'mild' : 'out') }, [h('b', { text: inj.label }), inj.note ? ' · ' + inj.note : '']);
+  }
+
   // Weekly fantasy points (league scoring) for a listed player: one bar per
   // week with its actual points. Missing weeks are a dash, not 0.
   function statsPanel(p) {
