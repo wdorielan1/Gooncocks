@@ -349,7 +349,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .pa-pn { display: block; font-weight: 600; }
 .pa-pl { display: block; font-size: 13px; color: var(--muted); }
 .pa-pp { font-variant-numeric: tabular-nums; }
-.pa-t0 { background: #0f1d36; } .pa-t1 { background: #15294a; } .pa-t2 { background: #1d3a68; } .pa-t3 { background: #264f8c; } .pa-t4 { background: #3264b3; }
+.pa-t4 { background: #1f7a45; } .pa-t3 { background: #2e5c41; } .pa-t2 { background: #3a4150; } .pa-t1 { background: #6e3434; } .pa-t0 { background: #95302e; }
 @media (max-width: 640px) { .pa-name { display: none; } .pa-slim .pa-name { display: inline; } .pa th { padding: 7px 3px; } .pa-cell { padding: 7px 2px; } .pa td { font-size: 14px; } }
 .stats { margin-top: 16px; }
 .stats h3 { font: 400 20px/1.1 var(--headline); text-transform: uppercase; letter-spacing: .5px; }
