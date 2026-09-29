@@ -358,7 +358,7 @@ STYLE_BLOCK = """
   .f-note{border-left:1px solid var(--line2);padding-left:28px;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--muted);line-height:1.6}
 
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-  @media(max-width:1240px){.nav a:not(.keep):not(.on){display:none}}
+  @media(max-width:1400px){.nav a:not(.keep):not(.on){display:none}}
   @media(max-width:780px){.brand span{display:none}}
   @media(max-width:1000px){
     .nav a:not(.keep){display:none}
@@ -980,7 +980,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
   <div class="wrap">
     <a class="brand" href="{HOME_URL}"><img src="{LOGO_URL}" alt="Gooncocks peacock logo"><span><b>GOONCOCKS</b><small>SPU FANTASY FOOTBALL</small></span></a>
     <nav class="nav" aria-label="Recap sections">
-      <span class="nav-links"><a class="on" href="#top">This Week</a><a href="#awards">Awards</a><a href="#matchups">Matchups</a><a href="#standings">Standings</a><a class="keep" href="{SITE_URL}/rivalries.html">Rivalries</a><a class="keep" href="{SITE_URL}/careers.html">Careers</a><a class="keep" href="{SITE_URL}/records.html">Records</a><a class="keep" href="{SITE_URL}/trade-lab.html">Trade Lab</a><a class="keep home" href="{HOME_URL}">Home</a></span>
+      <span class="nav-links"><a class="on" href="#top">This Week</a><a href="#awards">Awards</a><a href="#matchups">Matchups</a><a href="#standings">Standings</a><a class="keep" href="{SITE_URL}/rivalries.html">Rivalries</a><a class="keep" href="{SITE_URL}/careers.html">Careers</a><a class="keep" href="{SITE_URL}/records.html">Records</a><a class="keep" href="{SITE_URL}/trade-lab.html">Trade Lab</a><a class="keep" href="{SITE_URL}/tools.html">Tools</a><a class="keep home" href="{HOME_URL}">Home</a></span>
       <details class="wk"><summary>WEEK {week:02d}</summary>{week_menu}</details>
     </nav>
   </div>

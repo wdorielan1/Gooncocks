@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07101f">
+<title>Gooncocks Tools</title>
+<meta name="description" content="Gooncocks league tools: fantasy points each NFL defense gives up, in our league’s scoring.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Gooncocks">
+<meta property="og:title" content="Gooncocks Tools">
+<meta property="og:description" content="Points Against: which NFL defenses give up the most to each position, in our league’s scoring.">
+<meta property="og:url" content="https://stats.gooncocks.com/tools.html">
+<meta property="og:image" content="https://stats.gooncocks.com/gooncocks-logo.png">
+<meta property="og:image:alt" content="The Gooncocks peacock">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="https://stats.gooncocks.com/gooncocks-logo.png">
+<link rel="apple-touch-icon" href="https://stats.gooncocks.com/gooncocks-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Work+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the tools</a>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="https://gooncocks.com" aria-label="Gooncocks home"><img src="assets/logo.webp" alt="" width="40" height="40"><b>GOONCOCKS</b></a>
+    <nav class="nav" aria-label="Site">
+      <a class="keep" href="https://stats.gooncocks.com/">This Week</a>
+      <a class="keep" href="https://stats.gooncocks.com/rivalries.html">Rivalries</a>
+      <a class="keep" href="https://stats.gooncocks.com/careers.html">Careers</a>
+      <a class="keep" href="https://stats.gooncocks.com/records.html">Records</a>
+      <a class="keep" href="https://stats.gooncocks.com/trade-lab.html">Trade Lab</a>
+      <a class="on" href="#main" aria-current="page">Tools</a>
+      <a class="keep" href="https://gooncocks.com">Home</a>
+    </nav>
+      </div>
+</header>
+
+<p class="preview-flag" id="previewFlag" hidden>Design preview · sample data</p>
+
+<section class="hero" aria-labelledby="heroTitle">
+  <div class="hero-in">
+    <p class="kicker">Gooncocks League</p>
+    <h1 id="heroTitle">Tools</h1>
+    <p class="tagline">Matchups and more, in our league’s scoring.</p>
+  </div>
+</section>
+
+<main class="page" id="main" tabindex="-1">
+  <section class="tools-page" aria-label="Tools">
+    <div class="section-head"><h2>Tools</h2><span class="tag">Our league’s scoring</span></div>
+    <div class="tool-nav" role="group" aria-label="Tools" id="toolNav">
+      <button type="button" class="tool-b on" aria-pressed="true" data-tool="pa"><b>Points Against</b><span>Which defenses give up the most to each position</span></button>
+    </div>
+    <div id="tool-pa">
+    <h3 class="tool-h">Points Against</h3>
+    <p class="pa-intro">How many fantasy points each NFL defense gives up per game to each position. <b>Brighter blue = gives up more = an easier matchup</b> for your players. Pick a position for its full stats, or tap a team to see who scored and who they play next.</p>
+    <div class="pa-pos" role="group" aria-label="Position" id="paPos"></div>
+    <div class="pa-range" role="group" aria-label="Weeks">
+      <button type="button" class="btn small gold" id="paSeason" aria-pressed="true">Season</button>
+      <button type="button" class="btn small ghost" id="paLast4" aria-pressed="false">Last 4 weeks</button>
+    </div>
+    <div id="paState" class="state" role="status" aria-live="polite"></div>
+    <div class="pa-wrap"><table class="pa" id="paTable"><caption class="sr-only">Fantasy points allowed per game by each NFL defense, by position</caption></table></div>
+    <p class="fine" id="paNote"></p>
+    </div>
+  </section>
+</main>
+
+<footer class="foot"><p>Your league. Your edge.</p><p class="fine">Stats: nflverse, scored with our league’s Yahoo settings.</p></footer>
+
+<div class="modal" id="detail" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <button type="button" class="modal-x" id="detailClose" aria-label="Close">&times;</button>
+    <div id="detailBody"></div>
+  </div>
+</div>
+<div class="scrim" id="scrim" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- DATA -->
+<!-- /DATA -->
+<script src="js/logic.js"></script>
+<script src="js/api.js"></script>
+<script src="js/tools.js"></script>
+</body>
+</html>

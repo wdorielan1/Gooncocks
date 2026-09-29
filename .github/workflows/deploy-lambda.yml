@@ -47,6 +47,7 @@ jobs:
           python -m py_compile trade_lab.py trade_lab_store.py
           python -c "import trade_lab"
           python trade-lab/build.py trade-lab.html
+          python trade-lab/build.py --tools tools.html
           python test_awards.py
           python test_boxscores.py
           python test_weekly_history.py
@@ -84,4 +85,6 @@ jobs:
       - name: Publish the Trade Lab page
         run: |
           aws s3 cp trade-lab.html "s3://$SITE_BUCKET/trade-lab.html" \
+            --content-type "text/html; charset=utf-8" --cache-control "max-age=300"
+          aws s3 cp tools.html "s3://$SITE_BUCKET/tools.html" \
             --content-type "text/html; charset=utf-8" --cache-control "max-age=300"

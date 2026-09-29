@@ -32,6 +32,7 @@
       <a class="keep" href="https://stats.gooncocks.com/careers.html">Careers</a>
       <a class="keep" href="https://stats.gooncocks.com/records.html">Records</a>
       <a class="on" href="#main" aria-current="page">Trade Lab</a>
+      <a class="keep" href="https://stats.gooncocks.com/tools.html">Tools</a>
       <a class="keep" href="https://gooncocks.com">Home</a>
     </nav>
     <div class="account" id="account" aria-live="polite"></div>
@@ -55,7 +56,6 @@
     <button type="button" role="tab" id="tab-scout" aria-controls="panel-scout" aria-selected="false" tabindex="-1">Scouting</button>
     <button type="button" role="tab" id="tab-match" aria-controls="panel-match" aria-selected="false" tabindex="-1">Matchmaker</button>
     <button type="button" role="tab" id="tab-calc" aria-controls="panel-calc" aria-selected="false" tabindex="-1">Trade Calculator</button>
-    <button type="button" role="tab" id="tab-tools" aria-controls="panel-tools" aria-selected="false" tabindex="-1">Tools</button>
   </div>
 </div>
 
@@ -164,25 +164,6 @@
     <p class="fine">The verdict compares what each side receives, in rating points per week: within 10% is fair, up to 25% leans one way, more is lopsided. It’s based on points already scored, not projections, and it can’t see injuries or bye weeks.</p>
   </section>
 
-  <!-- ================= TOOLS ================= -->
-  <section class="panel-view" id="panel-tools" role="tabpanel" aria-labelledby="tab-tools" hidden>
-    <div class="section-head"><h2>Tools</h2><span class="tag">Our league’s scoring</span></div>
-    <div class="tool-nav" role="group" aria-label="Tools" id="toolNav">
-      <button type="button" class="tool-b on" aria-pressed="true" data-tool="pa"><b>Points Against</b><span>Which defenses give up the most to each position</span></button>
-    </div>
-    <div id="tool-pa">
-    <h3 class="tool-h">Points Against</h3>
-    <p class="pa-intro">How many fantasy points each NFL defense gives up per game to each position. <b>Brighter blue = gives up more = an easier matchup</b> for your players. Pick a position for its full stats, or tap a team to see who scored and who they play next.</p>
-    <div class="pa-pos" role="group" aria-label="Position" id="paPos"></div>
-    <div class="pa-range" role="group" aria-label="Weeks">
-      <button type="button" class="btn small gold" id="paSeason" aria-pressed="true">Season</button>
-      <button type="button" class="btn small ghost" id="paLast4" aria-pressed="false">Last 4 weeks</button>
-    </div>
-    <div id="paState" class="state" role="status" aria-live="polite"></div>
-    <div class="pa-wrap"><table class="pa" id="paTable"><caption class="sr-only">Fantasy points allowed per game by each NFL defense, by position</caption></table></div>
-    <p class="fine" id="paNote"></p>
-    </div>
-  </section>
 </main>
 
 <footer class="foot"><p>Your league. Your market.</p><p class="fine">Trade Lab lists and compares players. It never makes trades or changes Yahoo lineups.</p></footer>
