@@ -181,7 +181,7 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.ok(await page.isHidden('#panel-block'));
     assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'tab-scout');
     await page.keyboard.press('End');
-    assert.ok(await page.isVisible('#panel-calc'));
+    assert.ok(await page.isVisible('#panel-tools'));
     await page.keyboard.press('ArrowRight');
     assert.ok(await page.isVisible('#panel-block'));
   });
@@ -315,6 +315,23 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     await phone.click('#drawerClose');
     assert.ok(await phone.isHidden('#editorPanel'));
     assert.match(await phone.locator('#cards .card.mine').textContent(), /Phone edit/);
+    assert.ok(await noOverflow(phone));
+    assert.deepStrictEqual(phone.errors, []);
+  });
+  await check('tools: points against, sortable, season or last 4 weeks, fits a phone', async () => {
+    await phone.click('#tab-tools');
+    await phone.waitForSelector('#paTable tbody tr');
+    const rows = await phone.$$eval('#paTable tbody tr', trs => trs.map(t => [t.querySelector('th b').textContent, ...[...t.querySelectorAll('td')].map(td => parseFloat(td.textContent))]));
+    assert.strictEqual(rows.length, 32);
+    assert.ok(rows.every((r, i) => i === 0 || rows[i - 1][1] >= r[1]), 'sorted by QB, most allowed first');
+    await phone.click('#paTable th button:has-text("RB")');
+    const rb = await phone.$$eval('#paTable tbody tr td:nth-of-type(2)', tds => tds.map(td => parseFloat(td.textContent)));
+    assert.ok(rb.every((v, i) => i === 0 || rb[i - 1] >= v), 'sorted by RB');
+    assert.strictEqual(await phone.getAttribute('#paTable th[aria-sort="descending"] button', 'aria-label'), 'Sort by points allowed to RB');
+    assert.ok(await phone.$$eval('#paTable td', tds => tds.every(td => /^pa-t[0-4]/.test(td.className) && / most\)$/.test(td.title))));
+    await phone.click('#paLast4');
+    assert.strictEqual(await phone.getAttribute('#paLast4', 'aria-pressed'), 'true');
+    assert.match(await phone.textContent('#paNote'), /last 4 games.*nflverse/);
     assert.ok(await noOverflow(phone));
     assert.deepStrictEqual(phone.errors, []);
   });

@@ -55,6 +55,7 @@
     <button type="button" role="tab" id="tab-scout" aria-controls="panel-scout" aria-selected="false" tabindex="-1">Scouting</button>
     <button type="button" role="tab" id="tab-match" aria-controls="panel-match" aria-selected="false" tabindex="-1">Matchmaker</button>
     <button type="button" role="tab" id="tab-calc" aria-controls="panel-calc" aria-selected="false" tabindex="-1">Trade Calculator</button>
+    <button type="button" role="tab" id="tab-tools" aria-controls="panel-tools" aria-selected="false" tabindex="-1">Tools</button>
   </div>
 </div>
 
@@ -161,6 +162,19 @@
     <div id="calcState" class="state" role="status" aria-live="polite"></div>
     <div class="calc-out" id="calcOut"></div>
     <p class="fine">The verdict compares what each side receives, in rating points per week: within 10% is fair, up to 25% leans one way, more is lopsided. It’s based on points already scored, not projections, and it can’t see injuries or bye weeks.</p>
+  </section>
+
+  <!-- ================= TOOLS ================= -->
+  <section class="panel-view" id="panel-tools" role="tabpanel" aria-labelledby="tab-tools" hidden>
+    <div class="section-head"><h2>Points Against</h2><span class="tag">Our league’s scoring</span></div>
+    <p class="pa-intro">How many fantasy points each NFL defense gives up per game to each position. <b>Brighter blue = gives up more = an easier matchup</b> for your players. Tap a column to sort.</p>
+    <div class="pa-range" role="group" aria-label="Weeks">
+      <button type="button" class="btn small gold" id="paSeason" aria-pressed="true">Season</button>
+      <button type="button" class="btn small ghost" id="paLast4" aria-pressed="false">Last 4 weeks</button>
+    </div>
+    <div id="paState" class="state" role="status" aria-live="polite"></div>
+    <div class="pa-wrap"><table class="pa" id="paTable"><caption class="sr-only">Fantasy points allowed per game by each NFL defense, by position</caption></table></div>
+    <p class="fine" id="paNote"></p>
   </section>
 </main>
 

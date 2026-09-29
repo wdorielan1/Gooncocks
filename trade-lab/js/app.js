@@ -88,7 +88,7 @@
   }
 
   // ---------- tabs ----------
-  var TABS = ['block', 'scout', 'match', 'calc'];
+  var TABS = ['block', 'scout', 'match', 'calc', 'tools'];
   function showTab(name, focus) {
     TABS.forEach(function (t) {
       var on = t === name, b = $('tab-' + t);
@@ -100,6 +100,7 @@
     if (name === 'scout') renderScout();
     if (name === 'match') renderMatch();
     if (name === 'calc') loadCalc();
+    if (name === 'tools') renderTools();
   }
   function initTabs() {
     TABS.forEach(function (t, i) {
@@ -917,6 +918,64 @@
     });
   }
 
+  // ---------- tools: points against ----------
+  var NFL = { ARI: 'Cardinals', ATL: 'Falcons', BAL: 'Ravens', BUF: 'Bills', CAR: 'Panthers', CHI: 'Bears', CIN: 'Bengals', CLE: 'Browns',
+    DAL: 'Cowboys', DEN: 'Broncos', DET: 'Lions', GB: 'Packers', HOU: 'Texans', IND: 'Colts', JAX: 'Jaguars', KC: 'Chiefs',
+    LAC: 'Chargers', LAR: 'Rams', LV: 'Raiders', MIA: 'Dolphins', MIN: 'Vikings', NE: 'Patriots', NO: 'Saints', NYG: 'Giants',
+    NYJ: 'Jets', PHI: 'Eagles', PIT: 'Steelers', SEA: 'Seahawks', SF: '49ers', TB: 'Buccaneers', TEN: 'Titans', WAS: 'Commanders' };
+  var PA_POS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+  function renderTools() {
+    var st = $('paState');
+    if (S.pa === undefined) {
+      st.className = 'state'; st.textContent = 'Loading…';
+      if (!S.paLoad) S.paLoad = api.pointsAgainst(season()).then(function (d) { S.pa = d; S.paLoad = null; renderTools(); });
+      return;
+    }
+    if (!S.pa || !S.pa.teams || !Object.keys(S.pa.teams).length) {
+      st.className = 'state'; st.textContent = 'Points Against shows up once this season’s games have been scored.';
+      return;
+    }
+    st.textContent = '';
+    var last4 = !!S.paLast4, sortPos = S.paSort || 'QB';
+    $('paSeason').setAttribute('aria-pressed', last4 ? 'false' : 'true'); $('paSeason').classList.toggle('gold', !last4); $('paSeason').classList.toggle('ghost', last4);
+    $('paLast4').setAttribute('aria-pressed', last4 ? 'true' : 'false'); $('paLast4').classList.toggle('gold', last4); $('paLast4').classList.toggle('ghost', !last4);
+    var rows = Object.keys(S.pa.teams).map(function (code) {
+      var t = S.pa.teams[code], wks = Object.keys(t.weeks || {}).map(Number).sort(function (a, b) { return a - b; });
+      if (last4) wks = wks.slice(-4);
+      var avg = {};
+      PA_POS.forEach(function (p) {
+        avg[p] = wks.length ? wks.reduce(function (sum, w) { return sum + ((t.weeks[w] || {})[p] || 0); }, 0) / wks.length : (last4 ? null : t[p]);
+      });
+      return { code: code, avg: avg, games: wks.length || t.games };
+    });
+    // Shade by rank within each column: the top fifth (most allowed) darkest.
+    var rank = {};
+    PA_POS.forEach(function (p) {
+      rows.slice().sort(function (a, b) { return (b.avg[p] || 0) - (a.avg[p] || 0); }).forEach(function (r, i) { (rank[r.code] = rank[r.code] || {})[p] = i; });
+    });
+    rows.sort(function (a, b) { return ((b.avg[sortPos] || 0) - (a.avg[sortPos] || 0)) || a.code.localeCompare(b.code); });
+    var tbl = clear($('paTable'));
+    tbl.appendChild(h('caption', { class: 'sr-only', text: 'Fantasy points allowed per game by each NFL defense, by position' }));
+    tbl.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', text: 'Defense' })].concat(PA_POS.map(function (p) {
+      var on = p === sortPos;
+      return h('th', { scope: 'col', 'aria-sort': on ? 'descending' : 'none' }, [h('button', { type: 'button', class: 'pa-sort' + (on ? ' on' : ''),
+        text: p + (on ? ' ▼' : ''), 'aria-label': 'Sort by points allowed to ' + p, onclick: function () { S.paSort = p; renderTools(); } })]);
+    })))]));
+    var n = rows.length;
+    tbl.appendChild(h('tbody', {}, rows.map(function (r) {
+      return h('tr', {}, [h('th', { scope: 'row' }, [h('b', { text: r.code }), h('span', { class: 'pa-name', text: ' ' + (NFL[r.code] || '') })])]
+        .concat(PA_POS.map(function (p) {
+          var i = rank[r.code][p], tier = Math.min(4, Math.floor(i / n * 5));
+          return h('td', { class: 'pa-t' + (4 - tier) + (p === sortPos ? ' on' : ''),
+            title: (NFL[r.code] || r.code) + ' allow ' + fmt(r.avg[p]) + ' pts/game to ' + p + ' (' + ordinal(i + 1) + ' most)', text: fmt(r.avg[p]) });
+        })));
+    })));
+    var wks = S.pa.weeks || [];
+    $('paNote').textContent = S.pa.season + (wks.length ? ' weeks ' + wks[0] + (wks.length > 1 ? '–' + wks[wks.length - 1] : '') : '') +
+      (last4 ? ', each team’s last 4 games' : '') + '. Regular season, points per game in our league’s scoring (checked against Yahoo). ' +
+      (S.pa.updated ? 'Updated ' + L.ago(S.pa.updated, now()) + '. ' : '') + 'Stats: nflverse.';
+  }
+
   // ---------- trade calculator ----------
   function loadCalc() {
     withLeague('calcState', function () {
@@ -1056,6 +1115,8 @@
     $('mTeam').addEventListener('change', function () { S.matchTeam = $('mTeam').value; renderMatch(); });
     $('sTeam').addEventListener('change', renderScout);
     $('manageBtn').addEventListener('click', function (e) { openDrawer(e.currentTarget); });
+    $('paSeason').addEventListener('click', function () { S.paLast4 = false; renderTools(); });
+    $('paLast4').addEventListener('click', function () { S.paLast4 = true; renderTools(); });
     $('drawerClose').addEventListener('click', closeDrawer);
     $('scrim').addEventListener('click', closeDrawer);
     $('detailClose').addEventListener('click', closeDetail);
@@ -1069,7 +1130,7 @@
     window.addEventListener('resize', function () { if (!isDrawer()) closeDrawer(); });
     setInterval(renderChecked, 60000);
     var hash = location.hash.replace('#', '');
-    if (hash === 'scouting') showTab('scout'); else if (hash === 'matchmaker') showTab('match'); else if (hash === 'calculator') showTab('calc');
+    if (hash === 'scouting') showTab('scout'); else if (hash === 'matchmaker') showTab('match'); else if (hash === 'calculator') showTab('calc'); else if (hash === 'tools' || hash === 'points-against') showTab('tools');
     loadListings();
     loadMe();
   }

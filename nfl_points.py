@@ -193,9 +193,10 @@ def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
 
 
 def points_against(points):
-    """Average fantasy points each NFL defense gives up per game, by
-    position: {team: {"QB": avg, ..., "DEF": avg, "games": n}}. DEF is the
-    points opposing fantasy defenses scored against that team's offense."""
+    """Fantasy points each NFL defense gives up, by position: {team: {"QB":
+    avg per game, ..., "DEF": avg, "games": n, "weeks": {week: {"QB": pts,
+    ...}}}}. DEF is the points opposing fantasy defenses scored against that
+    team's offense. The weeks let a page average any range (e.g. last 4)."""
     sums = {}   # (defense team, week, pos) -> points scored against it
     games = {}  # defense team -> set(weeks)
     for p in points["players"]:
@@ -215,6 +216,7 @@ def points_against(points):
         n = len(weeks)
         out[team] = {pos: round(sum(sums.get((team, wk, pos), 0.0) for wk in weeks) / n, 2) for pos in POSITIONS}
         out[team]["games"] = n
+        out[team]["weeks"] = {wk: {pos: round(sums.get((team, wk, pos), 0.0), 2) for pos in POSITIONS} for wk in sorted(weeks)}
     return out
 
 

@@ -586,7 +586,8 @@ def _action_nfl_points(event):
     weeks = sorted({wk for p in pts["players"] for wk in p["weeks"]})
     _put(s3, bucket, f"nfl/points_{season}.json", json.dumps(pts, separators=(",", ":")), "application/json")
     _put(s3, bucket, f"nfl/points_against_{season}.json",
-         json.dumps({"season": int(season), "weeks": weeks, "teams": against}, separators=(",", ":")), "application/json")
+         json.dumps({"season": int(season), "weeks": weeks, "updated": int(time.time()), "teams": against},
+                    separators=(",", ":")), "application/json")
     box = _rivalry_store(s3, bucket).load(league_history.BOX_KEY.format(season), None) or {}
     result = nfl_points.check(pts, box)
     missing = nfl_points.unsupported(rules)

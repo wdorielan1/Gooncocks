@@ -114,5 +114,22 @@
       return r.concat([monday ? 0 : 1]).map(function (v, i) { return i === 4 && monday ? 0 : v; });
     });
   });
+  // Points Against: made-up points each NFL defense allowed by position, weeks 1-3.
+  var NFLT = ['ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE', 'DAL', 'DEN', 'DET', 'GB', 'HOU', 'IND', 'JAX', 'KC', 'LAC', 'LAR', 'LV', 'MIA',
+              'MIN', 'NE', 'NO', 'NYG', 'NYJ', 'PHI', 'PIT', 'SEA', 'SF', 'TB', 'TEN', 'WAS'];
+  var PAB = { QB: 25, RB: 26, WR: 34, TE: 13, K: 9, DEF: 16 }, paTeams = {};
+  NFLT.forEach(function (t) {
+    var weeks = {}, sum = {};
+    [1, 2, 3].forEach(function (w) {
+      weeks[w] = {};
+      Object.keys(PAB).forEach(function (p) {
+        var v = Math.round(PAB[p] * (1 + 0.9 * wobble(t + p + 'team') + 0.5 * wobble(t + p + w)) * 100) / 100;
+        weeks[w][p] = v; sum[p] = (sum[p] || 0) + v;
+      });
+    });
+    paTeams[t] = { weeks: weeks, games: 3 };
+    Object.keys(PAB).forEach(function (p) { paTeams[t][p] = Math.round(sum[p] / 3 * 100) / 100; });
+  });
+  window.TRADE_LAB_SAMPLE.pointsAgainst = { season: cur, weeks: [1, 2, 3], updated: now - 7200, teams: paTeams };
   window.TRADE_LAB_SAMPLE.live = { season: cur, week: 4, updated: Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 20, 2).getTime() / 1000), teams: liveTeams };
 })();

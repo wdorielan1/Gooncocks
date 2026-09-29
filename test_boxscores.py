@@ -273,7 +273,7 @@ check("nflverse: stops score for the defense that made them",
 check("nflverse: team codes match Yahoo's (LA -> LAR)", nfl_points.team_code("LA") == "LAR" and nfl_points.team_code("buf") == "BUF")
 pa = nfl_points.points_against(pts)
 check("points against: points each defense gave up, by position", pa["BAL"]["QB"] == 60.26 and pa["SF"]["RB"] == 18.4
-      and pa["BUF"]["DEF"] == 11.0 and pa["BAL"]["games"] == 1, pa)
+      and pa["BUF"]["DEF"] == 11.0 and pa["BAL"]["games"] == 1 and pa["BAL"]["weeks"][1]["QB"] == 60.26, pa)
 box = {"weeks": {"1": {"teams": {"t.1": [["QB", "Josh Allen", "QB", "BUF", 60.26], ["RB", "Kenneth Walker III", "RB", "SEA", 17.0],
                                          ["DEF", "Baltimore", "DEF", "BAL", 11.0], ["BN", "Nobody Known", "WR", "NYJ", 5.0]]}}}}
 ck = nfl_points.check(pts, box)
