@@ -306,6 +306,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .top-in { gap: 14px; flex-wrap: wrap; }
   .nav { order: 3; width: 100%; overflow-x: auto; gap: 18px; scrollbar-width: none; }
   .layout { grid-template-columns: minmax(0, 1fr); }
+  .side { order: -1; }  /* phones: Who Needs What (and its "What are you looking for?" button) above the block */
   .manage-btn { display: inline-flex; }
   /* the editor becomes a drawer on small screens */
   .editor { display: none; }
