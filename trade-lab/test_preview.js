@@ -450,7 +450,7 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     await ip.waitForSelector('.ir-sec.back');
     assert.ok(await ip.isHidden('#tool-pa') && await ip.isHidden('#tool-ww'));
     const sec = async () => ip.$$eval('.ir-sec', ss => ss.map(x => [x.querySelector('.ir-h').firstChild.textContent.trim(),
-      [...x.querySelectorAll('.ir-row')].map(r => r.querySelector('.ir-chip').textContent + ' ' + r.querySelector('b').textContent)]));
+      [...x.querySelectorAll('.ir-row')].map(r => (r.querySelector('.ir-code') || r.querySelector('.ir-chip')).textContent + ' ' + r.querySelector('b').textContent)]));
     let got = await sec();
     assert.deepStrictEqual(got.map(g => g[0]), ['Out', 'Game-time decisions', 'Coming back']);
     assert.ok(got[0][1].every(t => /^(O|IR) /.test(t)) && got[1][1].every(t => /^(D|Q) /.test(t)), JSON.stringify(got));
