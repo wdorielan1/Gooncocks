@@ -407,7 +407,7 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.strictEqual(await wp.getAttribute('#toolNav .tool-b[data-tool="ww"]', 'aria-pressed'), 'true');
     const rows = await wp.$$eval('#wwTable tbody tr', trs => trs.map(t => [t.querySelector('.ww-name').textContent, parseFloat(t.querySelector('.ww-pts').textContent), t.textContent]));
     assert.ok(rows.length >= 3 && rows.every((r, i) => i === 0 || rows[i - 1][1] >= r[1]), JSON.stringify(rows));  // best last 4 first
-    assert.ok(rows.some(r => r[0] === 'Tyrone Tracy Jr.' && /Waivers/.test(r[2])), 'waiver players are marked; Jr. names match');
+    assert.ok(rows.some(r => r[0] === 'Tyrone Tracy Jr.' && /Claim/.test(r[2])), 'waiver players are marked; Jr. names match');
     assert.ok(rows.every(r => /(NO|[A-Z]{2,3}) ?#\d+|BYE/.test(r[2])), 'each has a next matchup');
     // this week's projection: last 4 scaled by the matchup (within 30%), sortable
     await wp.click('#wwSort button:has-text("Wk 4 proj")');

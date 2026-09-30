@@ -377,7 +377,7 @@
   }
   function tags(p) {
     var out = [];
-    if (p.waivers) out.push(h('span', { class: 'ww-tag w', text: 'Waivers' }));
+    if (p.waivers) out.push(h('span', { class: 'ww-tag w', text: 'Claim', title: 'On waivers: put in a claim; he goes to the best waiver priority when waivers clear' }));
     if (p.injury) out.push(h('span', { class: 'ww-tag inj' + (/^(O|IR|PUP|NFI|SUSP|D)/.test(p.injury.code) ? ' out' : ''),
       text: p.injury.code + (p.injury.note ? ' · ' + p.injury.note : ''), title: p.injury.label }));
     return out;
