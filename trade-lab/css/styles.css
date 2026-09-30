@@ -299,9 +299,12 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .wk-list .wk-n { font-size: 10px; font-weight: 600; color: var(--muted); }
 .wk-list li.hi { background: #1f5a3a; } .wk-list li.lo { background: #5a2a2a; }
 .wk-list li.live { background-image: repeating-linear-gradient(135deg, transparent 0 5px, #ffffff14 5px 10px); }
-.wk-list li.nx { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 2px 3px; min-width: 62px; padding: 3px 4px; font-size: 12px; }
-.wk-list li.nx .wk-n { width: 100%; text-align: center; }
+.wk-list li.nx { min-width: 64px; padding: 3px 5px; }
 .wk-list li.nx.bye { color: var(--muted); }
+.nx-opp { font-size: 12px; white-space: nowrap; }
+.nx-proj { font-size: 14px; font-weight: 700; color: #fff; }
+.wk-list li.nx-total { background: none; border: 1px solid var(--gold); min-width: 56px; }
+.nx-total b { color: var(--gold); font-size: 15px; }
 .nx-rk { padding: 0 4px; border-radius: 3px; font-size: 11px; color: #fff; }
 
 .cmp-wrap { overflow-x: auto; margin-top: 12px; }

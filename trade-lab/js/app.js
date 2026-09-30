@@ -768,7 +768,7 @@
       (w.length ? ' (' + lg.yr + ' weeks ' + w[0] + (w.length > 1 ? '–' + w[w.length - 1] : '') + ')' : ' (no ' + lg.yr + ' weeks yet)') +
       (lg.live ? ', plus week ' + lg.live.week + ' so far (games through ' + liveTime(lg.live.updated) + '; players who haven’t played yet this week count once they do)' : '') +
       ', with last season’s average counting as ' + L.PRIOR_WEEKS + ' extra weeks. Each team is scored by its best lineup from its current Yahoo roster; injured-reserve players don’t count. No projections.' +
-      (lg.pa ? ' “Next 4” ranks come from Points Against: #1 is the defense that gives up the most to that position (green = easy, red = tough).' : '');
+      (lg.pa ? ' “Next 4” ranks come from Points Against: #1 is the defense that gives up the most to that position (green = easy, red = tough). Each week’s projection is our estimate: his rating adjusted for how many points that opponent gives up to his position (at most 30% either way; 0 on a bye).' : '');
   }
   function teamSelect(sel, keep) {
     var ts = S.league.rosters.teams;
@@ -1002,23 +1002,41 @@
     var rows = Object.keys(pa.teams).map(function (c) {
       var t = pa.teams[c], w = Object.keys(t.weeks || {});
       return [c, w.length ? w.reduce(function (x, k) { return x + ((t.weeks[k] || {})[pos] || 0); }, 0) / w.length : 0];
-    }).sort(function (a, b) { return b[1] - a[1] || a[0].localeCompare(b[0]); }), out = {};
-    rows.forEach(function (r, i) { out[r[0]] = i; });
+    }).sort(function (a, b) { return b[1] - a[1] || a[0].localeCompare(b[0]); }), out = { rank: {}, ppg: {}, mean: 0 };
+    rows.forEach(function (r, i) { out.rank[r[0]] = i; out.ppg[r[0]] = r[1]; out.mean += r[1] / rows.length; });
     return (S.league.paRank[pos] = out);
   }
-  function nextFour(p) {
+  // Our estimate for one game: his rating, scaled by how many points that
+  // opponent allows to his position vs the league average (within 30%).
+  function projectVs(value, a, opp) {
+    if (value === null || value === undefined) return null;
+    var allowed = a.ppg[opp];
+    return allowed === undefined || !a.mean ? value : value * Math.max(0.7, Math.min(1.3, allowed / a.mean));
+  }
+  function nextFour(p, r) {
     var pa = S.league.pa;
     if (!pa || !pa.schedule || !pa.teams) return null;
     var team = String(p.nfl_team || '').toUpperCase(); team = TEAM_FIX[team] || team;
     var sched = pa.schedule[team];
     if (!sched) return null;
-    var start = Math.max.apply(null, (pa.weeks || []).concat([0])) + 1, ranks = paRanks(p.position), n = Object.keys(ranks).length, chips = [];
+    var start = Math.max.apply(null, (pa.weeks || []).concat([0])) + 1, a = paRanks(p.position), ranks = a.rank, n = Object.keys(ranks).length, chips = [];
+    var value = r ? r.value : null, total = 0, counted = 0;
     for (var wk = start; wk < start + 4 && wk <= 18; wk++) {
       var opp = sched[wk];
-      if (!opp) { chips.push(h('li', { class: 'nx bye' }, [h('span', { class: 'wk-n', text: 'W' + wk }), h('span', { text: 'BYE' })])); continue; }
-      var i = ranks[opp], tier = i === undefined ? 2 : Math.min(4, Math.floor(i / n * 5));
-      chips.push(h('li', { class: 'nx', title: 'Week ' + wk + ' vs ' + opp + (i === undefined ? '' : ': ' + ordinal(i + 1) + ' easiest matchup for ' + p.position + 's') }, [
-        h('span', { class: 'wk-n', text: 'W' + wk }), h('span', { text: opp + ' ' }), i === undefined ? null : h('span', { class: 'nx-rk pa-t' + (4 - tier), text: '#' + (i + 1) })]));
+      if (!opp) {
+        counted++;
+        chips.push(h('li', { class: 'nx bye' }, [h('span', { class: 'wk-n', text: 'W' + wk }), h('span', { text: 'BYE' }), h('span', { class: 'nx-proj', text: '0.0' })]));
+        continue;
+      }
+      var i = ranks[opp], tier = i === undefined ? 2 : Math.min(4, Math.floor(i / n * 5)), proj = projectVs(value, a, opp);
+      if (proj !== null) { total += proj; counted++; }
+      chips.push(h('li', { class: 'nx', title: 'Week ' + wk + ' vs ' + opp + (i === undefined ? '' : ': ' + ordinal(i + 1) + ' easiest matchup for ' + p.position + 's') + (proj === null ? '' : '; projected ' + fmt(proj) + ' pts') }, [
+        h('span', { class: 'wk-n', text: 'W' + wk }),
+        h('span', { class: 'nx-opp' }, [opp + ' ', i === undefined ? null : h('span', { class: 'nx-rk pa-t' + (4 - tier), text: '#' + (i + 1) })]),
+        proj === null ? null : h('span', { class: 'nx-proj', text: fmt(proj) })]));
+    }
+    if (chips.length && value !== null && counted) {
+      chips.push(h('li', { class: 'nx-total', title: 'Projected points over these ' + chips.length + ' weeks' }, [h('span', { class: 'wk-n', text: 'Total' }), h('b', { text: fmt(total) }), h('span', { class: 'wk-n', text: 'proj' })]));
     }
     return chips.length ? h('div', { class: 'strip' }, [h('span', { class: 'strip-lab', text: 'Next 4' }), h('ol', { class: 'wk-list' }, chips)]) : null;
   }
@@ -1090,7 +1108,7 @@
           h('td', { text: String(r.games) }), h('td', { class: 'num', text: fmt(r.ppg) }), h('td', { class: 'num', text: fmt(r.recent) }),
           h('td', { class: 'num', text: fmt(r.lastPpg) }), h('td', { class: 'num strong', text: fmt(r.value) })
         ]));
-        rows.push(h('tr', { class: 'side-' + sd.side.toLowerCase() + ' p-more' }, [h('td', { colspan: '6' }, [weekStrip(p, r), nextFour(p)])]));
+        rows.push(h('tr', { class: 'side-' + sd.side.toLowerCase() + ' p-more' }, [h('td', { colspan: '6' }, [weekStrip(p, r), nextFour(p, r)])]));
       });
       var tot = sd.ratings.reduce(function (t, r) { return t + (r.value || 0); }, 0);
       rows.push(h('tr', { class: 'total side-' + sd.side.toLowerCase() }, [

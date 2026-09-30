@@ -271,8 +271,16 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     // each player: an injury tag when hurt, every week's points, and the next 4 matchups
     assert.match(rows[1][0], /Breece Hall.*Q · Hamstring/);
     const more = await page.$$eval('#calcOut tr.p-more', trs => trs.map(t => [...t.querySelectorAll('.strip')].map(s => s.querySelector('.strip-lab').textContent + ':' + s.querySelectorAll('li').length)));
-    assert.deepStrictEqual(more, [['Weekly:4', 'Next 4:4'], ['Weekly:4', 'Next 4:4']]);
+    assert.deepStrictEqual(more, [['Weekly:4', 'Next 4:5'], ['Weekly:4', 'Next 4:5']]);  // 4 games + the total
     assert.match(await page.textContent('#calcOut tr.p-more .wk-list'), /^W1[\d.–]+.*W4[\d.]+\*$/);  // week 4 in progress is marked
+    // next 4: each game's projection (rating scaled by the matchup, within 30%; 0 on a bye) and their total
+    const nx = await page.$$eval('#calcOut tr.p-more', trs => trs.map(t => {
+      const strips = t.querySelectorAll('.strip'), lis = [...strips[1].querySelectorAll('li.nx')];
+      return { proj: lis.map(l => parseFloat(l.querySelector('.nx-proj').textContent)), bye: lis.map(l => l.classList.contains('bye')),
+               total: parseFloat(strips[1].querySelector('.nx-total b').textContent), n: lis.length };
+    }));
+    [goff, hall].forEach((rating, k) => nx[k].proj.forEach((v, j) => assert.ok(nx[k].bye[j] ? v === 0 : v >= rating * 0.7 - 0.06 && v <= rating * 1.3 + 0.06, JSON.stringify(nx))));
+    assert.ok(nx.every(x => Math.abs(x.total - x.proj.reduce((a, b) => a + b, 0)) < 0.25), JSON.stringify(nx));
     // two different teams only
     await page.selectOption('#cTeamB', '470.l.960265.t.1');
     assert.match(await page.textContent('#calcOut'), /Pick at least one player on each side|Pick two different teams/);
