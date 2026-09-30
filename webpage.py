@@ -41,7 +41,7 @@ RECORD_ART_URL = f"{SITE_URL}/record-art.webp"
 # Picture at the top of each award card (award-<key>.webp, uploaded with
 # the other artwork). Awards without one show their icon instead.
 AWARD_ART = {key: f"{SITE_URL}/award-{key.replace('_', '-')}.webp" for key in (
-    "blowout", "heartbreaker", "upset", "fraud", "benchwarmer", "start_sit", "waiver", "injury")}
+    "blowout", "heartbreaker", "upset", "bad_beat", "fraud", "benchwarmer", "start_sit", "waiver", "injury")}
 COCK_ART_URL = f"{SITE_URL}/cock-art.webp"
 
 # Per-manager headshots, if uploaded. Convention: a manager named "Chet"
