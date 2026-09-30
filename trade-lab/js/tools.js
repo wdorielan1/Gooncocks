@@ -68,7 +68,7 @@
     }
     return S.pa !== undefined;
   }
-  var TOOLS = { pa: 'tool-pa', ww: 'tool-ww' };
+  var TOOLS = { pa: 'tool-pa', ww: 'tool-ww', ir: 'tool-ir' };
   function renderToolNav() {
     var tool = S.tool || 'pa';
     Array.prototype.forEach.call(document.querySelectorAll('#toolNav .tool-b'), function (b) {
@@ -80,6 +80,7 @@
   function renderTools() {
     renderToolNav();
     if (S.tool === 'ww') return renderWW();
+    if (S.tool === 'ir') return renderIR();
     var st = $('paState');
     if (!ensurePa()) {
       st.className = 'state'; st.textContent = 'Loading…';
@@ -537,6 +538,96 @@
     box.appendChild(card);
   }
 
+
+  // ---------- injury report ----------
+  // Every injured player on a league roster, from the Trade Lab API (which
+  // reads Yahoo and remembers each player's last status, for "coming back").
+  var BENCH = { BN: 'Bench', IR: 'IR spot', 'IR+': 'IR spot', NA: 'NA spot' };
+  function slotText(p) { return BENCH[p.slot] || (p.slot ? 'Starting' : ''); }
+  function isOut(code) { return code && code !== 'Q' && code !== 'D'; }
+  function newsLink(p) {
+    var id = /\.p\.(\d+)$/.exec(p.player_key || '');
+    return id ? h('a', { class: 'ir-news', href: 'https://sports.yahoo.com/nfl/players/' + id[1] + '/news/', target: '_blank', rel: 'noopener',
+      text: 'News', 'aria-label': 'Yahoo news on ' + p.name }) : null;
+  }
+  function irRow(p, back) {
+    var mine = S.me && S.me.team_key && p.team_key === S.me.team_key, inj = p.injury;
+    var chip = back ? h('span', { class: 'ir-chip back', text: '↑', 'aria-hidden': 'true' })
+      : h('span', { class: 'ir-chip ' + (isOut(inj.code) ? 'out' : 'gtd'), text: inj.code });
+    var status = back ? p.was + ' → ' + (inj ? inj.code : 'Active') + (p.changed ? ' · ' + L.ago(p.changed, now()) : '')
+      : (inj.label || inj.code) + (inj.note ? ' · ' + inj.note : '') + (p.since ? ' · listed ' + L.ago(p.since, now()) : '');
+    return h('li', { class: 'ir-row' + (mine ? ' mine' : '') }, [chip,
+      h('div', { class: 'ir-main' }, [
+        h('p', {}, [h('b', { text: p.name }), h('span', { class: 'ir-pos', text: ' ' + p.position + ' · ' + nflCode(p.nfl_team) })]),
+        h('p', { class: 'ir-status', text: status }),
+        h('p', { class: 'ir-who' }, [(mine ? '★ ' : '') + (p.manager || 'A manager') + (slotText(p) ? ' · ' + slotText(p) : ''), newsLink(p) ? ' · ' : null, newsLink(p)])])]);
+  }
+  function renderIR() {
+    var st = $('irState');
+    if (S.inj === undefined) {
+      if (!S.injLoad) S.injLoad = api.injuries().then(function (d) { S.inj = d; }, function (e) { S.inj = null; S.injErr = e.message; })
+        .then(function () { S.injLoad = null; renderTools(); });
+      st.className = 'state'; st.textContent = 'Loading…';
+      renderIRMe();
+      return;
+    }
+    st.textContent = '';
+    renderIRMe();
+    var body = clear($('irBody')), fbox = clear($('irFilter'));
+    $('irNote').textContent = '';
+    if (!S.inj) { st.className = 'state'; st.textContent = S.injErr || 'Injuries can’t be read from Yahoo right now.'; return; }
+    var canMine = S.me && S.me.can_edit, filt = S.irFilter === 'mine' && !canMine ? 'all' : (S.irFilter || 'all');
+    [['all', 'All teams'], ['start', 'Starters only']].concat(canMine ? [['mine', 'My team']] : []).forEach(function (o) {
+      fbox.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (o[0] === filt ? ' on' : ''), 'aria-pressed': o[0] === filt ? 'true' : 'false',
+        text: o[1], onclick: function () { S.irFilter = o[0]; renderTools(); } }));
+    });
+    function keep(p) {
+      if (filt === 'mine') return p.team_key === S.me.team_key;
+      if (filt === 'start') return slotText(p) === 'Starting';
+      return true;
+    }
+    function order(a, b) {
+      var mine = (b.team_key === (S.me || {}).team_key) - (a.team_key === (S.me || {}).team_key);
+      return mine || (slotText(b) === 'Starting') - (slotText(a) === 'Starting') || a.name.localeCompare(b.name);
+    }
+    var list = S.inj.injured.filter(keep);
+    var sections = [
+      ['Out', 'out', list.filter(function (p) { return isOut(p.injury.code); }).sort(order), false,
+       'Nobody’s out.'],
+      ['Game-time decisions', 'gtd', list.filter(function (p) { return !isOut(p.injury.code); })
+        .sort(function (a, b) { return (a.injury.code === 'D' ? 0 : 1) - (b.injury.code === 'D' ? 0 : 1) || order(a, b); }), false,
+       'No doubtful or questionable players.'],
+      ['Coming back', 'back', (S.inj.back || []).filter(keep), true,
+       'Nobody’s moved off Out or IR in the last two weeks.']
+    ];
+    sections.forEach(function (sec) {
+      body.appendChild(h('section', { class: 'ir-sec ' + sec[1], 'aria-label': sec[0] }, [
+        h('h4', { class: 'ir-h' }, [sec[0] + ' ', h('span', { class: 'ir-count', text: String(sec[2].length) })]),
+        sec[2].length ? h('ol', { class: 'ir-list' }, sec[2].map(function (p) { return irRow(p, sec[3]); }))
+          : h('p', { class: 'fine', text: sec[4] })]));
+    });
+    $('irNote').textContent = 'Statuses from Yahoo, ' + (S.inj.stale ? 'last read ' : 'checked ') + (S.inj.checked_at ? L.ago(S.inj.checked_at, now()) : 'just now') +
+      (S.inj.stale ? ' (Yahoo isn’t answering right now)' : '') + '. “Coming back” is anyone who went from Out or IR to questionable or active.';
+  }
+  function renderIRMe() {
+    var box = clear($('irMe'));
+    if (S.signinMsg) box.appendChild(h('p', { class: 'banner-msg' + (S.signinMsg[1] ? ' ' + S.signinMsg[1] : ''), text: S.signinMsg[0] }));
+    if (!S.me) return;
+    if (!S.me.signed_in) {
+      box.appendChild(h('div', { class: 'pa-me-in' }, [h('span', { text: 'Sign in to see your own players marked and a My team filter.' }), signInControl()]));
+      return;
+    }
+    var acct = h('p', { class: 'pa-me-acct' }, (S.me.can_edit ? ['Signed in as ', h('b', { text: S.me.manager || 'your team' })] : ['Signed in · not in our league'])
+      .concat([' · ', h('button', { type: 'button', class: 'linkbtn', text: 'Sign out', onclick: signOut })]));
+    box.appendChild(acct);
+    if (!S.me.can_edit || !S.inj) return;
+    var mine = S.inj.injured.filter(function (p) { return p.team_key === S.me.team_key; });
+    var out = mine.filter(function (p) { return isOut(p.injury.code); }).length, gtd = mine.length - out;
+    box.appendChild(h('p', { class: 'ir-mine' + (mine.length ? '' : ' ok'), text: mine.length
+      ? 'Your team: ' + [out ? out + ' out' : '', gtd ? gtd + ' game-time decision' + (gtd > 1 ? 's' : '') : ''].filter(Boolean).join(', ') + '.'
+      : 'Your team is healthy.' }));
+  }
+
   // ---------- start ----------
   $('paSeason').addEventListener('click', function () { S.paLast4 = false; renderTools(); });
   $('paLast4').addEventListener('click', function () { S.paLast4 = true; renderTools(); });
@@ -555,11 +646,12 @@
   Array.prototype.forEach.call(document.querySelectorAll('#toolNav .tool-b'), function (b) {
     b.addEventListener('click', function () {
       S.tool = b.getAttribute('data-tool'); renderTools();
-      try { history.replaceState(null, '', S.tool === 'ww' ? '#waivers' : location.pathname); } catch (e) { /* ignore */ }
+      try { history.replaceState(null, '', { ww: '#waivers', ir: '#injuries' }[S.tool] || location.pathname); } catch (e) { /* ignore */ }
     });
   });
   var m = /^#(qb|rb|wr|te|k|def)$/i.exec(location.hash);
   if (m) S.paView = m[1].toUpperCase();
   if (/^#waivers$/i.test(location.hash)) S.tool = 'ww';
+  if (/^#injuries$/i.test(location.hash)) S.tool = 'ir';
   renderTools();
 })();

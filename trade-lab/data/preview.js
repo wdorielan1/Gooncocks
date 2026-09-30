@@ -183,5 +183,21 @@
   window.TRADE_LAB_SAMPLE.available = FA.map(function (r) {
     return { player_key: '470.p.' + r[0], name: r[1], position: r[2], nfl_team: r[3], headshot: '', injury: r[6] || null, waivers: !!r[5] };
   });
+  // Injury Report: made-up statuses on top of the sample rosters' own.
+  var IRX = { 'Chris Olave': { code: 'D', label: 'Doubtful', note: 'Concussion' }, 'Puka Nacua': { code: 'O', label: 'Out', note: 'Ankle' },
+              'Nico Collins': { code: 'Q', label: 'Questionable', note: 'Hamstring' }, 'Chris Godwin': { code: 'Q', label: 'Questionable', note: 'Ankle' },
+              'Zay Flowers': { code: 'IR', label: 'Injured Reserve', note: 'Knee' } };
+  var injured = [], back = [];
+  names.forEach(function (n) {
+    rosters[T[n]].forEach(function (pl, i) {
+      var inj = IRX[pl.name] || pl.injury;
+      var row = { player_key: pl.player_key, name: pl.name, position: pl.position, nfl_team: pl.nfl_team, headshot: '',
+                  slot: pl.slot || (i < 9 ? pl.position : 'BN'), injury: inj, news: inj ? { recent: true, at: now - 7200 } : null, team_key: T[n], manager: n };
+      if (inj) injured.push(Object.assign({ since: pl.name === 'Puka Nacua' ? now - 2 * 86400 : null }, row));
+      if (pl.name === 'Chris Godwin') back.push(Object.assign({ was: 'IR', changed: now - 86400 }, row));
+      if (pl.name === 'Kyren Williams') back.push(Object.assign({ was: 'O', changed: now - 3 * 86400 }, row, { injury: null }));
+    });
+  });
+  window.TRADE_LAB_SAMPLE.injuries = { injured: injured, back: back };
   window.TRADE_LAB_SAMPLE.live = { season: cur, week: 4, updated: Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 20, 2).getTime() / 1000), teams: liveTeams };
 })();

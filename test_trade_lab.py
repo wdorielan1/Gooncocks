@@ -206,6 +206,30 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
     r = bapp.handle(event("GET", "/available"))
 check("with nothing saved and Yahoo down, it says so instead of guessing", r["statusCode"] == 503 and body(r)["error"] == "yahoo_unavailable")
 
+# ---------------------------------------------------------------- injury report
+iapp, iclock = new_app()
+iapp.yahoo.rosters[WILL][0] = dict(iapp.yahoo.rosters[WILL][0], status="IR", status_full="Injured Reserve", injury_note="Knee")
+iapp.yahoo.rosters[SAM][0] = dict(iapp.yahoo.rosters[SAM][0], status="Q", injury_note="Hamstring")
+got = body(iapp.handle(event("GET", "/injuries")))
+check("the injury report lists injured rostered players with their team's manager, and nobody healthy",
+      sorted((p["name"], p["injury"]["code"], p["manager"]) for p in got["injured"])
+      == [("Amon-Ra St. Brown", "IR", "Will"), ("Breece Hall", "Q", "Sam")] and got["back"] == [], got)
+iapp.yahoo.rosters[WILL][0] = dict(iapp.yahoo.rosters[WILL][0], status="Q", status_full="Questionable")
+iapp.yahoo.rosters[SAM][0] = dict(iapp.yahoo.rosters[SAM][0], status="")
+iclock.t += trade_lab.LEAGUE_TTL + 1
+got = body(iapp.handle(event("GET", "/injuries")))
+check("a player moving from IR to questionable shows as coming back; Q to healthy doesn't",
+      [(b["name"], b["was"], (b["injury"] or {}).get("code")) for b in got["back"]] == [("Amon-Ra St. Brown", "IR", "Q")]
+      and [p["name"] for p in got["injured"]] == ["Amon-Ra St. Brown"], got)
+iclock.t += trade_lab.BACK_DAYS * 86400 + trade_lab.LEAGUE_TTL
+got = body(iapp.handle(event("GET", "/injuries")))
+check("coming back drops off after two weeks", got["back"] == [], got)
+iapp.yahoo.down = True
+iclock.t += trade_lab.LEAGUE_TTL + 1
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    got = body(iapp.handle(event("GET", "/injuries")))
+check("when Yahoo is down the report uses the last rosters, marked stale", got["stale"] is True and len(got["injured"]) == 1, got)
+
 # every sign-in outcome is logged with a reason, never a state, code or token
 log = io.StringIO()
 with contextlib.redirect_stdout(log):

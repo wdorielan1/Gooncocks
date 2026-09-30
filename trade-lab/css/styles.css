@@ -373,6 +373,21 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .ww-picks { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
 .ww-picks li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; background: #0f1d36; border-radius: 3px; }
 .ww-picks b { display: block; }
+.ir-sec { margin-top: 18px; max-width: 640px; }
+.ir-h { margin: 0; font: 400 22px/1.1 var(--headline); text-transform: uppercase; letter-spacing: .5px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.ir-sec.out .ir-h { color: #f08a80; } .ir-sec.gtd .ir-h { color: #ffd98a; } .ir-sec.back .ir-h { color: #5fd08f; }
+.ir-count { font: 700 13px/1 var(--body); padding: 3px 7px; border-radius: 3px; background: #1a2238; color: #cfd6e4; }
+.ir-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.ir-row { display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: start; padding: 10px 12px; background: #0c1831; border: 1px solid var(--line-2); border-radius: 3px; }
+.ir-row.mine { border-color: var(--gold); }
+.ir-row p { margin: 0; }
+.ir-chip { display: block; text-align: center; padding: 6px 0; border-radius: 3px; font-weight: 700; font-size: 13px; }
+.ir-chip.out { background: #6e3434; color: #ffd0cc; } .ir-chip.gtd { background: #5a4410; color: #ffd98a; } .ir-chip.back { background: #1f7a45; color: #fff; font-size: 16px; }
+.ir-pos { color: var(--muted); font-size: 13px; }
+.ir-status { margin-top: 2px !important; font-size: 14px; color: #cfd6e4; }
+.ir-who { margin-top: 2px !important; font-size: 13px; color: var(--muted); }
+.ir-news { color: var(--blue-hi); font-weight: 600; }
+.ir-mine { margin-top: 6px; font-weight: 600; color: #ffd98a; } .ir-mine.ok { color: #5fd08f; }
 .pa-full th, .pa-full td { padding: 8px 6px; }
 .pa-full td.pa-stat { color: #cfd6e4; font-weight: 400; font-size: 14px; background: none; }
 .pa-full thead th.pa-stat, .pa-full thead th.pa-ptsh { color: var(--muted); font: 600 11px/1.2 var(--body); letter-spacing: .5px; text-transform: uppercase; white-space: normal; min-width: 44px; }

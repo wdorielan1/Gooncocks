@@ -46,6 +46,7 @@
     return fetch('/nfl/points_against_' + season + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
   };
   LiveApi.prototype.available = function () { return this.call('GET', '/available'); };
+  LiveApi.prototype.injuries = function () { return this.call('GET', '/injuries'); };
   LiveApi.prototype.nflPlayers = function (season) {
     return fetch('/nfl/players_' + season + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
   };
@@ -121,6 +122,10 @@
   PreviewApi.prototype.pointsAgainst = function () { return later(this.s.pointsAgainst || null); };
   PreviewApi.prototype.available = function () {
     return later({ players: this.s.available || [], checked_at: this.s.now - 600, stale: false });
+  };
+  PreviewApi.prototype.injuries = function () {
+    var i = this.s.injuries || { injured: [], back: [] };
+    return later({ injured: i.injured, back: i.back, checked_at: this.s.now - 300, stale: false });
   };
   PreviewApi.prototype.nflPlayers = function () { return later(this.s.nflPlayers || null); };
   PreviewApi.prototype.boxscores = function (season) { return later((this.s.boxscores || {})[season] || null); };

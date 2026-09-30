@@ -54,6 +54,7 @@
     <div class="tool-nav" role="group" aria-label="Tools" id="toolNav">
       <button type="button" class="tool-b on" aria-pressed="true" data-tool="pa"><b>Points Against</b><span>Which defenses give up the most to each position</span></button>
       <button type="button" class="tool-b" aria-pressed="false" data-tool="ww"><b>Waiver Wire Report</b><span>The best free agents, and where your team needs help</span></button>
+      <button type="button" class="tool-b" aria-pressed="false" data-tool="ir"><b>Injury Report</b><span>Who’s out, who’s a game-time call, and who’s coming back</span></button>
     </div>
     <div id="tool-pa">
     <h3 class="tool-h">Points Against</h3>
@@ -80,6 +81,15 @@
     <div id="wwState" class="state" role="status" aria-live="polite"></div>
     <div class="pa-wrap"><table class="pa pa-full pa-slim ww" id="wwTable"><caption class="sr-only">Best available players</caption></table></div>
     <p class="fine" id="wwNote"></p>
+    </div>
+    <div id="tool-ir" hidden>
+    <h3 class="tool-h">Injury Report</h3>
+    <p class="pa-intro">Every injured player on a Gooncocks roster, straight from Yahoo. <b>Out</b> won’t play this week, <b>game-time decisions</b> (doubtful or questionable) might, and <b>coming back</b> is anyone whose status got better in the last two weeks.</p>
+    <div class="pa-me" id="irMe" aria-live="polite"></div>
+    <div class="pa-pos" role="group" aria-label="Show" id="irFilter"></div>
+    <div id="irState" class="state" role="status" aria-live="polite"></div>
+    <div id="irBody"></div>
+    <p class="fine" id="irNote"></p>
     </div>
   </section>
 </main>

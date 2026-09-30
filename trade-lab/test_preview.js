@@ -441,6 +441,37 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.deepStrictEqual(wp.errors, []);
     await wp.close();
   });
+  await check('tools page: injury report, out vs game-time vs coming back, with your team', async () => {
+    const ip = await browser.newPage({ viewport: { width: 360, height: 780 } });
+    ip.errors = [];
+    ip.on('pageerror', e => ip.errors.push(e.message));
+    await ip.route(/^https?:/, r => r.abort());
+    await ip.goto('file://' + toolsFile + '#injuries', { waitUntil: 'domcontentloaded' });
+    await ip.waitForSelector('.ir-sec.back');
+    assert.ok(await ip.isHidden('#tool-pa') && await ip.isHidden('#tool-ww'));
+    const sec = async () => ip.$$eval('.ir-sec', ss => ss.map(x => [x.querySelector('.ir-h').firstChild.textContent.trim(),
+      [...x.querySelectorAll('.ir-row')].map(r => r.querySelector('.ir-chip').textContent + ' ' + r.querySelector('b').textContent)]));
+    let got = await sec();
+    assert.deepStrictEqual(got.map(g => g[0]), ['Out', 'Game-time decisions', 'Coming back']);
+    assert.ok(got[0][1].every(t => /^(O|IR) /.test(t)) && got[1][1].every(t => /^(D|Q) /.test(t)), JSON.stringify(got));
+    assert.ok(/^D /.test(got[1][1][0]), 'doubtful before questionable');
+    assert.match(await ip.textContent('.ir-sec.back'), /IR → Q/);
+    assert.match(await ip.textContent('.ir-sec.back'), /O → Active/);
+    assert.match(await ip.getAttribute('.ir-news', 'href'), /^https:\/\/sports\.yahoo\.com\/nfl\/players\/\d+\/news\/$/);
+    await ip.click('#irFilter button:has-text("Starters only")');
+    assert.ok(!/Javonte Williams/.test(await ip.textContent('#irBody')), 'IR-spot players are not starters');
+    assert.strictEqual(await ip.$('#irFilter button:has-text("My team")'), null);
+    await ip.click('#irMe button:has-text("Sign in")');
+    await ip.waitForSelector('.ir-mine');
+    assert.strictEqual(await ip.textContent('.ir-mine'), 'Your team: 1 game-time decision.');
+    await ip.click('#irFilter button:has-text("My team")');
+    got = await sec();
+    assert.deepStrictEqual(got.map(g => g[1].length), [0, 1, 0]);
+    assert.match(await ip.textContent('.ir-row.mine'), /★ Will/);
+    assert.ok(await noOverflow(ip));
+    assert.deepStrictEqual(ip.errors, []);
+    await ip.close();
+  });
   if (shots) {
     await phone.screenshot({ path: path.join(shots, 'phone.png'), fullPage: true });
     await phone.click('#manageBtn');

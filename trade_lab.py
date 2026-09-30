@@ -6,6 +6,7 @@ reached through the site's CloudFront at /api/trade-lab/* so its cookies
 are first-party on stats.gooncocks.com.
 
   GET  /api/trade-lab/available          free agents and waiver players (public, read-only)
+  GET  /api/trade-lab/injuries           injured players on league rosters, and who's coming back (public)
   GET  /api/trade-lab/login              start Yahoo sign-in (?next=tools returns to the Tools page)
   GET  /api/trade-lab/callback           Yahoo sends the manager back here
   GET  /api/trade-lab/me                 who's signed in (and a CSRF token)
@@ -78,6 +79,8 @@ AVAILABLE_TTL = 30 * 60     # how long the free agent / waiver list is reused
 # rank - deep enough that the best pickups by our scoring are in there.
 AVAILABLE_PAGES = (("QB", 2), ("RB", 3), ("WR", 3), ("TE", 2), ("K", 1), ("DEF", 1))
 WAIVER_PAGES = 4
+GAME_TIME = ("Q", "D")      # injury codes that can still play this week
+BACK_DAYS = 14              # how long a return from Out/IR stays in "Coming back"
 WRITE_ROSTER_TTL = 3 * 60   # a roster must be this fresh to approve a listing
 NOTE_MAX = 200
 MAX_ITEMS = 25
@@ -604,6 +607,57 @@ class TradeLab:
             return _json(503, {"error": "yahoo_unavailable", "message": "Available players can't be read from Yahoo right now. Try again in a minute."})
         return _json(200, {"players": data["players"], "checked_at": data["fetched_at"], "stale": stale})
 
+    # ---------------- injury report (Tools page)
+    def _track_statuses(self, codes):
+        """Remembers each rostered player's injury code and when it last
+        changed, so the report can show who's coming back. codes is
+        {player_key: code ('' = healthy)}. Returns the saved record,
+        {player_key: {"code", "prev", "changed"}} - prev/changed are None
+        until a change has been seen."""
+        item = self.store.get(f"META#{self.league}", "injuries")
+        saved = dict(item["data"]["players"]) if item else {}
+        out, changed = {}, not item
+        for key, code in codes.items():
+            old = saved.get(key)
+            if old is None:
+                out[key], changed = {"code": code, "prev": None, "changed": None}, True
+            elif old["code"] != code:
+                out[key], changed = {"code": code, "prev": old["code"], "changed": self.now()}, True
+            else:
+                out[key] = old
+        changed = changed or len(out) != len(saved)
+        if changed:
+            try:
+                self.store.put(f"META#{self.league}", "injuries", {"players": out, "at": self.now()},
+                               (item["version"] + 1) if item else 1, expect=item["version"] if item else 0)
+            except Conflict:
+                pass  # another request saved at the same moment; the next one catches up
+        return out
+
+    def injuries(self, event, cookies):
+        """Public: every injured player on a league roster, and who's coming
+        back from Out/IR. Read-only."""
+        try:
+            rosters, refreshed, stale = self.sync_league()
+            names = self.team_names()
+        except YahooUnavailable:
+            return _json(503, {"error": "yahoo_unavailable", "message": "Rosters can't be read from Yahoo right now. Try again in a minute."})
+        codes, info = {}, {}
+        for team_key, r in rosters.items():
+            for p in r["players"]:
+                codes[p["player_key"]] = ((p.get("injury") or {}).get("code") or "")
+                info[p["player_key"]] = {"player_key": p["player_key"], "name": p["name"], "position": p["position"],
+                                         "nfl_team": p.get("nfl_team") or "", "headshot": p.get("headshot") or "",
+                                         "slot": p.get("slot") or "", "injury": p.get("injury"), "news": p.get("news"),
+                                         "team_key": team_key, "manager": names.get(team_key, "")}
+        track = self._track_statuses(codes)
+        hurt = [dict(info[k], since=track[k]["changed"]) for k, c in codes.items() if c]
+        back = [dict(info[k], was=t["prev"], changed=t["changed"]) for k, t in track.items()
+                if t["prev"] and t["prev"] not in GAME_TIME and (t["code"] in GAME_TIME or not t["code"])
+                and t["changed"] and self.now() - t["changed"] < BACK_DAYS * 86400]
+        back.sort(key=lambda b: -b["changed"])
+        return _json(200, {"injured": hurt, "back": back, "checked_at": refreshed, "stale": stale})
+
     # ---------------- sessions
     def session(self, cookies):
         sid = cookies.get(SESSION_COOKIE)
@@ -1067,6 +1121,8 @@ class TradeLab:
                 return self.my_roster(event, cookies)
             if method == "GET" and route == "/available":
                 return self.available(event, cookies)
+            if method == "GET" and route == "/injuries":
+                return self.injuries(event, cookies)
             if method == "GET" and route == "/digest":
                 return self.digest(event)
             if method == "PUT" and route == "/needs":
