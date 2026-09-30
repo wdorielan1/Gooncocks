@@ -71,7 +71,8 @@ PREFIX = "/api/trade-lab"
 RETURN_PAGES = {"tools": "/tools.html"}
 SESSION_COOKIE = "__Host-tl_session"
 STATE_COOKIE = "__Host-tl_state"
-SESSION_TTL = 3 * 24 * 3600
+SESSION_TTL = 30 * 24 * 3600   # how long a sign-in lasts
+REVERIFY_AFTER = 3 * 24 * 3600  # how often a sign-in is re-checked against the league's managers
 STATE_TTL = 10 * 60
 LEAGUE_TTL = 15 * 60        # how long league-wide rosters are reused for reading
 AVAILABLE_TTL = 30 * 60     # how long the free agent / waiver list is reused
@@ -664,7 +665,36 @@ class TradeLab:
         if not sid:
             return None
         item = self.store.get("SESSION", _hash(sid))
-        return item["data"] if item else None
+        if not item:
+            return None
+        data = item["data"]
+        if data.get("team_key") and self.now() - data.get("checked", data["created"]) > REVERIFY_AFTER:
+            data = self._reverify(item)
+        return data
+
+    def _reverify(self, item):
+        """A sign-in lasts SESSION_TTL, but every few days it's checked again
+        against Yahoo's list of the league's managers (by Yahoo account ID,
+        with the league's own connection): an account that no longer
+        manages that team drops to browsing only. If Yahoo can't be reached
+        the session is left as it was - editing needs Yahoo anyway."""
+        data = dict(item["data"])
+        try:
+            teams = self.yahoo.league_teams(self.league)
+        except Exception:
+            traceback.print_exc()
+            return item["data"]
+        still = any(t["team_key"] == data["team_key"] and any(_hash(g) == data.get("guid") for g in (t.get("guids") or []))
+                    for t in teams)
+        if not still:
+            print("Trade Lab sign-in: a session's account no longer manages its team; now browse-only")
+            data["team_key"], data["manager"] = None, None
+        data["checked"] = self.now()
+        try:
+            self.store.put("SESSION", item["sk"], data, item["version"] + 1, expect=item["version"], expires=item.get("expires"))
+        except Conflict:
+            pass  # checked by another request at the same moment
+        return data
 
     def _require_editor(self, event, cookies):
         sess = self.session(cookies)
