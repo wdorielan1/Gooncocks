@@ -579,15 +579,16 @@ def _action_nfl_points(event):
     rules = get_league_scoring(_get_access_token(), league_key)
     stops = (nfl_points.fetch_fourth_down_stops(season)
              if any(r["stat_id"] == 67 and r["points"] for r in rules) else None)
+    games = nfl_points.fetch(nfl_points.GAMES_URL)
     pts = nfl_points.season_points(season, rules, nfl_points.fetch(nfl_points.PLAYER_URL.format(season=season)),
-                                   nfl_points.fetch(nfl_points.TEAM_URL.format(season=season)),
-                                   nfl_points.fetch(nfl_points.GAMES_URL), stops)
+                                   nfl_points.fetch(nfl_points.TEAM_URL.format(season=season)), games, stops)
     against = nfl_points.points_against(pts)
     weeks = sorted({wk for p in pts["players"] for wk in p["weeks"]})
     _put(s3, bucket, f"nfl/points_{season}.json", json.dumps(pts, separators=(",", ":")), "application/json")
     _put(s3, bucket, f"nfl/points_against_{season}.json",
          json.dumps({"season": int(season), "weeks": weeks, "updated": int(time.time()), "teams": against,
-                     "schedule": pts["schedule"], "starters": nfl_points.starters(pts),
+                     "schedule": pts["schedule"], "kickoffs": nfl_points.kickoffs(season, games),
+                     "starters": nfl_points.starters(pts),
                      "cols": {pos: [label for label, _cols in cols] for pos, cols in nfl_points.STAT_COLS.items()}},
                     separators=(",", ":")), "application/json")
     # Every player's weekly points, for the Tools page's Waiver Wire Report.

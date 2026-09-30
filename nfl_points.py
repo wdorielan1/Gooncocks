@@ -275,6 +275,19 @@ def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
     return {"season": int(season), "players": list(players.values()), "defenses": defenses, "schedule": schedule}
 
 
+def kickoffs(season, games_csv):
+    """Every regular-season game's kickoff, in Eastern time as nflverse
+    lists it: {team: {week: "YYYY-MM-DD HH:MM"}}."""
+    out = {}
+    for g in _csv(games_csv):
+        if g.get("season") != str(season) or g.get("game_type") not in ("REG", None, "") or not g.get("gameday"):
+            continue
+        when = g["gameday"] + (" " + g["gametime"] if g.get("gametime") else "")
+        for team in (g["home_team"], g["away_team"]):
+            out.setdefault(team_code(team), {})[int(g["week"])] = when
+    return out
+
+
 def player_weeks(points):
     """Just each player's weekly points, small enough for a web page to
     load whole: {"players": [[name key, name, position, team, {week: pts}]],

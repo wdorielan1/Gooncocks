@@ -550,12 +550,39 @@
     return id ? h('a', { class: 'ir-news', href: 'https://sports.yahoo.com/nfl/players/' + id[1] + '/news/', target: '_blank', rel: 'noopener',
       text: 'News', 'aria-label': 'Yahoo news on ' + p.name }) : null;
   }
+  // A team's next kickoff (nflverse lists them in Eastern time), as
+  // {day: "Sun", time: "1:00 PM", opp} - or {bye} if its next week is off.
+  function etToUtc(y, m, d, hh, mm) {
+    // Eastern daylight time runs from the 2nd Sunday of March to the 1st Sunday of November.
+    function nthSunday(month, n) { var first = new Date(Date.UTC(y, month, 1)).getUTCDay(); return 1 + (7 - first) % 7 + (n - 1) * 7; }
+    var dst = (m > 3 || (m === 3 && d >= nthSunday(2, 2))) && (m < 11 || (m === 11 && d < nthSunday(10, 1)));
+    return Date.UTC(y, m - 1, d, hh, mm) / 1000 + (dst ? 4 : 5) * 3600;
+  }
+  function nextKickoff(team) {
+    var ks = ((S.pa || {}).kickoffs || {})[nflCode(team)], sched = ((S.pa || {}).schedule || {})[nflCode(team)] || {};
+    if (!ks) return null;
+    var t = now(), wks = Object.keys(ks).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < wks.length; i++) {
+      var m = /^(\d{4})-(\d\d)-(\d\d)(?: (\d\d):(\d\d))?$/.exec(ks[wks[i]]);
+      if (!m) continue;
+      var hh = m[4] ? +m[4] : 13, mm = m[5] ? +m[5] : 0, at = etToUtc(+m[1], +m[2], +m[3], hh, mm);
+      if (at + 4 * 3600 < t) continue;  // over (games run about 3 hours)
+      if (i > 0 && wks[i] - wks[i - 1] > 1 && at - t > 8 * 86400) return { bye: true };
+      var day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()];
+      return { day: day, time: m[4] ? (hh % 12 || 12) + ':' + m[5] + (hh < 12 ? ' AM' : ' PM') : '', opp: sched[wks[i]] || '' };
+    }
+    return null;
+  }
   function irRow(p, back) {
     var mine = S.me && S.me.team_key && p.team_key === S.me.team_key, inj = p.injury;
+    var gtd = !back && !isOut(inj.code), k = gtd ? nextKickoff(p.nfl_team) : null;
     var chip = back ? h('span', { class: 'ir-chip back', text: '↑', 'aria-hidden': 'true' })
-      : h('span', { class: 'ir-chip ' + (isOut(inj.code) ? 'out' : 'gtd'), text: inj.code });
+      : h('span', { class: 'ir-chip ' + (gtd ? 'gtd' : 'out') + (k ? ' kick' : ''), title: k && !k.bye ? 'Kickoff ' + k.day + (k.time ? ' ' + k.time + ' ET' : '') : null }, [h('span', { class: 'ir-code', text: inj.code })].concat(
+          !k ? [] : k.bye ? [h('span', { class: 'ir-kick', text: 'BYE' })]
+          : [h('span', { class: 'ir-kick', text: k.day }), k.time ? h('span', { class: 'ir-kick', text: k.time.replace(' ', '\u00a0') }) : null]));
     var status = back ? p.was + ' → ' + (inj ? inj.code : 'Active') + (p.changed ? ' · ' + L.ago(p.changed, now()) : '')
-      : (inj.label || inj.code) + (inj.note ? ' · ' + inj.note : '') + (p.since ? ' · listed ' + L.ago(p.since, now()) : '');
+      : (inj.label || inj.code) + (inj.note ? ' · ' + inj.note : '') + (p.since ? ' · listed ' + L.ago(p.since, now()) : '') +
+        (k && !k.bye && k.opp ? ' · vs ' + k.opp : k && k.bye ? ' · bye this week' : '');
     return h('li', { class: 'ir-row' + (mine ? ' mine' : '') }, [chip,
       h('div', { class: 'ir-main' }, [
         h('p', {}, [h('b', { text: p.name }), h('span', { class: 'ir-pos', text: ' ' + p.position + ' · ' + nflCode(p.nfl_team) })]),
@@ -564,6 +591,7 @@
   }
   function renderIR() {
     var st = $('irState');
+    ensurePa();  // kickoff times for game-time decisions
     if (S.inj === undefined) {
       if (!S.injLoad) S.injLoad = api.injuries().then(function (d) { S.inj = d; }, function (e) { S.inj = null; S.injErr = e.message; })
         .then(function () { S.injLoad = null; renderTools(); });

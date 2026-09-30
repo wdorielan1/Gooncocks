@@ -380,10 +380,13 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .ir-sec.out .ir-h { color: #f08a80; } .ir-sec.gtd .ir-h { color: #ffd98a; } .ir-sec.back .ir-h { color: #5fd08f; }
 .ir-count { font: 700 13px/1 var(--body); padding: 3px 7px; border-radius: 3px; background: #1a2238; color: #cfd6e4; }
 .ir-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
-.ir-row { display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: start; padding: 10px 12px; background: #0c1831; border: 1px solid var(--line-2); border-radius: 3px; }
+.ir-row { display: grid; grid-template-columns: 56px 1fr; gap: 12px; align-items: start; padding: 10px 12px; background: #0c1831; border: 1px solid var(--line-2); border-radius: 3px; }
 .ir-row.mine { border-color: var(--gold); }
 .ir-row p { margin: 0; }
 .ir-chip { display: block; text-align: center; padding: 6px 0; border-radius: 3px; font-weight: 700; font-size: 13px; }
+.ir-chip .ir-code { display: block; }
+.ir-chip .ir-kick { display: block; margin-top: 2px; font-size: 10px; font-weight: 700; letter-spacing: .2px; text-transform: uppercase; white-space: nowrap; }
+.ir-chip.kick { padding: 5px 0 6px; }
 .ir-chip.out { background: #6e3434; color: #ffd0cc; } .ir-chip.gtd { background: #5a4410; color: #ffd98a; } .ir-chip.back { background: #1f7a45; color: #fff; font-size: 16px; }
 .ir-pos { color: var(--muted); font-size: 13px; }
 .ir-status { margin-top: 2px !important; font-size: 14px; color: #cfd6e4; }

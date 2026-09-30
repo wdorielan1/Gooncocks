@@ -156,7 +156,19 @@
     for (var w = 1; w <= 18; w++) if (w !== 5 + (i % 9)) schedule[t][w] = NFLT[(i + w * 7) % 32];
     starters[t] = { QB: [t + ' QB1'], RB: [t + ' RB1', t + ' RB2'], WR: [t + ' WR1', t + ' WR2', t + ' WR3'], TE: [t + ' TE1'], K: [t + ' K'] };
   });
-  window.TRADE_LAB_SAMPLE.pointsAgainst = { season: cur, weeks: [1, 2, 3], updated: now - 7200, teams: paTeams, schedule: schedule, starters: starters,
+  // Kickoffs (Eastern), with week 4 on the coming Sunday: most at 1:00, some
+  // late, one Thursday, one Sunday night and one Monday night game.
+  var kick = {}, sun = new Date(d.getFullYear(), d.getMonth(), d.getDate() + ((7 - d.getDay()) % 7 || 7));
+  function two(n) { return (n < 10 ? '0' : '') + n; }
+  NFLT.forEach(function (t, i) {
+    kick[t] = {};
+    Object.keys(schedule[t]).forEach(function (w) {
+      var slot = [[-3, '20:15'], [0, '16:25'], [0, '20:20'], [1, '20:15']][i % 8] || [0, '13:00'];
+      var day = new Date(sun.getFullYear(), sun.getMonth(), sun.getDate() + (w - 4) * 7 + slot[0]);
+      kick[t][w] = day.getFullYear() + '-' + two(day.getMonth() + 1) + '-' + two(day.getDate()) + ' ' + slot[1];
+    });
+  });
+  window.TRADE_LAB_SAMPLE.pointsAgainst = { season: cur, weeks: [1, 2, 3], updated: now - 7200, teams: paTeams, schedule: schedule, kickoffs: kick, starters: starters,
     cols: { QB: OFFC, RB: OFFC, WR: OFFC, TE: OFFC, K: ['FG 0-19', 'FG 20-29', 'FG 30-39', 'FG 40-49', 'FG 50+', 'FG Miss', 'PAT'],
             DEF: ['Sack', 'Int', 'Fum Rec', 'TD', 'Safety', 'Blk Kick', 'Pts Allow'] } };
   // Waiver Wire Report: made-up free agents (true = on waivers), and every

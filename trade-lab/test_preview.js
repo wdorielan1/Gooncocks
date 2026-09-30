@@ -455,6 +455,11 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.deepStrictEqual(got.map(g => g[0]), ['Out', 'Game-time decisions', 'Coming back']);
     assert.ok(got[0][1].every(t => /^(O|IR) /.test(t)) && got[1][1].every(t => /^(D|Q) /.test(t)), JSON.stringify(got));
     assert.ok(/^D /.test(got[1][1][0]), 'doubtful before questionable');
+    // game-time decisions show their kickoff (Eastern) in the box; out players don't
+    const kicks = await ip.$$eval('.ir-sec.gtd .ir-chip', cs => cs.map(c => [...c.querySelectorAll('.ir-kick')].map(k => k.textContent)));
+    assert.ok(kicks.length && kicks.every(k => k.length === 2 && /^(Sun|Mon|Thu)$/.test(k[0]) && /^\d{1,2}:\d\d (AM|PM)$/.test(k[1])), JSON.stringify(kicks));
+    assert.strictEqual(await ip.$$eval('.ir-sec.out .ir-kick', e => e.length), 0);
+    assert.match(await ip.textContent('.ir-sec.gtd .ir-status'), / · vs [A-Z]{2,3}$/);
     assert.match(await ip.textContent('.ir-sec.back'), /IR → Q/);
     assert.match(await ip.textContent('.ir-sec.back'), /O → Active/);
     assert.match(await ip.getAttribute('.ir-news', 'href'), /^https:\/\/sports\.yahoo\.com\/nfl\/players\/\d+\/news\/$/);
