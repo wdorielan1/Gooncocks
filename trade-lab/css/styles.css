@@ -371,7 +371,13 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .pa-mine-tag.t0, .pa-mine-tag.t1 { color: #5fd08f; } .pa-mine-tag.t3, .pa-mine-tag.t4 { color: #f08a80; }
 .pa-mine-chip { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--gold); white-space: normal; }
 .pa tr.pa-mine-row th, .pa tr.pa-mine-row td.pa-rank { background: #1a2238; }
-.ww .ww-name { display: block; color: var(--text); font-weight: 600; white-space: normal; }
+.ww .ww-name { display: block; padding: 0; border: 0; background: none; color: var(--text); font: 600 15px/1.3 var(--body); text-align: left; white-space: normal; cursor: pointer; text-decoration: underline dotted #ffffff55; text-underline-offset: 4px; }
+.ww .ww-name[aria-expanded="true"] { color: var(--gold); }
+.ww tr.ww-open th, .ww tr.ww-open td { border-bottom: 0; }
+.ww tr.ww-weeks-row td { padding-top: 0; background: none; text-align: left; }
+.ww-weeks { margin-top: 6px; }
+.ww-picks .ww-weeks li { min-width: 38px; background: #13213d; }
+.ww-picks .ww-weeks li.hi { background: #1f5a3a; } .ww-picks .ww-weeks li.lo { background: #5a2a2a; }
 .ww-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 3px; font-size: 12px; color: var(--muted); font-weight: 400; }
 .ww-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: .3px; line-height: 1.5; white-space: nowrap; }
 .ww-tag.w { border: 1px solid var(--gold); color: var(--gold); }
@@ -408,8 +414,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .ww-weak-h b { color: #fff; font-size: 16px; }
 .ww-weak-s { margin-top: 2px; font-size: 14px; color: #cfd6e4; }
 .ww-picks { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
-.ww-picks li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; background: #0f1d36; border-radius: 3px; }
-.ww-picks b { display: block; }
+.ww-picks > li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; background: #0f1d36; border-radius: 3px; }
+.ww-picks > li > div > b { display: block; }
 .ir-sec { margin-top: 18px; max-width: 640px; }
 .ir-teams { margin-top: 8px; }
 .ir-pc { margin-left: 6px; font-size: 12px; font-weight: 700; opacity: .75; }

@@ -336,6 +336,21 @@
     var pts = Object.keys(w).map(Number).sort(function (a, b) { return a - b; }).map(function (k) { return w[k]; });
     return pts.length ? { games: pts.length, season: avg(pts), last4: avg(pts.slice(-4)) } : null;
   }
+  // Every week's points this season for one player: big weeks green, duds
+  // red (against his own average), "–" when he didn't score (bye, injured,
+  // or no stats).
+  function weekChips(p, f) {
+    var w = weeksFor(p), weeks = (S.nflp && S.nflp.weeks) || [], last = weeks.length ? Math.max.apply(null, weeks) : 0;
+    if (!w || !last) return null;
+    var cells = [];
+    for (var wk = 1; wk <= last; wk++) {
+      var pts = w[wk], has = typeof pts === 'number';
+      var tone = !has || !f || !f.season ? '' : pts >= f.season * 1.25 ? ' hi' : pts <= f.season * 0.6 ? ' lo' : '';
+      cells.push(h('li', { class: 'wk' + tone, title: 'Week ' + wk + ': ' + (has ? fmt(pts) + ' pts' : 'no score') }, [
+        h('span', { class: 'wk-n', text: 'W' + wk }), h('span', { class: 'wk-v', text: has ? fmt(pts) : '–' })]));
+    }
+    return h('ol', { class: 'wk-list ww-weeks', 'aria-label': p.name + ', points by week' }, cells);
+  }
   // Points each defense allows per game to a position, the league average,
   // and each defense's rank from 0 (0 = allows the most).
   function paAllowed(pos) {
@@ -442,16 +457,23 @@
       h('th', { scope: 'col', class: 'pa-nexth ww-col-season', text: 'Season' }),
       wk ? h('th', { scope: 'col', class: byProj ? 'pa-ptsh' : 'pa-nexth', text: 'Wk ' + wk + ' proj', 'aria-sort': byProj ? 'descending' : null }) : null,
       wk ? h('th', { scope: 'col', class: 'pa-nexth', text: 'Wk ' + wk + ' vs' }) : null])]));
-    tbl.appendChild(h('tbody', {}, rows.length ? rows.map(function (r, i) {
-      return h('tr', {}, [h('td', { class: 'pa-rank', text: String(i + 1) }),
-        h('th', { scope: 'row' }, [h('b', { class: 'ww-name', text: r.p.name }),
+    S.wwWeeks = S.wwWeeks || {};
+    var body = [];
+    rows.forEach(function (r, i) {
+      var open = !!S.wwWeeks[r.p.player_key];
+      body.push(h('tr', { class: open ? 'ww-open' : null }, [h('td', { class: 'pa-rank', text: String(i + 1) }),
+        h('th', { scope: 'row' }, [h('button', { type: 'button', class: 'ww-name', 'aria-expanded': open ? 'true' : 'false',
+            title: open ? 'Hide his weeks' : 'Show his points each week', text: r.p.name,
+            onclick: function () { S.wwWeeks[r.p.player_key] = !open; renderTools(); } }),
           h('span', { class: 'ww-sub' }, [h('span', { text: nflCode(r.p.nfl_team) + ' · ' + plural(r.f.games, 'game') })].concat(tags(r.p)))]),
         h('td', { class: byProj ? 'ww-season' : 'ww-pts', text: fmt(r.f.last4) }), h('td', { class: 'ww-season ww-col-season', text: fmt(r.f.season) }),
         wk ? h('td', { class: 'ww-proj' + (byProj ? ' on' : ''), text: r.m && r.m.bye ? '0.0' : fmt(r.proj) }) : null,
-        wk ? h('td', { class: 'ww-next' }, [matchupChip(r.m)]) : null]);
-    }) : [h('tr', {}, [h('td', { colspan: '6', class: 'fine', text: 'No available ' + PA_WHO[pos] + ' with stats this season.' })])]));
+        wk ? h('td', { class: 'ww-next' }, [matchupChip(r.m)]) : null]));
+      if (open) body.push(h('tr', { class: 'ww-weeks-row' }, [h('td'), h('td', { colspan: wk ? '5' : '3' }, [weekChips(r.p, r.f)])]));
+    });
+    tbl.appendChild(h('tbody', {}, body.length ? body : [h('tr', {}, [h('td', { colspan: '6', class: 'fine', text: 'No available ' + PA_WHO[pos] + ' with stats this season.' })])]));
     var hidden = all.length - all.filter(function (r) { return r.f; }).length, ws = S.nflp.weeks || [];
-    $('wwNote').textContent = 'Free agents and waivers from Yahoo, ' + (S.avail.stale ? 'last read ' : 'checked ') + L.ago(S.avail.checked_at, now()) +
+    $('wwNote').textContent = 'Tap a player to see his points each week. Free agents and waivers from Yahoo, ' + (S.avail.stale ? 'last read ' : 'checked ') + L.ago(S.avail.checked_at, now()) +
       (S.avail.stale ? ' (Yahoo isn’t answering right now)' : '') + '. Points per game in our scoring from nflverse' +
       (ws.length ? ', weeks ' + ws[0] + (ws.length > 1 ? '–' + ws[ws.length - 1] : '') : '') + '. ' +
       (wk ? 'Wk ' + wk + ' proj is our estimate: last-4 average adjusted for how many points his opponent gives up to his position. ' : '') +
@@ -556,7 +578,7 @@
         r.picks.length ? h('ol', { class: 'ww-picks' }, r.picks.map(function (k) {
           return h('li', {}, [h('div', {}, [h('b', { text: k.p.name }), h('span', { class: 'ww-sub' },
             [h('span', { text: nflCode(k.p.nfl_team) + ' · ' + fmt(k.f.last4) + ' last 4' + (k.m ? ' · ' + (k.m.bye ? 'bye' : fmt(projection(k.p, k.f, k.m)) + ' proj') : '') })]
-            .concat(tags(k.p)))]), matchupChip(k.m)]);
+            .concat(tags(k.p))), weekChips(k.p, k.f)]), matchupChip(k.m)]);
         })) : h('p', { class: 'fine', text: 'Nobody on the wire has outscored ' + (w ? w.p.name : 'that spot') + ' lately. Hold.' })
       ]));
     });

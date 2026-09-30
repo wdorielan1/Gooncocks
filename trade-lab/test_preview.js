@@ -423,6 +423,12 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.ok(await wp.isHidden('#tool-pa'));
     assert.strictEqual(await wp.getAttribute('#toolNav .tool-b[data-tool="ww"]', 'aria-pressed'), 'true');
     const rows = await wp.$$eval('#wwTable tbody tr', trs => trs.map(t => [t.querySelector('.ww-name').textContent, parseFloat(t.querySelector('.ww-pts').textContent), t.textContent]));
+    // tapping a player shows every week's points; tapping again hides them
+    await wp.click('#wwTable .ww-name >> nth=0');
+    assert.strictEqual(await wp.getAttribute('#wwTable .ww-name >> nth=0', 'aria-expanded'), 'true');
+    assert.match(await wp.textContent('#wwTable .ww-weeks-row'), /^W1[\d.–]+W2[\d.–]+W3[\d.–]+$/);
+    await wp.click('#wwTable .ww-name >> nth=0');
+    assert.strictEqual(await wp.$('#wwTable .ww-weeks-row'), null);
     assert.ok(rows.length >= 3 && rows.every((r, i) => i === 0 || rows[i - 1][1] >= r[1]), JSON.stringify(rows));  // best last 4 first
     assert.ok(rows.some(r => r[0] === 'Tyrone Tracy Jr.' && /Claim/.test(r[2])), 'waiver players are marked; Jr. names match');
     assert.ok(rows.every(r => /(NO|[A-Z]{2,3}) ?#\d+|BYE/.test(r[2])), 'each has a next matchup');
@@ -444,7 +450,7 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     const ranks = await wp.$$eval('.ww-rk', e => e.map(x => [x.textContent, x.className]));
     assert.deepStrictEqual(ranks.map(r => r[0].split(' ')[0]), ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
     const weak = await wp.$$eval('.ww-weak', ws => ws.map(w => [w.querySelector('.ww-weak-h').textContent, w.querySelector('.ww-weak-s').textContent,
-      [...w.querySelectorAll('.ww-picks li')].map(li => li.textContent)]));
+      [...w.querySelectorAll('.ww-picks > li')].map(li => li.textContent)]));
     assert.ok(weak.length >= 1 && weak.length === ranks.filter(r => /t2/.test(r[1])).length, JSON.stringify([ranks, weak]));
     for (const [head, starter, picks] of weak) {
       assert.match(head, /^(QB|RB|WR|TE|K|DEF) · \d+(st|nd|rd|th) of 6 in the league$/);
@@ -452,6 +458,7 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
       assert.ok(picks.every(t => parseFloat(/ · ([\d.]+) last 4/.exec(t)[1]) >= floor + 1), JSON.stringify([starter, picks]));  // only real upgrades
     }
     assert.match(await wp.textContent('.ww-review'), /TE · 5th of 6.*Jake Ferguson/);
+    assert.match(await wp.textContent('.ww-picks li'), /W1[\d.–]+W2[\d.–]+W3[\d.–]+/);  // pickups show their weeks
     // tapping a rank shows who's behind it
     await wp.click('.ww-rk:has-text("TE")');
     assert.strictEqual(await wp.getAttribute('.ww-rk:has-text("TE")', 'aria-expanded'), 'true');
