@@ -582,11 +582,12 @@
           : [h('span', { class: 'ir-kick', text: k.day }), k.time ? h('span', { class: 'ir-kick', text: k.time.replace(' ', '\u00a0') }) : null]));
     var status = back ? p.was + ' → ' + (inj ? inj.code : 'Active') + (p.changed ? ' · ' + L.ago(p.changed, now()) : '')
       : (inj.label || inj.code) + (inj.note ? ' · ' + inj.note : '') + (p.since ? ' · listed ' + L.ago(p.since, now()) : '') +
-        (k && !k.bye && k.opp ? ' · vs ' + k.opp : k && k.bye ? ' · bye this week' : '');
+        (k && k.bye ? ' · bye this week' : '');
     return h('li', { class: 'ir-row' + (mine ? ' mine' : '') }, [chip,
       h('div', { class: 'ir-main' }, [
         h('p', {}, [h('b', { text: p.name }), h('span', { class: 'ir-pos', text: ' ' + p.position + ' · ' + nflCode(p.nfl_team) })]),
         h('p', { class: 'ir-status', text: status }),
+        k && !k.bye ? h('p', { class: 'ir-kickoff', text: 'Kickoff ' + k.day + (k.time ? ' ' + k.time + ' ET' : '') + (k.opp ? ' vs ' + k.opp : '') }) : null,
         h('p', { class: 'ir-who' }, [(mine ? '★ ' : '') + (p.manager || 'A manager') + (slotText(p) ? ' · ' + slotText(p) : ''), newsLink(p) ? ' · ' : null, newsLink(p)])])]);
   }
   function renderIR() {

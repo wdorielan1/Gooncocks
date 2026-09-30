@@ -459,7 +459,8 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     const kicks = await ip.$$eval('.ir-sec.gtd .ir-chip', cs => cs.map(c => [...c.querySelectorAll('.ir-kick')].map(k => k.textContent)));
     assert.ok(kicks.length && kicks.every(k => k.length === 2 && /^(Sun|Mon|Thu)$/.test(k[0]) && /^\d{1,2}:\d\d (AM|PM)$/.test(k[1])), JSON.stringify(kicks));
     assert.strictEqual(await ip.$$eval('.ir-sec.out .ir-kick', e => e.length), 0);
-    assert.match(await ip.textContent('.ir-sec.gtd .ir-status'), / · vs [A-Z]{2,3}$/);
+    assert.match(await ip.textContent('.ir-sec.gtd .ir-kickoff'), /^Kickoff (Sun|Mon|Thu) \d{1,2}:\d\d (AM|PM) ET vs [A-Z]{2,3}$/);
+    assert.strictEqual(await ip.$$eval('.ir-sec.out .ir-kickoff', e => e.length), 0);
     assert.match(await ip.textContent('.ir-sec.back'), /IR → Q/);
     assert.match(await ip.textContent('.ir-sec.back'), /O → Active/);
     assert.match(await ip.getAttribute('.ir-news', 'href'), /^https:\/\/sports\.yahoo\.com\/nfl\/players\/\d+\/news\/$/);
