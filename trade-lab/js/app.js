@@ -713,8 +713,9 @@
   function loadLeague() {
     if (S.leagueLoad) return S.leagueLoad;
     var yr = season();
-    S.leagueLoad = Promise.all([api.rosters(), api.boxscores(yr), api.boxscores(yr - 1), api.liveWeek()]).then(function (res) {
-      var ro = res[0], cur = res[1] || { games: {} }, prev = res[2] || { games: {} }, live = res[3];
+    S.leagueLoad = Promise.all([api.rosters(), api.boxscores(yr), api.boxscores(yr - 1), api.liveWeek(),
+                                api.pointsAgainst(yr).then(null, function () { return null; })]).then(function (res) {
+      var ro = res[0], cur = res[1] || { games: {} }, prev = res[2] || { games: {} }, live = res[3], pa = res[4];
       // The in-progress week counts until the final box scores include it.
       if (!live || live.season !== yr || weeksIn(cur).indexOf(live.week) >= 0) live = null;
       var cw = L.playerWeeks(cur, live), pw = L.playerWeeks(prev), cache = {};
@@ -723,7 +724,7 @@
         return cache[k] || (cache[k] = L.playerRating(cw, pw, p));
       }
       var slots = (ro.slots && ro.slots.length) ? ro.slots : L.slotsFromBox(Object.keys(cur.games).length ? cur : prev);
-      S.league = { rosters: ro, slots: slots, cur: cur, prev: prev, yr: yr, rate: rate, live: live, cw: cw, pw: pw,
+      S.league = { rosters: ro, slots: slots, cur: cur, prev: prev, yr: yr, rate: rate, live: live, cw: cw, pw: pw, pa: pa,
                    weeksPlayed: weeksIn(cur), scout: L.scouting(ro.teams, slots, rate) };
       S.leagueError = null;
       return S.league;
@@ -766,7 +767,8 @@
     return 'Ratings are points per week in Yahoo league scoring from this site’s box scores' +
       (w.length ? ' (' + lg.yr + ' weeks ' + w[0] + (w.length > 1 ? '–' + w[w.length - 1] : '') + ')' : ' (no ' + lg.yr + ' weeks yet)') +
       (lg.live ? ', plus week ' + lg.live.week + ' so far (games through ' + liveTime(lg.live.updated) + '; players who haven’t played yet this week count once they do)' : '') +
-      ', with last season’s average counting as ' + L.PRIOR_WEEKS + ' extra weeks. Each team is scored by its best lineup from its current Yahoo roster; injured-reserve players don’t count. No projections.';
+      ', with last season’s average counting as ' + L.PRIOR_WEEKS + ' extra weeks. Each team is scored by its best lineup from its current Yahoo roster; injured-reserve players don’t count. No projections.' +
+      (lg.pa ? ' “Next 4” ranks come from Points Against: #1 is the defense that gives up the most to that position (green = easy, red = tough).' : '');
   }
   function teamSelect(sel, keep) {
     var ts = S.league.rosters.teams;
@@ -975,6 +977,51 @@
     renderPicks('A'); renderPicks('B'); renderCalcOut();
   }
   function fmt(n) { return n === null || n === undefined || isNaN(n) ? '—' : (Math.round(n * 10) / 10).toFixed(1); }
+  // Every week's points this season, colored against the player's own
+  // rating: big weeks green, duds red.
+  function weekStrip(p, r) {
+    var lg = S.league, line = L.weekLine(lg.cw, p);
+    var last = Math.max.apply(null, lg.weeksPlayed.concat(lg.live ? [lg.live.week] : []).concat([0]));
+    if (!last) return null;
+    var cells = [];
+    for (var wk = 1; wk <= last; wk++) {
+      var pts = line.weeks[wk], has = typeof pts === 'number', live = lg.live && lg.live.week === wk;
+      var tone = !has || !r.value ? '' : pts >= r.value * 1.25 ? ' hi' : pts <= r.value * 0.6 ? ' lo' : '';
+      cells.push(h('li', { class: 'wk' + tone + (live ? ' live' : ''), title: 'Week ' + wk + ': ' + (has ? fmt(pts) + ' pts' + (live ? ' so far' : '') : 'no score') }, [
+        h('span', { class: 'wk-n', text: 'W' + wk }), h('span', { class: 'wk-v', text: has ? fmt(pts) + (live ? '*' : '') : '–' })]));
+    }
+    return h('div', { class: 'strip' }, [h('span', { class: 'strip-lab', text: 'Weekly' }), h('ol', { class: 'wk-list' }, cells)]);
+  }
+  // The next 4 weeks' opponents, each with how easy that matchup is for his
+  // position (Points Against: #1 gives up the most).
+  var TEAM_FIX = { JAC: 'JAX', WSH: 'WAS', LA: 'LAR', LVR: 'LV', OAK: 'LV', SD: 'LAC', STL: 'LAR' };
+  function paRanks(pos) {
+    var pa = S.league.pa;
+    S.league.paRank = S.league.paRank || {};
+    if (S.league.paRank[pos]) return S.league.paRank[pos];
+    var rows = Object.keys(pa.teams).map(function (c) {
+      var t = pa.teams[c], w = Object.keys(t.weeks || {});
+      return [c, w.length ? w.reduce(function (x, k) { return x + ((t.weeks[k] || {})[pos] || 0); }, 0) / w.length : 0];
+    }).sort(function (a, b) { return b[1] - a[1] || a[0].localeCompare(b[0]); }), out = {};
+    rows.forEach(function (r, i) { out[r[0]] = i; });
+    return (S.league.paRank[pos] = out);
+  }
+  function nextFour(p) {
+    var pa = S.league.pa;
+    if (!pa || !pa.schedule || !pa.teams) return null;
+    var team = String(p.nfl_team || '').toUpperCase(); team = TEAM_FIX[team] || team;
+    var sched = pa.schedule[team];
+    if (!sched) return null;
+    var start = Math.max.apply(null, (pa.weeks || []).concat([0])) + 1, ranks = paRanks(p.position), n = Object.keys(ranks).length, chips = [];
+    for (var wk = start; wk < start + 4 && wk <= 18; wk++) {
+      var opp = sched[wk];
+      if (!opp) { chips.push(h('li', { class: 'nx bye' }, [h('span', { class: 'wk-n', text: 'W' + wk }), h('span', { text: 'BYE' })])); continue; }
+      var i = ranks[opp], tier = i === undefined ? 2 : Math.min(4, Math.floor(i / n * 5));
+      chips.push(h('li', { class: 'nx', title: 'Week ' + wk + ' vs ' + opp + (i === undefined ? '' : ': ' + ordinal(i + 1) + ' easiest matchup for ' + p.position + 's') }, [
+        h('span', { class: 'wk-n', text: 'W' + wk }), h('span', { text: opp + ' ' }), i === undefined ? null : h('span', { class: 'nx-rk pa-t' + (4 - tier), text: '#' + (i + 1) })]));
+    }
+    return chips.length ? h('div', { class: 'strip' }, [h('span', { class: 'strip-lab', text: 'Next 4' }), h('ol', { class: 'wk-list' }, chips)]) : null;
+  }
   function renderCalcOut() {
     var lg = S.league, out = clear($('calcOut'));
     $('calcSource').textContent = methodNote(lg);
@@ -995,13 +1042,21 @@
     var f = L.fairness(sides[0].ratings, sides[1].ratings), A = sides[0], B = sides[1];
     var winner = f.favors === 'A' ? A.manager : f.favors === 'B' ? B.manager : null;
     var head = f.verdict === 'fair' ? 'Fair trade' : (f.verdict === 'leans' ? 'Leans toward ' : 'Lopsided toward ') + winner;
-    // Marker: 0% = all to A, 100% = all to B; the middle is even.
-    var pos = 50 + Math.max(-45, Math.min(45, (f.diff > 0 ? -1 : 1) * f.pct * 100 * 0.9));
+    // Donut: each side's slice is the points per week it receives.
+    var tot = (f.aReceives || 0) + (f.bReceives || 0), share = tot ? (f.aReceives || 0) / tot * 100 : 50;
     out.appendChild(h('div', { class: 'verdict ' + f.verdict }, [
       h('p', { class: 'v-head', text: head }),
-      h('div', { class: 'gauge', role: 'img', 'aria-label': head + '. ' + A.manager + ' receives ' + fmt(f.aReceives) + ' points per week, ' + B.manager + ' receives ' + fmt(f.bReceives) + '.' }, [
-        h('span', { class: 'g-zone' }), h('span', { class: 'g-mark', style: 'left:' + pos.toFixed(1) + '%' }),
-        h('span', { class: 'g-end l', text: A.manager }), h('span', { class: 'g-end r', text: B.manager })
+      h('div', { class: 'donut-row' }, [
+        h('div', { class: 'donut', role: 'img', style: 'background:conic-gradient(var(--blue) 0 ' + share.toFixed(1) + '%, var(--gold) ' + share.toFixed(1) + '% 100%)',
+          'aria-label': head + '. ' + A.manager + ' receives ' + fmt(f.aReceives) + ' points per week, ' + B.manager + ' receives ' + fmt(f.bReceives) + '.' }, [
+          h('div', { class: 'donut-hole' }, winner && f.verdict !== 'fair'
+            ? [h('b', { class: 'donut-who', text: winner }), h('span', { class: 'donut-pct', text: '+' + Math.round(f.pct * 100) + '%' })]
+            : [h('b', { class: 'donut-who', text: 'Fair' }), h('span', { class: 'donut-pct', text: 'within 10%' })])
+        ]),
+        h('ul', { class: 'donut-key' }, [
+          h('li', { class: 'a' }, [h('span', { class: 'sw' }), h('span', {}, [h('b', { text: A.manager }), ' gets ' + fmt(f.aReceives) + ' pts/wk'])]),
+          h('li', { class: 'b' }, [h('span', { class: 'sw' }), h('span', {}, [h('b', { text: B.manager }), ' gets ' + fmt(f.bReceives) + ' pts/wk'])])
+        ])
       ]),
       h('p', { text: A.manager + ' receives ' + fmt(f.aReceives) + ' pts/wk and ' + B.manager + ' receives ' + fmt(f.bReceives) + ' pts/wk' +
         (f.verdict === 'fair' ? ' — within 10%, so it’s even.' : ' — a ' + fmt(Math.abs(f.diff)) + ' pt/wk (' + Math.round(f.pct * 100) + '%) edge to ' + winner + '.') })
@@ -1028,11 +1083,14 @@
     sides.forEach(function (sd) {
       sd.players.forEach(function (p, i) {
         var r = sd.ratings[i];
-        rows.push(h('tr', { class: 'side-' + sd.side.toLowerCase() }, [
-          h('td', {}, [p.name + ' ', h('span', { class: 'nfl', text: p.position + (p.nfl_team ? ' · ' + p.nfl_team : '') })]),
+        var inj = p.injury;
+        rows.push(h('tr', { class: 'side-' + sd.side.toLowerCase() + ' p-main' }, [
+          h('td', {}, [p.name + ' ', h('span', { class: 'nfl', text: p.position + (p.nfl_team ? ' · ' + p.nfl_team : '') }),
+            inj ? h('span', { class: 'ww-tag inj' + (inj.code === 'Q' || inj.code === 'D' ? '' : ' out'), title: inj.label, text: inj.code + (inj.note ? ' · ' + inj.note : '') }) : null]),
           h('td', { text: String(r.games) }), h('td', { class: 'num', text: fmt(r.ppg) }), h('td', { class: 'num', text: fmt(r.recent) }),
           h('td', { class: 'num', text: fmt(r.lastPpg) }), h('td', { class: 'num strong', text: fmt(r.value) })
         ]));
+        rows.push(h('tr', { class: 'side-' + sd.side.toLowerCase() + ' p-more' }, [h('td', { colspan: '6' }, [weekStrip(p, r), nextFour(p)])]));
       });
       var tot = sd.ratings.reduce(function (t, r) { return t + (r.value || 0); }, 0);
       rows.push(h('tr', { class: 'total side-' + sd.side.toLowerCase() }, [

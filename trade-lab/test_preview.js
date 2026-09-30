@@ -255,15 +255,24 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     await page.locator('#picksA label', { hasText: 'Jared Goff' }).locator('input').check();
     await page.locator('#picksB label', { hasText: 'Breece Hall' }).locator('input').check();
     assert.strictEqual(await page.textContent('#givesA'), 'Will gives');
-    const rows = await page.$$eval('#calcOut tbody tr', trs => trs.map(t => [...t.children].map(c => c.textContent)));
-    const goff = parseFloat(rows[0][5]), hall = parseFloat(rows[2][5]);
+    const rows = await page.$$eval('#calcOut tbody tr.p-main', trs => trs.map(t => [...t.children].map(c => c.textContent)));
+    const goff = parseFloat(rows[0][5]), hall = parseFloat(rows[1][5]);
     const head = await page.textContent('.v-head'), line = await page.textContent('.verdict p:last-child');
     const pct = Math.abs(goff - hall) / Math.max(goff, hall);
     const expect = pct < 0.10 ? 'Fair trade' : (pct < 0.25 ? 'Leans toward ' : 'Lopsided toward ') + (hall > goff ? 'Will' : 'Sam');
     assert.strictEqual(head, expect);
     assert.ok(line.includes('Will receives ' + hall.toFixed(1)) && line.includes('Sam receives ' + goff.toFixed(1)), line);
     assert.match(await page.textContent('#calcOut'), /Fills a need: Will’s RBs grade D, so getting Breece Hall helps/);
-    assert.ok(await page.getAttribute('.gauge', 'aria-label'));
+    assert.ok(await page.getAttribute('.donut', 'aria-label'));
+    // donut: Will's (blue) slice is his share of the points changing hands; the winner and edge in the middle
+    const slice = parseFloat(/var\(--blue\) 0 ([\d.]+)%/.exec(await page.getAttribute('.donut', 'style'))[1]);
+    assert.ok(Math.abs(slice - hall / (hall + goff) * 100) < 0.5, slice);
+    assert.strictEqual(await page.textContent('.donut-who'), expect === 'Fair trade' ? 'Fair' : expect.split(' ').pop());
+    // each player: an injury tag when hurt, every week's points, and the next 4 matchups
+    assert.match(rows[1][0], /Breece Hall.*Q · Hamstring/);
+    const more = await page.$$eval('#calcOut tr.p-more', trs => trs.map(t => [...t.querySelectorAll('.strip')].map(s => s.querySelector('.strip-lab').textContent + ':' + s.querySelectorAll('li').length)));
+    assert.deepStrictEqual(more, [['Weekly:4', 'Next 4:4'], ['Weekly:4', 'Next 4:4']]);
+    assert.match(await page.textContent('#calcOut tr.p-more .wk-list'), /^W1[\d.–]+.*W4[\d.]+\*$/);  // week 4 in progress is marked
     // two different teams only
     await page.selectOption('#cTeamB', '470.l.960265.t.1');
     assert.match(await page.textContent('#calcOut'), /Pick at least one player on each side|Pick two different teams/);
