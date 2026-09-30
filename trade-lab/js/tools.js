@@ -581,11 +581,19 @@
       fbox.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (o[0] === filt ? ' on' : ''), 'aria-pressed': o[0] === filt ? 'true' : 'false',
         text: o[1], onclick: function () { S.irFilter = o[0]; renderTools(); } }));
     });
-    function keep(p) {
+    var pos = S.irPos || 'ALL', pbox = clear($('irPos'));
+    function keepTeam(p) {
       if (filt === 'mine') return p.team_key === S.me.team_key;
       if (filt === 'start') return slotText(p) === 'Starting';
       return true;
     }
+    function keep(p) { return keepTeam(p) && (pos === 'ALL' || p.position === pos); }
+    ['ALL'].concat(WW_POS).forEach(function (p) {
+      var n = S.inj.injured.concat(S.inj.back || []).filter(function (x) { return keepTeam(x) && (p === 'ALL' || x.position === p); }).length;
+      pbox.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (p === pos ? ' on' : ''), 'aria-pressed': p === pos ? 'true' : 'false',
+        'aria-label': (p === 'ALL' ? 'All positions' : p) + ', ' + n + ' listed', onclick: function () { S.irPos = p; renderTools(); } },
+        [p === 'ALL' ? 'All' : p, h('span', { class: 'ir-pc', text: String(n) })]));
+    });
     function order(a, b) {
       var mine = (b.team_key === (S.me || {}).team_key) - (a.team_key === (S.me || {}).team_key);
       return mine || (slotText(b) === 'Starting') - (slotText(a) === 'Starting') || a.name.localeCompare(b.name);
@@ -593,10 +601,10 @@
     var list = S.inj.injured.filter(keep);
     var sections = [
       ['Out', 'out', list.filter(function (p) { return isOut(p.injury.code); }).sort(order), false,
-       'Nobody’s out.'],
+       'Nobody’s out' + (pos === 'ALL' ? '.' : ' at ' + pos + '.')],
       ['Game-time decisions', 'gtd', list.filter(function (p) { return !isOut(p.injury.code); })
         .sort(function (a, b) { return (a.injury.code === 'D' ? 0 : 1) - (b.injury.code === 'D' ? 0 : 1) || order(a, b); }), false,
-       'No doubtful or questionable players.'],
+       'No doubtful or questionable ' + (pos === 'ALL' ? 'players.' : PA_WHO[pos] + '.')],
       ['Coming back', 'back', (S.inj.back || []).filter(keep), true,
        'Nobody’s moved off Out or IR in the last two weeks.']
     ];

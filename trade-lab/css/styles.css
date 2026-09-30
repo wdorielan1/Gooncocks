@@ -374,6 +374,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .ww-picks li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; background: #0f1d36; border-radius: 3px; }
 .ww-picks b { display: block; }
 .ir-sec { margin-top: 18px; max-width: 640px; }
+.ir-teams { margin-top: 8px; }
+.ir-pc { margin-left: 6px; font-size: 12px; font-weight: 700; opacity: .75; }
 .ir-h { margin: 0; font: 400 22px/1.1 var(--headline); text-transform: uppercase; letter-spacing: .5px; color: var(--text); display: flex; align-items: center; gap: 8px; }
 .ir-sec.out .ir-h { color: #f08a80; } .ir-sec.gtd .ir-h { color: #ffd98a; } .ir-sec.back .ir-h { color: #5fd08f; }
 .ir-count { font: 700 13px/1 var(--body); padding: 3px 7px; border-radius: 3px; background: #1a2238; color: #cfd6e4; }

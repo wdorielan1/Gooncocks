@@ -458,6 +458,16 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.match(await ip.textContent('.ir-sec.back'), /IR → Q/);
     assert.match(await ip.textContent('.ir-sec.back'), /O → Active/);
     assert.match(await ip.getAttribute('.ir-news', 'href'), /^https:\/\/sports\.yahoo\.com\/nfl\/players\/\d+\/news\/$/);
+    // by position: each tab shows its count and only that position
+    const tabs = await ip.$$eval('#irPos button', bs => bs.map(b => b.textContent));
+    assert.deepStrictEqual(tabs.map(t => t.replace(/\d+$/, '')), ['All', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
+    await ip.click('#irPos button:has-text("WR")');
+    const wrs = await ip.$$eval('.ir-row .ir-pos', e => e.map(x => x.textContent.trim().split(' ')[0]));
+    assert.ok(wrs.length && wrs.every(p => p === 'WR'), JSON.stringify(wrs));
+    assert.strictEqual(String(wrs.length), /\d+$/.exec(tabs[3])[0]);
+    await ip.click('#irPos button:has-text("QB")');
+    assert.match(await ip.textContent('.ir-sec.out'), /Nobody’s out at QB\./);
+    await ip.click('#irPos button:has-text("All")');
     await ip.click('#irFilter button:has-text("Starters only")');
     assert.ok(!/Javonte Williams/.test(await ip.textContent('#irBody')), 'IR-spot players are not starters');
     assert.strictEqual(await ip.$('#irFilter button:has-text("My team")'), null);
