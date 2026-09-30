@@ -391,7 +391,16 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .ww-bye { color: var(--muted); font-size: 13px; }
 .ww-explain { margin-top: 10px; font-size: 14px; color: #cfd6e4; }
 .ww-ranks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.ww-rk { padding: 4px 8px; border-radius: 3px; font-size: 13px; font-weight: 700; color: #fff; background: #3a4150; }
+.ww-rk { padding: 6px 10px; border: 2px solid transparent; border-radius: 3px; font: 700 13px/1.2 var(--body); color: #fff; background: #3a4150; cursor: pointer; }
+.ww-rk.on { border-color: #fff; }
+.ww-rk:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.ww-rkpanel { margin-top: 10px; padding: 10px 12px; background: #0f1d36; border-radius: 3px; }
+.ww-rkp-h { color: #cfd6e4; } .ww-rkp-h b { color: #fff; }
+.ww-rkp-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.ww-rkp-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.ww-rkp-list b { display: block; }
+.ww-rkp-pts { white-space: nowrap; color: var(--muted); font-size: 13px; } .ww-rkp-pts b { display: inline; color: #fff; font-size: 16px; }
+.ww-rkp-cmp { margin-top: 8px; font-size: 14px; color: #cfd6e4; }
 .ww-rk.t0 { background: #1f7a45; } .ww-rk.t2 { background: #95302e; }
 .ww-ok { margin-top: 12px; color: #5fd08f; font-weight: 600; }
 .ww-weak { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }

@@ -475,7 +475,7 @@
   function review() {
     var slots = (S.lg.slots && S.lg.slots.length ? S.lg.slots : DEFAULT_SLOTS), need = {};
     slots.forEach(function (sl) { if (WW_POS.indexOf(sl) >= 0) need[sl] = (need[sl] || 0) + 1; });
-    var teams = (S.lg.teams || []).map(function (t) { return { key: t.team_key, s: lineupStrength(t.players || [], need) }; });
+    var teams = (S.lg.teams || []).map(function (t) { return { key: t.team_key, manager: t.manager, s: lineupStrength(t.players || [], need) }; });
     var mine = teams.filter(function (t) { return t.key === S.me.team_key; })[0];
     if (!mine) return null;
     var n = teams.length, cut = n - Math.ceil(n / 3);
@@ -489,9 +489,29 @@
           .map(function (r) { r.m = S.pa && paNextWeek() ? nextMatchup(r.p) : null; return r; })
           .sort(function (a, b) { return b.f.last4 - a.f.last4; }).slice(0, 3);
       }
+      var best = teams.slice().sort(function (a, b) { return b.s[pos].sum - a.s[pos].sum; })[0];
       return { pos: pos, rank: rank, n: n, weak: rank > cut, tier: rank <= Math.ceil(n / 3) ? 0 : rank > cut ? 2 : 1,
-               weakest: weakest, many: need[pos] > 1, picks: picks };
+               weakest: weakest, many: need[pos] > 1, picks: picks, starters: mine.s[pos].starters, sum: mine.s[pos].sum,
+               avg: teams.reduce(function (x, t) { return x + t.s[pos].sum; }, 0) / n, best: best, mineBest: best.key === mine.key };
     });
+  }
+  // Who's behind one rank chip: your starters there, the league average for
+  // that spot, and the best team at it.
+  function rankPanel(r) {
+    var per = r.many ? ' (' + r.starters.length + ' starters, added up)' : '';
+    return h('div', { class: 'ww-rkpanel', id: 'wwRkPanel' }, [
+      h('p', { class: 'ww-rkp-h' }, [h('b', { text: 'Your ' + (r.many ? PA_WHO[r.pos] : r.pos) }), ' · ' + ordinal(r.rank) + ' of ' + r.n + per]),
+      r.starters.length ? h('ol', { class: 'ww-rkp-list' }, r.starters.map(function (x) {
+        var inj = x.p.injury;
+        return h('li', {}, [h('span', {}, [h('b', { text: x.p.name }), h('span', { class: 'ww-sub' }, [h('span', { text: nflCode(x.p.nfl_team) + (x.p.slot === 'BN' ? ' · on your bench' : '') })]
+            .concat(inj ? [h('span', { class: 'ww-tag inj' + (/^(O|IR|PUP|NFI|SUSP|D)/.test(inj.code) ? ' out' : ''), text: inj.code + (inj.note ? ' · ' + inj.note : '') })] : []))]),
+          h('span', { class: 'ww-rkp-pts' }, [h('b', { text: fmt(x.v) }), ' pts/g'])]);
+      })) : h('p', { class: 'fine', text: 'You don’t have a ' + r.pos + ' with points yet.' }),
+      h('p', { class: 'ww-rkp-cmp', text: 'You: ' + fmt(r.sum) + ' · League average: ' + fmt(r.avg) +
+        (r.mineBest ? ' · You’re the best in the league here.' : ' · Best: ' + (r.best.manager || 'another team') + ' ' + fmt(r.best.s[r.pos].sum) +
+          ' (' + r.best.s[r.pos].starters.map(function (x) { return x.p.name; }).join(', ') + ')') }),
+      h('p', { class: 'fine', text: 'Points per game over each player’s last 4 games, in our scoring. Your best lineup, so a bench player shows if he’s outscoring your starter.' })
+    ]);
   }
   function renderReview() {
     var box = clear($('wwMe'));
@@ -514,10 +534,15 @@
     var card = h('section', { class: 'pa-mine ww-review', 'aria-label': 'Your team review' }, [
       h('div', { class: 'pa-mine-h' }, [h('h4', { text: 'Your team review' }), acct])]);
     if (!rows) { card.appendChild(h('p', { class: 'fine', text: 'Your team isn’t in Yahoo’s roster list right now. Try again in a minute.' })); box.appendChild(card); return; }
-    card.appendChild(h('p', { class: 'ww-explain', text: 'Your best lineup (by the last 4 games) against the rest of the league, spot by spot:' }));
-    card.appendChild(h('div', { class: 'ww-ranks' }, rows.map(function (r) {
-      return h('span', { class: 'ww-rk t' + r.tier, text: r.pos + ' ' + ordinal(r.rank), title: ordinal(r.rank) + ' of ' + r.n + ' at ' + r.pos });
+    card.appendChild(h('p', { class: 'ww-explain', text: 'Your best lineup (by the last 4 games) against the rest of the league, spot by spot. Tap one to see who:' }));
+    card.appendChild(h('div', { class: 'ww-ranks', role: 'group', 'aria-label': 'Your rank at each spot. Tap one to see your players there.' }, rows.map(function (r) {
+      var open = S.wwOpen === r.pos;
+      return h('button', { type: 'button', class: 'ww-rk t' + r.tier + (open ? ' on' : ''), 'aria-expanded': open ? 'true' : 'false', 'aria-controls': 'wwRkPanel',
+        text: r.pos + ' ' + ordinal(r.rank), title: ordinal(r.rank) + ' of ' + r.n + ' at ' + r.pos + '. Tap to see who.',
+        onclick: function () { S.wwOpen = open ? null : r.pos; renderTools(); } });
     })));
+    var openRow = rows.filter(function (r) { return r.pos === S.wwOpen; })[0];
+    if (openRow) card.appendChild(rankPanel(openRow));
     var weak = rows.filter(function (r) { return r.weak; });
     if (!weak.length) {
       card.appendChild(h('p', { class: 'ww-ok', text: 'Your lineup is in the top two-thirds of the league at every spot. No moves needed.' }));

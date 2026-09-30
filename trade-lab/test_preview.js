@@ -452,6 +452,15 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
       assert.ok(picks.every(t => parseFloat(/ · ([\d.]+) last 4/.exec(t)[1]) >= floor + 1), JSON.stringify([starter, picks]));  // only real upgrades
     }
     assert.match(await wp.textContent('.ww-review'), /TE · 5th of 6.*Jake Ferguson/);
+    // tapping a rank shows who's behind it
+    await wp.click('.ww-rk:has-text("TE")');
+    assert.strictEqual(await wp.getAttribute('.ww-rk:has-text("TE")', 'aria-expanded'), 'true');
+    assert.match(await wp.textContent('#wwRkPanel'), /Your TE · 5th of 6.*Dallas Goedert.*pts\/g.*You: [\d.]+ · League average: [\d.]+ · Best: \w+ [\d.]+ \(/);
+    await wp.click('.ww-rk:has-text("WR")');
+    assert.match(await wp.textContent('#wwRkPanel'), /Your WRs · 2nd of 6 \(3 starters, added up\)/);
+    assert.strictEqual(await wp.$$eval('#wwRkPanel .ww-rkp-list li', l => l.length), 3);
+    await wp.click('.ww-rk:has-text("WR")');
+    assert.strictEqual(await wp.$('#wwRkPanel'), null);
     assert.ok(await noOverflow(wp));
     await wp.click('.ww-review .linkbtn:has-text("Sign out")');
     await wp.waitForSelector('#wwMe .pa-me-in');
