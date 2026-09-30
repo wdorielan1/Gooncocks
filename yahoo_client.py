@@ -345,6 +345,33 @@ def get_player_points(access_token, league_key, player_keys, week):
     return points
 
 
+def get_league_players(access_token, league_key, status="A", position=None, start=0, count=25, sort="AR"):
+    """One page (Yahoo's cap is 25) of the league's players with a given
+    status - "A" every available player (free agents and waivers), "FA"
+    free agents only, "W" waivers only - best first by Yahoo's actual
+    rank. [{'player_key', 'name', 'position', 'nfl_team', 'status',
+    'status_full', 'injury_note', 'headshot'}]."""
+    filters = f"status={status}" + (f";position={position}" if position else "") + f";sort={sort};start={start};count={count}"
+    url = f"{FANTASY_BASE}/league/{league_key}/players;{filters}?format=json"
+    data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+    players = []
+    for entry in _yahoo_collection(_sub_resource(data["fantasy_content"]["league"], "players")):
+        p = _player_record(entry.get("player") if isinstance(entry, dict) else None)
+        if not p.get("player_key"):
+            continue
+        players.append({
+            "player_key": p["player_key"],
+            "name": (p.get("name") or {}).get("full") or "",
+            "position": p.get("display_position") or "",
+            "nfl_team": (p.get("editorial_team_abbr") or "").upper(),
+            "status": p.get("status") or "",
+            "status_full": p.get("status_full") or "",
+            "injury_note": p.get("injury_note") or "",
+            "headshot": headshot_url(p),
+        })
+    return players
+
+
 def get_league_season(access_token, league_key):
     """One season's final standings: {'season', 'name', 'is_finished',
     'renew', 'teams': [{'team', 'manager', 'manager_guid', 'rank'}]}.

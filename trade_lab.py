@@ -5,6 +5,7 @@ A separate Lambda from the weekly awards job (handler: trade_lab.handler),
 reached through the site's CloudFront at /api/trade-lab/* so its cookies
 are first-party on stats.gooncocks.com.
 
+  GET  /api/trade-lab/available          free agents and waiver players (public, read-only)
   GET  /api/trade-lab/login              start Yahoo sign-in (?next=tools returns to the Tools page)
   GET  /api/trade-lab/callback           Yahoo sends the manager back here
   GET  /api/trade-lab/me                 who's signed in (and a CSRF token)
@@ -57,6 +58,7 @@ import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 import discord_client
 import yahoo_client
@@ -71,6 +73,11 @@ STATE_COOKIE = "__Host-tl_state"
 SESSION_TTL = 3 * 24 * 3600
 STATE_TTL = 10 * 60
 LEAGUE_TTL = 15 * 60        # how long league-wide rosters are reused for reading
+AVAILABLE_TTL = 30 * 60     # how long the free agent / waiver list is reused
+# Available players read per position, 25 to a page, best first by Yahoo's
+# rank - deep enough that the best pickups by our scoring are in there.
+AVAILABLE_PAGES = (("QB", 2), ("RB", 3), ("WR", 3), ("TE", 2), ("K", 1), ("DEF", 1))
+WAIVER_PAGES = 4
 WRITE_ROSTER_TTL = 3 * 60   # a roster must be this fresh to approve a listing
 NOTE_MAX = 200
 MAX_ITEMS = 25
@@ -133,6 +140,9 @@ class YahooLeague:
 
     def positions(self, league_key):
         return yahoo_client.get_league_positions(self._league_token(), league_key)
+
+    def league_players(self, league_key, status, position=None, start=0):
+        return yahoo_client.get_league_players(self._league_token(), league_key, status=status, position=position, start=start)
 
 
 # ------------------------------------------------------------ helpers
@@ -549,6 +559,50 @@ class TradeLab:
                     rosters[t["team_key"]] = cached["data"]
         oldest = min((r["fetched_at"] for r in rosters.values()), default=None)
         return rosters, oldest, failed
+
+    # ---------------- available players (Tools page: Waiver Wire Report)
+    def available_players(self, max_age=AVAILABLE_TTL):
+        """(data, stale): every available player worth a look, from cache if
+        fresh enough, else from Yahoo; the last good list (stale=True) if
+        Yahoo fails. Raises YahooUnavailable with nothing cached."""
+        cached = self.store.get(f"META#{self.league}", "available")
+        if cached and self.now() - cached["data"]["fetched_at"] < max_age:
+            return cached["data"], False
+        try:
+            pages = [(pos, i * 25) for pos, n in AVAILABLE_PAGES for i in range(n)]
+            first = self.yahoo.league_players(self.league, "A", pages[0][0], pages[0][1])  # signs in once
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                rest = list(pool.map(lambda pg: self.yahoo.league_players(self.league, "A", pg[0], pg[1]), pages[1:]))
+            waivers = set()
+            for i in range(WAIVER_PAGES):
+                page = self.yahoo.league_players(self.league, "W", None, i * 25)
+                waivers.update(p["player_key"] for p in page)
+                if len(page) < 25:
+                    break
+            players, seen = [], set()
+            for p in [p for page in [first] + rest for p in page]:
+                if p["player_key"] in seen:
+                    continue
+                seen.add(p["player_key"])
+                players.append({"player_key": p["player_key"], "name": p.get("name") or "", "position": primary_position(p),
+                                "nfl_team": p.get("nfl_team") or "", "headshot": p.get("headshot") or "",
+                                "injury": injury(p), "waivers": p["player_key"] in waivers})
+            data = {"players": players, "fetched_at": self.now()}
+            self.store.put(f"META#{self.league}", "available", data, 1)
+            return data, False
+        except Exception:
+            traceback.print_exc()
+            if cached:
+                return cached["data"], True
+            raise YahooUnavailable()
+
+    def available(self, event, cookies):
+        """Public: the league's free agents and waiver players. Read-only."""
+        try:
+            data, stale = self.available_players()
+        except YahooUnavailable:
+            return _json(503, {"error": "yahoo_unavailable", "message": "Available players can't be read from Yahoo right now. Try again in a minute."})
+        return _json(200, {"players": data["players"], "checked_at": data["fetched_at"], "stale": stale})
 
     # ---------------- sessions
     def session(self, cookies):
@@ -1011,6 +1065,8 @@ class TradeLab:
                 return self.rosters(event, cookies)
             if method == "GET" and route == "/roster":
                 return self.my_roster(event, cookies)
+            if method == "GET" and route == "/available":
+                return self.available(event, cookies)
             if method == "GET" and route == "/digest":
                 return self.digest(event)
             if method == "PUT" and route == "/needs":

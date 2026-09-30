@@ -159,5 +159,29 @@
   window.TRADE_LAB_SAMPLE.pointsAgainst = { season: cur, weeks: [1, 2, 3], updated: now - 7200, teams: paTeams, schedule: schedule, starters: starters,
     cols: { QB: OFFC, RB: OFFC, WR: OFFC, TE: OFFC, K: ['FG 0-19', 'FG 20-29', 'FG 30-39', 'FG 40-49', 'FG 50+', 'FG Miss', 'PAT'],
             DEF: ['Sack', 'Int', 'Fum Rec', 'TD', 'Safety', 'Blk Kick', 'Pts Allow'] } };
+  // Waiver Wire Report: made-up free agents (true = on waivers), and every
+  // player's weekly points the way nflverse's file has them.
+  var FA = [[101, 'Jaylen Warren', 'RB', 'PIT', 12], [102, 'Tyrone Tracy Jr.', 'RB', 'NYG', 13, true], [103, 'Ray Davis', 'RB', 'BUF', 7],
+            [104, 'Kimani Vidal', 'RB', 'LAC', 9], [105, 'Jaleel McLaughlin', 'RB', 'DEN', 5], [111, 'Jalen McMillan', 'WR', 'TB', 12],
+            [112, "Wan'Dale Robinson", 'WR', 'NYG', 11], [113, 'Jauan Jennings', 'WR', 'SF', 13, false, { code: 'Q', label: 'Questionable', note: 'Calf' }],
+            [114, 'Rashid Shaheed', 'WR', 'NO', 10, true], [115, 'Demario Douglas', 'WR', 'NE', 7], [121, 'Bo Nix', 'QB', 'DEN', 18],
+            [122, 'Geno Smith', 'QB', 'LV', 16], [123, 'Bryce Young', 'QB', 'CAR', 12], [131, 'Hunter Henry', 'TE', 'NE', 11],
+            [132, 'Jake Ferguson', 'TE', 'DAL', 10, true], [133, 'Cole Kmet', 'TE', 'CHI', 6], [141, 'Cameron Dicker', 'K', 'LAC', 10],
+            [142, 'Wil Lutz', 'K', 'DEN', 8], [151, 'Denver', 'DEF', 'DEN', 10], [152, 'Pittsburgh', 'DEF', 'PIT', 8],
+            [160, 'Brand New Rookie', 'WR', 'CHI', 0]];
+  FA.forEach(function (r) { if (r[4]) base[r[1]] = r[4]; });
+  function nk(n) { return n.toLowerCase().replace(/[.'’]/g, '').replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/g, '').replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean).join(' '); }
+  var nflp = { season: cur, weeks: [1, 2, 3], updated: now - 7200, players: [], defenses: {} };
+  names.map(function (n) { return R[n]; }).concat([FA]).forEach(function (list) {
+    list.forEach(function (r) {
+      if (!r[4]) return;
+      var wk = {}; [1, 2, 3].forEach(function (w) { wk[w] = points(r[1], cur, w); });
+      if (r[2] === 'DEF') nflp.defenses[r[3]] = wk; else nflp.players.push([nk(r[1]), r[1], r[2], r[3], wk]);
+    });
+  });
+  window.TRADE_LAB_SAMPLE.nflPlayers = nflp;
+  window.TRADE_LAB_SAMPLE.available = FA.map(function (r) {
+    return { player_key: '470.p.' + r[0], name: r[1], position: r[2], nfl_team: r[3], headshot: '', injury: r[6] || null, waivers: !!r[5] };
+  });
   window.TRADE_LAB_SAMPLE.live = { season: cur, week: 4, updated: Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 20, 2).getTime() / 1000), teams: liveTeams };
 })();

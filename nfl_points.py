@@ -275,6 +275,18 @@ def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
     return {"season": int(season), "players": list(players.values()), "defenses": defenses, "schedule": schedule}
 
 
+def player_weeks(points):
+    """Just each player's weekly points, small enough for a web page to
+    load whole: {"players": [[name key, name, position, team, {week: pts}]],
+    "defenses": {team: {week: pts}}}. The name key is name_key(name), for
+    matching Yahoo's names."""
+    return {"players": [[name_key(p["name"]), p["name"], p["position"], p["team"],
+                         {wk: round(w[0], 2) for wk, w in p["weeks"].items()}]
+                        for p in points["players"] if p["weeks"]],
+            "defenses": {team: {wk: round(w[0], 2) for wk, w in weeks.items()}
+                         for team, weeks in points["defenses"].items()}}
+
+
 def starters(points):
     """Each team's likely starters, from its most recent game: {team: {"QB":
     [name], "RB": [2 names], "WR": [3], "TE": [1], "K": [1]}}, by usage

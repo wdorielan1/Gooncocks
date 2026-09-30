@@ -78,6 +78,18 @@ class FakeYahoo:
             raise RuntimeError("Yahoo returned HTTP 999: Request denied")
         return list(self.rosters[team_key])
 
+    # the league's available players: (player, on waivers?)
+    available = [(player("470.p.50", "Jaylen Warren", "RB"), False), (player("470.p.51", "Rico Dowdle", "RB"), True),
+                 (player("470.p.52", "Jalen McMillan", "WR"), False)]
+    player_calls = 0
+
+    def league_players(self, league_key, status, position=None, start=0):
+        self.player_calls += 1
+        if self.down:
+            raise RuntimeError("Yahoo returned HTTP 503")
+        found = [p for p, w in self.available if (status == "A" or w) and (not position or p["position"] == position)]
+        return [dict(p) for p in found[start:start + 25]]
+
     def positions(self, league_key):
         return ["QB", "WR", "WR", "RB", "RB", "TE", "W/R/T", "K", "DEF", "BN", "IR"]
 
@@ -172,6 +184,27 @@ check("sign-in from the Tools page returns there", login_to(app, "tools", "code-
 check("a cancelled Tools sign-in returns there too", login_to(app, "tools", error="access_denied").startswith("/tools.html?signin=cancelled"))
 check("an unknown return page falls back to the Trade Lab",
       all(login_to(app, n, "code-will").startswith("/trade-lab.html?signin=ok") for n in ("https://evil.example", "//evil.example", "/tools.html", "")))
+
+# ---------------------------------------------------------------- available players
+aapp, aclock = new_app()
+r = aapp.handle(event("GET", "/available"))
+got = body(r)
+check("available players are public and list each player once, with waivers marked",
+      r["statusCode"] == 200 and [(p["name"], p["position"], p["waivers"]) for p in got["players"]]
+      == [("Jaylen Warren", "RB", False), ("Rico Dowdle", "RB", True), ("Jalen McMillan", "WR", False)] and not got["stale"], got)
+calls = aapp.yahoo.player_calls
+aapp.handle(event("GET", "/available"))
+check("the available list is reused for 30 minutes", aapp.yahoo.player_calls == calls)
+aclock.t += trade_lab.AVAILABLE_TTL + 1
+aapp.yahoo.down = True
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    got = body(aapp.handle(event("GET", "/available")))
+check("if Yahoo is down, the last list is shown and marked stale", got["stale"] is True and len(got["players"]) == 3, got)
+bapp, _ = new_app()
+bapp.yahoo.down = True
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    r = bapp.handle(event("GET", "/available"))
+check("with nothing saved and Yahoo down, it says so instead of guessing", r["statusCode"] == 503 and body(r)["error"] == "yahoo_unavailable")
 
 # every sign-in outcome is logged with a reason, never a state, code or token
 log = io.StringIO()

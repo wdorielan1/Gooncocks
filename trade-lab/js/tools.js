@@ -60,11 +60,29 @@
     LAC: 'Chargers', LAR: 'Rams', LV: 'Raiders', MIA: 'Dolphins', MIN: 'Vikings', NE: 'Patriots', NO: 'Saints', NYG: 'Giants',
     NYJ: 'Jets', PHI: 'Eagles', PIT: 'Steelers', SEA: 'Seahawks', SF: '49ers', TB: 'Buccaneers', TEN: 'Titans', WAS: 'Commanders' };
   var PA_POS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+  // Points Against data (also used for the Waiver Wire Report's matchups).
+  function ensurePa() {
+    if (S.pa === undefined && !S.paLoad) {
+      S.paLoad = api.pointsAgainst(season()).then(function (d) { S.pa = d; S.paLoad = null; renderTools(); },
+        function () { S.pa = null; S.paLoad = null; renderTools(); });
+    }
+    return S.pa !== undefined;
+  }
+  var TOOLS = { pa: 'tool-pa', ww: 'tool-ww' };
+  function renderToolNav() {
+    var tool = S.tool || 'pa';
+    Array.prototype.forEach.call(document.querySelectorAll('#toolNav .tool-b'), function (b) {
+      var on = b.getAttribute('data-tool') === tool;
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    Object.keys(TOOLS).forEach(function (t) { $(TOOLS[t]).hidden = t !== tool; });
+  }
   function renderTools() {
+    renderToolNav();
+    if (S.tool === 'ww') return renderWW();
     var st = $('paState');
-    if (S.pa === undefined) {
+    if (!ensurePa()) {
       st.className = 'state'; st.textContent = 'Loading…';
-      if (!S.paLoad) S.paLoad = api.pointsAgainst(season()).then(function (d) { S.pa = d; S.paLoad = null; renderTools(); });
       return;
     }
     if (!S.pa || !S.pa.teams || !Object.keys(S.pa.teams).length) {
@@ -217,11 +235,11 @@
   function loadMe() {
     api.me().then(function (m) {
       S.me = m; S.mine = null; S.mineErr = null;
-      if (S.pa) renderTools();
+      renderTools();
       if (m.signed_in && m.can_edit) {
         return api.myRoster().then(function (r) { S.mine = r.players || []; }, function (e) { S.mineErr = e.message; });
       }
-    }, function () { S.me = null; }).then(function () { if (S.pa) renderTools(); });
+    }, function () { S.me = null; }).then(renderTools);
   }
   function paNote(last4) {
     var wks = S.pa.weeks || [];
@@ -283,6 +301,211 @@
   }
 
 
+
+  // ---------- waiver wire report ----------
+  // Free agents and waiver players come from the Trade Lab API (read from
+  // Yahoo). Their points come from nflverse's weekly stats in our scoring
+  // (nfl/players_<season>.json), matched by name the way the Lambda does it.
+  function nameKey(n) {
+    return String(n || '').toLowerCase().replace(/[.'’]/g, '').replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/g, '')
+      .replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean).join(' ');
+  }
+  function nflIndex() {
+    if (S.nflIdx) return S.nflIdx;
+    var idx = {};
+    ((S.nflp || {}).players || []).forEach(function (p) {
+      (idx[p[0] + '|' + p[2]] = idx[p[0] + '|' + p[2]] || []).push(p);
+      (idx[p[0]] = idx[p[0]] || []).push(p);
+    });
+    return (S.nflIdx = idx);
+  }
+  // A player's weekly points {week: pts}, or null if nflverse has none.
+  function weeksFor(p) {
+    var team = nflCode(p.nfl_team);
+    if (p.position === 'DEF') return ((S.nflp || {}).defenses || {})[team] || null;
+    var idx = nflIndex(), k = nameKey(p.name), list = idx[k + '|' + p.position] || idx[k] || [];
+    if (!list.length) return null;
+    return (list.filter(function (x) { return x[3] === team; })[0] || list[0])[4];
+  }
+  function avg(a) { return a.length ? a.reduce(function (x, y) { return x + y; }, 0) / a.length : 0; }
+  // Points per game over the season and the last 4 games he played.
+  function form(p) {
+    var w = weeksFor(p);
+    if (!w) return null;
+    var pts = Object.keys(w).map(Number).sort(function (a, b) { return a - b; }).map(function (k) { return w[k]; });
+    return pts.length ? { games: pts.length, season: avg(pts), last4: avg(pts.slice(-4)) } : null;
+  }
+  // {team: rank from 0} of defenses by points allowed per game to a position.
+  function paRank(pos) {
+    if (!S.pa || !S.pa.teams) return {};
+    S.paRanks = S.paRanks || {};
+    if (S.paRanks[pos]) return S.paRanks[pos];
+    var rows = Object.keys(S.pa.teams).map(function (code) {
+      var t = S.pa.teams[code], wks = Object.keys(t.weeks || {});
+      return [code, wks.length ? avg(wks.map(function (w) { return (t.weeks[w] || {})[pos] || 0; })) : 0];
+    }).sort(function (a, b) { return b[1] - a[1] || a[0].localeCompare(b[0]); }), out = {};
+    rows.forEach(function (r, i) { out[r[0]] = i; });
+    return (S.paRanks[pos] = out);
+  }
+  // Next week's opponent and how easy that matchup is: {opp, i, n} or {bye}.
+  function nextMatchup(p) {
+    var wk = S.pa && paNextWeek();
+    if (!wk) return null;
+    var team = nflCode(p.nfl_team), opp = ((S.pa.schedule || {})[team] || {})[wk];
+    if (!opp) return { bye: true, wk: wk };
+    var r = paRank(p.position);
+    return { opp: opp, wk: wk, i: r[opp], n: Object.keys(r).length };
+  }
+  function matchupChip(m) {
+    if (!m) return h('span', { class: 'fine', text: '—' });
+    if (m.bye) return h('span', { class: 'ww-bye', text: 'BYE' });
+    var tier = m.i === undefined ? 2 : Math.min(4, Math.floor(m.i / m.n * 5));
+    return h('span', { class: 'ww-match' }, [h('span', { text: m.opp + ' ' }),
+      m.i === undefined ? null : h('span', { class: 'ww-rank pa-t' + (4 - tier), text: '#' + (m.i + 1), title: ordinal(m.i + 1) + ' easiest matchup of ' + m.n })]);
+  }
+  function tags(p) {
+    var out = [];
+    if (p.waivers) out.push(h('span', { class: 'ww-tag w', text: 'Waivers' }));
+    if (p.injury) out.push(h('span', { class: 'ww-tag inj' + (/^(O|IR|PUP|NFI|SUSP|D)/.test(p.injury.code) ? ' out' : ''),
+      text: p.injury.code + (p.injury.note ? ' · ' + p.injury.note : ''), title: p.injury.label }));
+    return out;
+  }
+  function ensureWW() {
+    if (S.avail === undefined && !S.availLoad) {
+      S.availLoad = api.available().then(function (d) { S.avail = d; }, function (e) { S.avail = null; S.availErr = e.message; })
+        .then(function () { S.availLoad = null; renderTools(); });
+    }
+    if (S.nflp === undefined && !S.nflpLoad) {
+      S.nflpLoad = api.nflPlayers(season()).then(function (d) { S.nflp = d; S.nflIdx = null; }, function () { S.nflp = null; })
+        .then(function () { S.nflpLoad = null; renderTools(); });
+    }
+    ensurePa();
+    if (S.me && S.me.can_edit && S.lg === undefined && !S.lgLoad) {
+      S.lgLoad = api.rosters().then(function (d) { S.lg = d; }, function (e) { S.lg = null; S.lgErr = e.message; })
+        .then(function () { S.lgLoad = null; renderTools(); });
+    }
+    return S.avail !== undefined && S.nflp !== undefined && S.pa !== undefined;
+  }
+  var WW_POS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+  var DEFAULT_SLOTS = ['QB', 'WR', 'WR', 'WR', 'RB', 'RB', 'TE', 'W/R/T', 'K', 'DEF'];
+  function renderWW() {
+    var st = $('wwState');
+    if (!ensureWW()) {
+      st.className = 'state'; st.textContent = 'Loading…';
+      renderReview();
+      return;
+    }
+    st.textContent = '';
+    if (!S.avail) { st.className = 'state'; st.textContent = S.availErr || 'Available players can’t be read from Yahoo right now.'; }
+    else if (!S.nflp) { st.className = 'state'; st.textContent = 'The Waiver Wire Report shows up once this season’s games have been scored.'; }
+    renderReview();
+    var pos = S.wwPos || 'RB', box = clear($('wwPos'));
+    WW_POS.forEach(function (p) {
+      box.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (p === pos ? ' on' : ''), 'aria-pressed': p === pos ? 'true' : 'false',
+        text: p, onclick: function () { S.wwPos = p; renderTools(); } }));
+    });
+    var tbl = clear($('wwTable'));
+    $('wwNote').textContent = '';
+    if (!S.avail || !S.nflp) return;
+    var all = S.avail.players.filter(function (p) { return p.position === pos; }).map(function (p) { return { p: p, f: form(p) }; });
+    var rows = all.filter(function (r) { return r.f; }).sort(function (a, b) { return b.f.last4 - a.f.last4 || b.f.season - a.f.season; }).slice(0, 25);
+    var wk = S.pa && paNextWeek();
+    tbl.appendChild(h('caption', { class: 'sr-only', text: 'Best available ' + PA_WHO[pos] + ', by points per game over their last 4 games' }));
+    tbl.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', class: 'pa-rank', text: '#' }), h('th', { scope: 'col', text: 'Player' }),
+      h('th', { scope: 'col', class: 'pa-ptsh', text: 'Last 4', 'aria-sort': 'descending' }), h('th', { scope: 'col', class: 'pa-nexth', text: 'Season' }),
+      wk ? h('th', { scope: 'col', class: 'pa-nexth', text: 'Wk ' + wk + ' vs' }) : null])]));
+    tbl.appendChild(h('tbody', {}, rows.length ? rows.map(function (r, i) {
+      return h('tr', {}, [h('td', { class: 'pa-rank', text: String(i + 1) }),
+        h('th', { scope: 'row' }, [h('b', { class: 'ww-name', text: r.p.name }),
+          h('span', { class: 'ww-sub' }, [h('span', { text: nflCode(r.p.nfl_team) + ' · ' + plural(r.f.games, 'game') })].concat(tags(r.p)))]),
+        h('td', { class: 'ww-pts', text: fmt(r.f.last4) }), h('td', { class: 'ww-season', text: fmt(r.f.season) }),
+        wk ? h('td', { class: 'ww-next' }, [matchupChip(nextMatchup(r.p))]) : null]);
+    }) : [h('tr', {}, [h('td', { colspan: '5', class: 'fine', text: 'No available ' + PA_WHO[pos] + ' with stats this season.' })])]));
+    var hidden = all.length - all.filter(function (r) { return r.f; }).length, ws = S.nflp.weeks || [];
+    $('wwNote').textContent = 'Free agents and waivers from Yahoo, ' + (S.avail.stale ? 'last read ' : 'checked ') + L.ago(S.avail.checked_at, now()) +
+      (S.avail.stale ? ' (Yahoo isn’t answering right now)' : '') + '. Points per game in our scoring from nflverse' +
+      (ws.length ? ', weeks ' + ws[0] + (ws.length > 1 ? '–' + ws[ws.length - 1] : '') : '') + '. ' +
+      (hidden ? plural(hidden, 'player') + ' with no NFL stats yet ' + (hidden === 1 ? 'isn’t' : 'aren’t') + ' shown.' : '');
+  }
+
+  // Team review: each team's best lineup by last-4 form, compared spot by
+  // spot. Only where you're in the bottom third of the league does it
+  // suggest pickups, and only ones who've outscored your starter there.
+  var OUT_SLOTS = { IR: 1, 'IR+': 1, NA: 1 };
+  function lineupStrength(players, need) {
+    var byPos = {};
+    Object.keys(need).forEach(function (pos) {
+      var best = players.filter(function (p) { return p.position === pos && !OUT_SLOTS[p.slot]; })
+        .map(function (p) { var f = form(p); return { p: p, v: f ? f.last4 : 0 }; })
+        .sort(function (a, b) { return b.v - a.v; }).slice(0, need[pos]);
+      byPos[pos] = { sum: best.reduce(function (x, b) { return x + b.v; }, 0), starters: best };
+    });
+    return byPos;
+  }
+  function review() {
+    var slots = (S.lg.slots && S.lg.slots.length ? S.lg.slots : DEFAULT_SLOTS), need = {};
+    slots.forEach(function (sl) { if (WW_POS.indexOf(sl) >= 0) need[sl] = (need[sl] || 0) + 1; });
+    var teams = (S.lg.teams || []).map(function (t) { return { key: t.team_key, s: lineupStrength(t.players || [], need) }; });
+    var mine = teams.filter(function (t) { return t.key === S.me.team_key; })[0];
+    if (!mine) return null;
+    var n = teams.length, cut = n - Math.ceil(n / 3);
+    return WW_POS.filter(function (pos) { return need[pos]; }).map(function (pos) {
+      var rank = 1 + teams.filter(function (t) { return t.s[pos].sum > mine.s[pos].sum + 1e-9; }).length;
+      var weakest = mine.s[pos].starters[mine.s[pos].starters.length - 1] || null, picks = [];
+      if (rank > cut && S.avail) {
+        var floor = (weakest ? weakest.v : 0) + 1, minGames = (S.nflp.weeks || []).length > 1 ? 2 : 1;
+        picks = S.avail.players.filter(function (p) { return p.position === pos; }).map(function (p) { return { p: p, f: form(p) }; })
+          .filter(function (r) { return r.f && r.f.games >= minGames && r.f.last4 >= floor; })
+          .sort(function (a, b) { return b.f.last4 - a.f.last4; }).slice(0, 3);
+      }
+      return { pos: pos, rank: rank, n: n, weak: rank > cut, tier: rank <= Math.ceil(n / 3) ? 0 : rank > cut ? 2 : 1,
+               weakest: weakest, many: need[pos] > 1, picks: picks };
+    });
+  }
+  function renderReview() {
+    var box = clear($('wwMe'));
+    if (S.signinMsg) box.appendChild(h('p', { class: 'banner-msg' + (S.signinMsg[1] ? ' ' + S.signinMsg[1] : ''), text: S.signinMsg[0] }));
+    if (!S.me) return;
+    if (!S.me.signed_in) {
+      box.appendChild(h('div', { class: 'pa-me-in' }, [h('span', { text: 'Sign in to see where your lineup is weak and who on the wire could help.' }), signInControl()]));
+      return;
+    }
+    var acct = h('p', { class: 'pa-me-acct' }, (S.me.can_edit ? ['Signed in as ', h('b', { text: S.me.manager || 'your team' })] : ['Signed in · not in our league'])
+      .concat([' · ', h('button', { type: 'button', class: 'linkbtn', text: 'Sign out', onclick: signOut })]));
+    if (!S.me.can_edit) { box.appendChild(acct); return; }
+    if (S.lg === null || !S.avail || !S.nflp) {
+      box.appendChild(acct);
+      if (S.lg === null) box.appendChild(h('p', { class: 'fine', text: S.lgErr || 'Rosters can’t be read from Yahoo right now.' }));
+      return;
+    }
+    if (S.lg === undefined) { box.appendChild(acct); box.appendChild(h('p', { class: 'fine', text: 'Checking your team…' })); return; }
+    var rows = review();
+    var card = h('section', { class: 'pa-mine ww-review', 'aria-label': 'Your team review' }, [
+      h('div', { class: 'pa-mine-h' }, [h('h4', { text: 'Your team review' }), acct])]);
+    if (!rows) { card.appendChild(h('p', { class: 'fine', text: 'Your team isn’t in Yahoo’s roster list right now. Try again in a minute.' })); box.appendChild(card); return; }
+    card.appendChild(h('p', { class: 'ww-explain', text: 'Your best lineup (by the last 4 games) against the rest of the league, spot by spot:' }));
+    card.appendChild(h('div', { class: 'ww-ranks' }, rows.map(function (r) {
+      return h('span', { class: 'ww-rk t' + r.tier, text: r.pos + ' ' + ordinal(r.rank), title: ordinal(r.rank) + ' of ' + r.n + ' at ' + r.pos });
+    })));
+    var weak = rows.filter(function (r) { return r.weak; });
+    if (!weak.length) {
+      card.appendChild(h('p', { class: 'ww-ok', text: 'Your lineup is in the top two-thirds of the league at every spot. No moves needed.' }));
+    }
+    weak.forEach(function (r) {
+      var w = r.weakest;
+      card.appendChild(h('div', { class: 'ww-weak' }, [
+        h('p', { class: 'ww-weak-h' }, [h('b', { text: r.pos }), ' · ' + ordinal(r.rank) + ' of ' + r.n + ' in the league']),
+        h('p', { class: 'ww-weak-s', text: w && w.v ? (r.many ? 'Your weakest starter: ' : 'Your starter: ') + w.p.name + ', ' + fmt(w.v) + ' pts/game (last 4)'
+          : 'You don’t have a ' + r.pos + ' scoring right now.' }),
+        r.picks.length ? h('ol', { class: 'ww-picks' }, r.picks.map(function (k) {
+          return h('li', {}, [h('div', {}, [h('b', { text: k.p.name }), h('span', { class: 'ww-sub' },
+            [h('span', { text: nflCode(k.p.nfl_team) + ' · ' + fmt(k.f.last4) + ' last 4' })].concat(tags(k.p)))]), matchupChip(nextMatchup(k.p))]);
+        })) : h('p', { class: 'fine', text: 'Nobody on the wire has outscored ' + (w ? w.p.name : 'that spot') + ' lately. Hold.' })
+      ]));
+    });
+    box.appendChild(card);
+  }
+
   // ---------- start ----------
   $('paSeason').addEventListener('click', function () { S.paLast4 = false; renderTools(); });
   $('paLast4').addEventListener('click', function () { S.paLast4 = true; renderTools(); });
@@ -298,7 +521,14 @@
     try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* ignore */ }
   }
   loadMe();
+  Array.prototype.forEach.call(document.querySelectorAll('#toolNav .tool-b'), function (b) {
+    b.addEventListener('click', function () {
+      S.tool = b.getAttribute('data-tool'); renderTools();
+      try { history.replaceState(null, '', S.tool === 'ww' ? '#waivers' : location.pathname); } catch (e) { /* ignore */ }
+    });
+  });
   var m = /^#(qb|rb|wr|te|k|def)$/i.exec(location.hash);
   if (m) S.paView = m[1].toUpperCase();
+  if (/^#waivers$/i.test(location.hash)) S.tool = 'ww';
   renderTools();
 })();

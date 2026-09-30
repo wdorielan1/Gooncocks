@@ -590,6 +590,10 @@ def _action_nfl_points(event):
                      "schedule": pts["schedule"], "starters": nfl_points.starters(pts),
                      "cols": {pos: [label for label, _cols in cols] for pos, cols in nfl_points.STAT_COLS.items()}},
                     separators=(",", ":")), "application/json")
+    # Every player's weekly points, for the Tools page's Waiver Wire Report.
+    _put(s3, bucket, f"nfl/players_{season}.json",
+         json.dumps(dict(nfl_points.player_weeks(pts), season=int(season), weeks=weeks, updated=int(time.time())),
+                    separators=(",", ":")), "application/json")
     box = _rivalry_store(s3, bucket).load(league_history.BOX_KEY.format(season), None) or {}
     result = nfl_points.check(pts, box)
     missing = nfl_points.unsupported(rules)

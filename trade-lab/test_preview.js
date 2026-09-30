@@ -395,6 +395,46 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.ok(await noOverflow(tp));
     assert.deepStrictEqual(tp.errors, []);
   });
+  await check('tools page: waiver wire report, best available and a team review when signed in', async () => {
+    const wp = await browser.newPage({ viewport: { width: 360, height: 780 } });
+    wp.errors = [];
+    wp.on('pageerror', e => wp.errors.push(e.message));
+    await wp.route(/^https?:/, r => r.abort());
+    await wp.goto('file://' + toolsFile, { waitUntil: 'domcontentloaded' });
+    await wp.click('#toolNav .tool-b[data-tool="ww"]');
+    await wp.waitForSelector('#wwTable tbody tr');
+    assert.ok(await wp.isHidden('#tool-pa'));
+    assert.strictEqual(await wp.getAttribute('#toolNav .tool-b[data-tool="ww"]', 'aria-pressed'), 'true');
+    const rows = await wp.$$eval('#wwTable tbody tr', trs => trs.map(t => [t.querySelector('.ww-name').textContent, parseFloat(t.querySelector('.ww-pts').textContent), t.textContent]));
+    assert.ok(rows.length >= 3 && rows.every((r, i) => i === 0 || rows[i - 1][1] >= r[1]), JSON.stringify(rows));  // best last 4 first
+    assert.ok(rows.some(r => r[0] === 'Tyrone Tracy Jr.' && /Waivers/.test(r[2])), 'waiver players are marked; Jr. names match');
+    assert.ok(rows.every(r => /(NO|[A-Z]{2,3}) ?#\d+|BYE/.test(r[2])), 'each has a next matchup');
+    await wp.click('#wwPos button:has-text("WR")');
+    assert.match(await wp.textContent('#wwTable'), /Jauan Jennings.*Q · Calf/);
+    assert.match(await wp.textContent('#wwNote'), /1 player with no NFL stats yet isn’t shown/);
+    await wp.click('#wwPos button:has-text("DEF")');
+    assert.match(await wp.textContent('#wwTable'), /Denver/);
+    // signed out: a sign-in prompt, no review; signed in: ranks and pickups only where weak
+    assert.match(await wp.textContent('#wwMe'), /Sign in to see where your lineup is weak/);
+    await wp.click('#wwMe button:has-text("Sign in")');
+    await wp.waitForSelector('.ww-review .ww-ranks');
+    const ranks = await wp.$$eval('.ww-rk', e => e.map(x => [x.textContent, x.className]));
+    assert.deepStrictEqual(ranks.map(r => r[0].split(' ')[0]), ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
+    const weak = await wp.$$eval('.ww-weak', ws => ws.map(w => [w.querySelector('.ww-weak-h').textContent, w.querySelector('.ww-weak-s').textContent,
+      [...w.querySelectorAll('.ww-picks li')].map(li => li.textContent)]));
+    assert.ok(weak.length >= 1 && weak.length === ranks.filter(r => /t2/.test(r[1])).length, JSON.stringify([ranks, weak]));
+    for (const [head, starter, picks] of weak) {
+      assert.match(head, /^(QB|RB|WR|TE|K|DEF) · \d+(st|nd|rd|th) of 6 in the league$/);
+      const floor = parseFloat(/, ([\d.]+) pts\/game/.exec(starter)[1]);
+      assert.ok(picks.every(t => parseFloat(/ · ([\d.]+) last 4/.exec(t)[1]) >= floor + 1), JSON.stringify([starter, picks]));  // only real upgrades
+    }
+    assert.match(await wp.textContent('.ww-review'), /TE · 5th of 6.*Jake Ferguson/);
+    assert.ok(await noOverflow(wp));
+    await wp.click('.ww-review .linkbtn:has-text("Sign out")');
+    await wp.waitForSelector('#wwMe .pa-me-in');
+    assert.deepStrictEqual(wp.errors, []);
+    await wp.close();
+  });
   if (shots) {
     await phone.screenshot({ path: path.join(shots, 'phone.png'), fullPage: true });
     await phone.click('#manageBtn');

@@ -343,6 +343,30 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .pa-mine-tag.t0, .pa-mine-tag.t1 { color: #5fd08f; } .pa-mine-tag.t3, .pa-mine-tag.t4 { color: #f08a80; }
 .pa-mine-chip { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--gold); white-space: normal; }
 .pa tr.pa-mine-row th, .pa tr.pa-mine-row td.pa-rank { background: #1a2238; }
+.ww .ww-name { display: block; color: var(--text); font-weight: 600; white-space: normal; }
+.ww-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 3px; font-size: 12px; color: var(--muted); font-weight: 400; }
+.ww-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: .3px; line-height: 1.5; white-space: nowrap; }
+.ww-tag.w { border: 1px solid var(--gold); color: var(--gold); }
+.ww-tag.inj { background: #5a4410; color: #ffd98a; }
+.ww-tag.inj.out { background: #6e3434; color: #ffd0cc; }
+.pa-full.ww td.ww-pts { color: #fff; font-size: 16px; font-weight: 700; background: none; }
+.pa-full.ww td.ww-season { color: #cfd6e4; font-weight: 400; font-size: 14px; background: none; }
+.pa-full.ww td.ww-next { background: none; font-size: 14px; font-weight: 600; color: #cfd6e4; }
+.ww-match { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.ww-rank { display: inline-block; min-width: 30px; padding: 2px 5px; border-radius: 3px; color: #fff; font-size: 12px; font-weight: 700; text-align: center; }
+.ww-bye { color: var(--muted); font-size: 13px; }
+.ww-explain { margin-top: 10px; font-size: 14px; color: #cfd6e4; }
+.ww-ranks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ww-rk { padding: 4px 8px; border-radius: 3px; font-size: 13px; font-weight: 700; color: #fff; background: #3a4150; }
+.ww-rk.t0 { background: #1f7a45; } .ww-rk.t2 { background: #95302e; }
+.ww-ok { margin-top: 12px; color: #5fd08f; font-weight: 600; }
+.ww-weak { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.ww-weak-h { color: #f08a80; }
+.ww-weak-h b { color: #fff; font-size: 16px; }
+.ww-weak-s { margin-top: 2px; font-size: 14px; color: #cfd6e4; }
+.ww-picks { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.ww-picks li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; background: #0f1d36; border-radius: 3px; }
+.ww-picks b { display: block; }
 .pa-full th, .pa-full td { padding: 8px 6px; }
 .pa-full td.pa-stat { color: #cfd6e4; font-weight: 400; font-size: 14px; background: none; }
 .pa-full thead th.pa-stat, .pa-full thead th.pa-ptsh { color: var(--muted); font: 600 11px/1.2 var(--body); letter-spacing: .5px; text-transform: uppercase; white-space: normal; min-width: 44px; }

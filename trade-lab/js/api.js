@@ -45,6 +45,10 @@
   LiveApi.prototype.pointsAgainst = function (season) {
     return fetch('/nfl/points_against_' + season + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
   };
+  LiveApi.prototype.available = function () { return this.call('GET', '/available'); };
+  LiveApi.prototype.nflPlayers = function (season) {
+    return fetch('/nfl/players_' + season + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
+  };
   LiveApi.prototype.liveWeek = function () {
     return fetch('/boxscores/live.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
   };
@@ -115,6 +119,10 @@
   PreviewApi.prototype.signOut = function () { this.signedIn = false; return later({ signed_in: false }); };
   PreviewApi.prototype.liveWeek = function () { return later(this.s.live || null); };
   PreviewApi.prototype.pointsAgainst = function () { return later(this.s.pointsAgainst || null); };
+  PreviewApi.prototype.available = function () {
+    return later({ players: this.s.available || [], checked_at: this.s.now - 600, stale: false });
+  };
+  PreviewApi.prototype.nflPlayers = function () { return later(this.s.nflPlayers || null); };
   PreviewApi.prototype.boxscores = function (season) { return later((this.s.boxscores || {})[season] || null); };
 
   window.TradeApi = window.TRADE_LAB_PREVIEW && window.TRADE_LAB_SAMPLE ? new PreviewApi(window.TRADE_LAB_SAMPLE) : new LiveApi();
