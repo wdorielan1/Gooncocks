@@ -409,6 +409,12 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.ok(rows.length >= 3 && rows.every((r, i) => i === 0 || rows[i - 1][1] >= r[1]), JSON.stringify(rows));  // best last 4 first
     assert.ok(rows.some(r => r[0] === 'Tyrone Tracy Jr.' && /Waivers/.test(r[2])), 'waiver players are marked; Jr. names match');
     assert.ok(rows.every(r => /(NO|[A-Z]{2,3}) ?#\d+|BYE/.test(r[2])), 'each has a next matchup');
+    // this week's projection: last 4 scaled by the matchup (within 30%), sortable
+    await wp.click('#wwSort button:has-text("Wk 4 proj")');
+    const proj = await wp.$$eval('#wwTable tbody tr', trs => trs.map(t => [parseFloat(t.querySelector('td:nth-of-type(2)').textContent), parseFloat(t.querySelector('.ww-proj').textContent)]));
+    assert.ok(proj.every((r, i) => (i === 0 || proj[i - 1][1] >= r[1]) && r[1] >= r[0] * 0.7 - 0.06 && r[1] <= r[0] * 1.3 + 0.06), JSON.stringify(proj));
+    assert.match(await wp.textContent('#wwNote'), /Wk 4 proj is our estimate/);
+    await wp.click('#wwSort button:has-text("Last 4")');
     await wp.click('#wwPos button:has-text("WR")');
     assert.match(await wp.textContent('#wwTable'), /Jauan Jennings.*Q · Calf/);
     assert.match(await wp.textContent('#wwNote'), /1 player with no NFL stats yet isn’t shown/);

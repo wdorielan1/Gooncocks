@@ -351,6 +351,12 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .ww-tag.inj.out { background: #6e3434; color: #ffd0cc; }
 .pa-full.ww td.ww-pts { color: #fff; font-size: 16px; font-weight: 700; background: none; }
 .pa-full.ww td.ww-season { color: #cfd6e4; font-weight: 400; font-size: 14px; background: none; }
+.pa-full.ww td.ww-proj { background: none; color: #cfd6e4; font-size: 14px; font-weight: 600; }
+.pa-full.ww td.ww-proj.on { color: #fff; font-size: 16px; font-weight: 700; }
+.ww-sorts { margin-top: 8px; align-items: center; }
+@media (max-width: 640px) { .ww .ww-col-season { display: none; } .ww-match { flex-direction: column; gap: 3px; } }
+.ww-sortlab { margin-right: 2px; font-size: 13px; color: var(--muted); }
+.ww-sort { font-size: 13px; }
 .pa-full.ww td.ww-next { background: none; font-size: 14px; font-weight: 600; color: #cfd6e4; }
 .ww-match { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
 .ww-rank { display: inline-block; min-width: 30px; padding: 2px 5px; border-radius: 3px; color: #fff; font-size: 12px; font-weight: 700; text-align: center; }

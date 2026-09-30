@@ -335,18 +335,20 @@
     var pts = Object.keys(w).map(Number).sort(function (a, b) { return a - b; }).map(function (k) { return w[k]; });
     return pts.length ? { games: pts.length, season: avg(pts), last4: avg(pts.slice(-4)) } : null;
   }
-  // {team: rank from 0} of defenses by points allowed per game to a position.
-  function paRank(pos) {
-    if (!S.pa || !S.pa.teams) return {};
-    S.paRanks = S.paRanks || {};
-    if (S.paRanks[pos]) return S.paRanks[pos];
+  // Points each defense allows per game to a position, the league average,
+  // and each defense's rank from 0 (0 = allows the most).
+  function paAllowed(pos) {
+    if (!S.pa || !S.pa.teams) return { ppg: {}, rank: {}, mean: 0 };
+    S.paAllow = S.paAllow || {};
+    if (S.paAllow[pos]) return S.paAllow[pos];
     var rows = Object.keys(S.pa.teams).map(function (code) {
       var t = S.pa.teams[code], wks = Object.keys(t.weeks || {});
       return [code, wks.length ? avg(wks.map(function (w) { return (t.weeks[w] || {})[pos] || 0; })) : 0];
-    }).sort(function (a, b) { return b[1] - a[1] || a[0].localeCompare(b[0]); }), out = {};
-    rows.forEach(function (r, i) { out[r[0]] = i; });
-    return (S.paRanks[pos] = out);
+    }).sort(function (a, b) { return b[1] - a[1] || a[0].localeCompare(b[0]); }), out = { ppg: {}, rank: {}, mean: avg(rows.map(function (r) { return r[1]; })) };
+    rows.forEach(function (r, i) { out.ppg[r[0]] = r[1]; out.rank[r[0]] = i; });
+    return (S.paAllow[pos] = out);
   }
+  function paRank(pos) { return paAllowed(pos).rank; }
   // Next week's opponent and how easy that matchup is: {opp, i, n} or {bye}.
   function nextMatchup(p) {
     var wk = S.pa && paNextWeek();
@@ -355,6 +357,16 @@
     if (!opp) return { bye: true, wk: wk };
     var r = paRank(p.position);
     return { opp: opp, wk: wk, i: r[opp], n: Object.keys(r).length };
+  }
+  // Our estimate for next week: his last-4 average, scaled by how many
+  // points his opponent allows to his position compared with the league
+  // average (kept within 30% either way). 0 on a bye; null if unknown.
+  function projection(p, f, m) {
+    if (!f || !m) return null;
+    if (m.bye) return 0;
+    var a = paAllowed(p.position), opp = a.ppg[m.opp];
+    if (opp === undefined || !a.mean) return f.last4;
+    return f.last4 * Math.max(0.7, Math.min(1.3, opp / a.mean));
   }
   function matchupChip(m) {
     if (!m) return h('span', { class: 'fine', text: '—' });
@@ -407,24 +419,41 @@
     var tbl = clear($('wwTable'));
     $('wwNote').textContent = '';
     if (!S.avail || !S.nflp) return;
-    var all = S.avail.players.filter(function (p) { return p.position === pos; }).map(function (p) { return { p: p, f: form(p) }; });
-    var rows = all.filter(function (r) { return r.f; }).sort(function (a, b) { return b.f.last4 - a.f.last4 || b.f.season - a.f.season; }).slice(0, 25);
-    var wk = S.pa && paNextWeek();
+    var wk = S.pa && paNextWeek(), byProj = !!(wk && S.wwSortProj);
+    var all = S.avail.players.filter(function (p) { return p.position === pos; }).map(function (p) {
+      var f = form(p), m = f && wk ? nextMatchup(p) : null;
+      return { p: p, f: f, m: m, proj: projection(p, f, m) };
+    });
+    var rows = all.filter(function (r) { return r.f; }).sort(function (a, b) {
+      return (byProj ? (b.proj || 0) - (a.proj || 0) : 0) || b.f.last4 - a.f.last4 || b.f.season - a.f.season;
+    }).slice(0, 25);
+    var sbox = clear($('wwSort'));
+    if (wk) {
+      sbox.appendChild(h('span', { class: 'ww-sortlab', text: 'Sort by' }));
+      [[false, 'Last 4'], [true, 'Wk ' + wk + ' proj']].forEach(function (o) {
+        sbox.appendChild(h('button', { type: 'button', class: 'pa-pos-b ww-sort' + (o[0] === byProj ? ' on' : ''), 'aria-pressed': o[0] === byProj ? 'true' : 'false',
+          text: o[1], onclick: function () { S.wwSortProj = o[0]; renderTools(); } }));
+      });
+    }
     tbl.appendChild(h('caption', { class: 'sr-only', text: 'Best available ' + PA_WHO[pos] + ', by points per game over their last 4 games' }));
     tbl.appendChild(h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', class: 'pa-rank', text: '#' }), h('th', { scope: 'col', text: 'Player' }),
-      h('th', { scope: 'col', class: 'pa-ptsh', text: 'Last 4', 'aria-sort': 'descending' }), h('th', { scope: 'col', class: 'pa-nexth', text: 'Season' }),
+      h('th', { scope: 'col', class: byProj ? 'pa-nexth' : 'pa-ptsh', text: 'Last 4', 'aria-sort': byProj ? null : 'descending' }),
+      h('th', { scope: 'col', class: 'pa-nexth ww-col-season', text: 'Season' }),
+      wk ? h('th', { scope: 'col', class: byProj ? 'pa-ptsh' : 'pa-nexth', text: 'Wk ' + wk + ' proj', 'aria-sort': byProj ? 'descending' : null }) : null,
       wk ? h('th', { scope: 'col', class: 'pa-nexth', text: 'Wk ' + wk + ' vs' }) : null])]));
     tbl.appendChild(h('tbody', {}, rows.length ? rows.map(function (r, i) {
       return h('tr', {}, [h('td', { class: 'pa-rank', text: String(i + 1) }),
         h('th', { scope: 'row' }, [h('b', { class: 'ww-name', text: r.p.name }),
           h('span', { class: 'ww-sub' }, [h('span', { text: nflCode(r.p.nfl_team) + ' · ' + plural(r.f.games, 'game') })].concat(tags(r.p)))]),
-        h('td', { class: 'ww-pts', text: fmt(r.f.last4) }), h('td', { class: 'ww-season', text: fmt(r.f.season) }),
-        wk ? h('td', { class: 'ww-next' }, [matchupChip(nextMatchup(r.p))]) : null]);
-    }) : [h('tr', {}, [h('td', { colspan: '5', class: 'fine', text: 'No available ' + PA_WHO[pos] + ' with stats this season.' })])]));
+        h('td', { class: byProj ? 'ww-season' : 'ww-pts', text: fmt(r.f.last4) }), h('td', { class: 'ww-season ww-col-season', text: fmt(r.f.season) }),
+        wk ? h('td', { class: 'ww-proj' + (byProj ? ' on' : ''), text: r.m && r.m.bye ? '0.0' : fmt(r.proj) }) : null,
+        wk ? h('td', { class: 'ww-next' }, [matchupChip(r.m)]) : null]);
+    }) : [h('tr', {}, [h('td', { colspan: '6', class: 'fine', text: 'No available ' + PA_WHO[pos] + ' with stats this season.' })])]));
     var hidden = all.length - all.filter(function (r) { return r.f; }).length, ws = S.nflp.weeks || [];
     $('wwNote').textContent = 'Free agents and waivers from Yahoo, ' + (S.avail.stale ? 'last read ' : 'checked ') + L.ago(S.avail.checked_at, now()) +
       (S.avail.stale ? ' (Yahoo isn’t answering right now)' : '') + '. Points per game in our scoring from nflverse' +
       (ws.length ? ', weeks ' + ws[0] + (ws.length > 1 ? '–' + ws[ws.length - 1] : '') : '') + '. ' +
+      (wk ? 'Wk ' + wk + ' proj is our estimate: last-4 average adjusted for how many points his opponent gives up to his position. ' : '') +
       (hidden ? plural(hidden, 'player') + ' with no NFL stats yet ' + (hidden === 1 ? 'isn’t' : 'aren’t') + ' shown.' : '');
   }
 
@@ -456,6 +485,7 @@
         var floor = (weakest ? weakest.v : 0) + 1, minGames = (S.nflp.weeks || []).length > 1 ? 2 : 1;
         picks = S.avail.players.filter(function (p) { return p.position === pos; }).map(function (p) { return { p: p, f: form(p) }; })
           .filter(function (r) { return r.f && r.f.games >= minGames && r.f.last4 >= floor; })
+          .map(function (r) { r.m = S.pa && paNextWeek() ? nextMatchup(r.p) : null; return r; })
           .sort(function (a, b) { return b.f.last4 - a.f.last4; }).slice(0, 3);
       }
       return { pos: pos, rank: rank, n: n, weak: rank > cut, tier: rank <= Math.ceil(n / 3) ? 0 : rank > cut ? 2 : 1,
@@ -499,7 +529,8 @@
           : 'You don’t have a ' + r.pos + ' scoring right now.' }),
         r.picks.length ? h('ol', { class: 'ww-picks' }, r.picks.map(function (k) {
           return h('li', {}, [h('div', {}, [h('b', { text: k.p.name }), h('span', { class: 'ww-sub' },
-            [h('span', { text: nflCode(k.p.nfl_team) + ' · ' + fmt(k.f.last4) + ' last 4' })].concat(tags(k.p)))]), matchupChip(nextMatchup(k.p))]);
+            [h('span', { text: nflCode(k.p.nfl_team) + ' · ' + fmt(k.f.last4) + ' last 4' + (k.m ? ' · ' + (k.m.bye ? 'bye' : fmt(projection(k.p, k.f, k.m)) + ' proj') : '') })]
+            .concat(tags(k.p)))]), matchupChip(k.m)]);
         })) : h('p', { class: 'fine', text: 'Nobody on the wire has outscored ' + (w ? w.p.name : 'that spot') + ' lately. Hold.' })
       ]));
     });
