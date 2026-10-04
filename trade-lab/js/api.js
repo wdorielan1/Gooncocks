@@ -47,6 +47,7 @@
   };
   LiveApi.prototype.available = function () { return this.call('GET', '/available'); };
   LiveApi.prototype.injuries = function () { return this.call('GET', '/injuries'); };
+  LiveApi.prototype.transactions = function () { return this.call('GET', '/transactions'); };
   LiveApi.prototype.nflPlayers = function (season) {
     return fetch('/nfl/players_' + season + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
   };
@@ -122,6 +123,9 @@
   PreviewApi.prototype.pointsAgainst = function () { return later(this.s.pointsAgainst || null); };
   PreviewApi.prototype.available = function () {
     return later({ players: this.s.available || [], checked_at: this.s.now - 600, stale: false });
+  };
+  PreviewApi.prototype.transactions = function () {
+    return later({ transactions: this.s.transactions || [], checked_at: this.s.now - 120, stale: false });
   };
   PreviewApi.prototype.injuries = function () {
     var i = this.s.injuries || { injured: [], back: [] };

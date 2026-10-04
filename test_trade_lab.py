@@ -78,6 +78,31 @@ class FakeYahoo:
             raise RuntimeError("Yahoo returned HTTP 999: Request denied")
         return list(self.rosters[team_key])
 
+    # the league's transactions, newest first
+    tx_list = (
+        [{"key": "t3", "type": "trade", "status": "successful", "timestamp": 300, "faab_bid": None,
+          "trader_team_key": WILL, "tradee_team_key": SAM,
+          "players": [{"player_key": "470.p.1", "name": "Amon-Ra St. Brown", "position": "WR", "nfl_team": "DET", "type": "trade",
+                       "source_type": "team", "source_team_key": WILL, "destination_type": "team", "destination_team_key": SAM},
+                      {"player_key": "470.p.3", "name": "Breece Hall", "position": "RB", "nfl_team": "NYJ", "type": "trade",
+                       "source_type": "team", "source_team_key": SAM, "destination_type": "team", "destination_team_key": WILL}]},
+         {"key": "t2", "type": "add/drop", "status": "successful", "timestamp": 200, "faab_bid": "12",
+          "players": [{"player_key": "470.p.50", "name": "Jaylen Warren", "position": "RB", "nfl_team": "PIT", "type": "add",
+                       "source_type": "waivers", "destination_type": "team", "destination_team_key": SAM},
+                      {"player_key": "470.p.51", "name": "Rico Dowdle", "position": "RB", "nfl_team": "CAR", "type": "drop",
+                       "source_type": "team", "source_team_key": SAM, "destination_type": "waivers"}]},
+         {"key": "t1", "type": "commish", "status": "successful", "timestamp": 100, "players": []}]
+        + [{"key": "f%d" % i, "type": "add", "status": "successful", "timestamp": 50 - i,
+            "players": [{"player_key": "470.p.%d" % (100 + i), "name": "Filler %d" % i, "position": "WR", "nfl_team": "KC", "type": "add",
+                         "source_type": "freeagents", "destination_type": "team", "destination_team_key": WILL}]} for i in range(30)])
+    tx_calls = 0
+
+    def transactions(self, league_key, start=0):
+        self.tx_calls += 1
+        if self.down:
+            raise RuntimeError("Yahoo returned HTTP 503")
+        return [dict(t) for t in self.tx_list[start:start + 25]]
+
     # the league's available players: (player, on waivers?)
     available = [(player("470.p.50", "Jaylen Warren", "RB"), False), (player("470.p.51", "Rico Dowdle", "RB"), True),
                  (player("470.p.52", "Jalen McMillan", "WR"), False)]
@@ -255,6 +280,27 @@ check("if Yahoo can't be reached for the re-check, the sign-in is left as it was
 lapp2.yahoo.down = False
 lclock2.t += trade_lab.SESSION_TTL
 check("after 30 days the sign-in ends", body(lapp2.handle(event("GET", "/me", cookies=lw2)))["signed_in"] is False)
+
+# ---------------------------------------------------------------- transaction report
+tapp, tclock = new_app()
+got = body(tapp.handle(event("GET", "/transactions")))
+tx = got["transactions"]
+check("transactions are public, newest first, across pages, without commissioner edits",
+      [t["key"] for t in tx[:2]] == ["t3", "t2"] and len(tx) == 32 and all(t["key"] != "t1" for t in tx) and tapp.yahoo.tx_calls == 2, [t["key"] for t in tx])
+check("a trade names both managers and who got whom",
+      tx[0]["type"] == "trade" and [m["manager"] for m in tx[0]["teams"]] == ["Will", "Sam"]
+      and [(p["name"], p["to_team"]) for p in tx[0]["players"]] == [("Amon-Ra St. Brown", SAM), ("Breece Hall", WILL)], tx[0])
+check("an add/drop names the manager, the waiver bid, and each player's move",
+      tx[1]["type"] == "move" and [m["manager"] for m in tx[1]["teams"]] == ["Sam"] and tx[1]["faab"] == "12"
+      and [(p["name"], p["action"], p["from"]) for p in tx[1]["players"]] == [("Jaylen Warren", "add", "waivers"), ("Rico Dowdle", "drop", "team")], tx[1])
+calls = tapp.yahoo.tx_calls
+tapp.handle(event("GET", "/transactions"))
+check("the transaction list is reused for 15 minutes", tapp.yahoo.tx_calls == calls)
+tclock.t += trade_lab.TRANSACTIONS_TTL + 1
+tapp.yahoo.down = True
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    got = body(tapp.handle(event("GET", "/transactions")))
+check("if Yahoo is down, the last list is shown, marked stale", got["stale"] is True and len(got["transactions"]) == 32)
 
 # every sign-in outcome is logged with a reason, never a state, code or token
 log = io.StringIO()

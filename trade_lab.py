@@ -7,6 +7,7 @@ are first-party on stats.gooncocks.com.
 
   GET  /api/trade-lab/available          free agents and waiver players (public, read-only)
   GET  /api/trade-lab/injuries           injured players on league rosters, and who's coming back (public)
+  GET  /api/trade-lab/transactions       the league's adds, drops and trades (public)
   GET  /api/trade-lab/login              start Yahoo sign-in (?next=tools returns to the Tools page)
   GET  /api/trade-lab/callback           Yahoo sends the manager back here
   GET  /api/trade-lab/me                 who's signed in (and a CSRF token)
@@ -82,6 +83,8 @@ AVAILABLE_PAGES = (("QB", 2), ("RB", 3), ("WR", 3), ("TE", 2), ("K", 1), ("DEF",
 WAIVER_PAGES = 4
 GAME_TIME = ("Q", "D")      # injury codes that can still play this week
 BACK_DAYS = 14              # how long a return from Out/IR stays in "Coming back"
+TRANSACTIONS_TTL = 15 * 60  # how long the league's transaction list is reused
+TRANSACTIONS_MAX = 300      # newest moves kept for the Transaction Report
 WRITE_ROSTER_TTL = 3 * 60   # a roster must be this fresh to approve a listing
 NOTE_MAX = 200
 MAX_ITEMS = 25
@@ -144,6 +147,9 @@ class YahooLeague:
 
     def positions(self, league_key):
         return yahoo_client.get_league_positions(self._league_token(), league_key)
+
+    def transactions(self, league_key, start=0):
+        return yahoo_client.get_league_transactions(self._league_token(), league_key, start=start)
 
     def league_players(self, league_key, status, position=None, start=0):
         return yahoo_client.get_league_players(self._league_token(), league_key, status=status, position=position, start=start)
@@ -659,6 +665,59 @@ class TradeLab:
         back.sort(key=lambda b: -b["changed"])
         return _json(200, {"injured": hurt, "back": back, "checked_at": refreshed, "stale": stale})
 
+    # ---------------- transaction report (Tools page)
+    def league_transactions(self, max_age=TRANSACTIONS_TTL):
+        """(data, stale): the season's completed adds, drops and trades,
+        newest first, from cache if fresh enough; the last good list
+        (stale=True) if Yahoo fails. Raises YahooUnavailable with nothing
+        cached."""
+        cached = self.store.get(f"META#{self.league}", "transactions")
+        if cached and self.now() - cached["data"]["fetched_at"] < max_age:
+            return cached["data"], False
+        try:
+            moves, seen = [], set()
+            while len(moves) < TRANSACTIONS_MAX:
+                page = self.yahoo.transactions(self.league, start=len(seen))
+                new = [t for t in page if t.get("key") not in seen]
+                for t in new:
+                    seen.add(t.get("key"))
+                    if t.get("status", "successful") == "successful" and t.get("type") in ("add", "drop", "add/drop", "trade"):
+                        moves.append(t)
+                if len(page) < 25 or not new:
+                    break
+            names = self.team_names()
+            out = []
+            for t in sorted(moves, key=lambda t: -t["timestamp"])[:TRANSACTIONS_MAX]:
+                out.append({
+                    "key": t.get("key"), "type": "trade" if t["type"] == "trade" else "move", "at": t["timestamp"],
+                    "faab": t.get("faab_bid"),
+                    "teams": [{"team_key": k, "manager": names.get(k, "")} for k in
+                              ([t.get("trader_team_key"), t.get("tradee_team_key")] if t["type"] == "trade"
+                               else sorted({p.get("destination_team_key") or p.get("source_team_key") for p in t["players"]} - {None}))
+                              if k],
+                    "players": [{"player_key": p.get("player_key"), "name": p.get("name") or "",
+                                 "position": primary_position(p), "nfl_team": p.get("nfl_team") or "",
+                                 "action": p.get("type") or "", "from": p.get("source_type") or "", "to": p.get("destination_type") or "",
+                                 "from_team": p.get("source_team_key"), "to_team": p.get("destination_team_key")}
+                                for p in t["players"]],
+                })
+            data = {"transactions": out, "fetched_at": self.now()}
+            self.store.put(f"META#{self.league}", "transactions", data, 1)
+            return data, False
+        except Exception:
+            traceback.print_exc()
+            if cached:
+                return cached["data"], True
+            raise YahooUnavailable()
+
+    def transactions(self, event, cookies):
+        """Public: the league's adds, drops and trades. Read-only."""
+        try:
+            data, stale = self.league_transactions()
+        except YahooUnavailable:
+            return _json(503, {"error": "yahoo_unavailable", "message": "Transactions can't be read from Yahoo right now. Try again in a minute."})
+        return _json(200, {"transactions": data["transactions"], "checked_at": data["fetched_at"], "stale": stale})
+
     # ---------------- sessions
     def session(self, cookies):
         sid = cookies.get(SESSION_COOKIE)
@@ -1153,6 +1212,8 @@ class TradeLab:
                 return self.available(event, cookies)
             if method == "GET" and route == "/injuries":
                 return self.injuries(event, cookies)
+            if method == "GET" and route == "/transactions":
+                return self.transactions(event, cookies)
             if method == "GET" and route == "/digest":
                 return self.digest(event)
             if method == "PUT" and route == "/needs":

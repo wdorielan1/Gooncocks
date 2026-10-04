@@ -451,6 +451,48 @@ def get_transactions(access_token, league_key):
     return results
 
 
+def get_league_transactions(access_token, league_key, start=0, count=25):
+    """One page of the league's completed transactions, newest first, with
+    everything the Transaction Report shows: [{'key', 'type', 'timestamp',
+    'faab_bid', 'trader_team_key', 'tradee_team_key', 'players': [{
+    'player_key', 'name', 'position', 'nfl_team', 'type' (add/drop/trade),
+    'source_type', 'source_team_key', 'destination_type',
+    'destination_team_key'}]}]."""
+    url = f"{FANTASY_BASE}/league/{league_key}/transactions;start={start};count={count}?format=json"
+    data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+    results = []
+    for entry in _yahoo_collection(_sub_resource(data["fantasy_content"]["league"], "transactions")):
+        tx = entry.get("transaction") if isinstance(entry, dict) else None
+        if not tx:
+            continue
+        meta = tx[0] if isinstance(tx[0], dict) else _merge_record(tx[0])
+        players = []
+        container = tx[1].get("players") if len(tx) > 1 and isinstance(tx[1], dict) else None
+        for p_entry in _yahoo_collection(container):
+            p = _player_record(p_entry.get("player") if isinstance(p_entry, dict) else None)
+            move = p.get("transaction_data") or {}
+            if isinstance(move, list):
+                move = move[0] if move else {}
+            players.append({
+                "player_key": p.get("player_key"),
+                "name": (p.get("name") or {}).get("full") or "",
+                "position": p.get("display_position") or "",
+                "nfl_team": (p.get("editorial_team_abbr") or "").upper(),
+                "type": move.get("type"),
+                "source_type": move.get("source_type"),
+                "source_team_key": move.get("source_team_key"),
+                "destination_type": move.get("destination_type"),
+                "destination_team_key": move.get("destination_team_key"),
+            })
+        results.append({
+            "key": meta.get("transaction_key"), "type": meta.get("type"), "status": meta.get("status", "successful"),
+            "timestamp": int(meta.get("timestamp") or 0), "faab_bid": meta.get("faab_bid"),
+            "trader_team_key": meta.get("trader_team_key"), "tradee_team_key": meta.get("tradee_team_key"),
+            "players": players,
+        })
+    return results
+
+
 def _extract_manager(team_meta):
     """Pull (nickname, guid) for the team's manager out of a merged team
     record's "managers" list (Yahoo nests it as [{"manager": {"nickname":

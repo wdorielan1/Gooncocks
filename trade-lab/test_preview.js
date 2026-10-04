@@ -521,6 +521,31 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.deepStrictEqual(ip.errors, []);
     await ip.close();
   });
+  await check('tools page: transaction report, adds/drops/trades with filters', async () => {
+    const xp = await browser.newPage({ viewport: { width: 360, height: 780 } });
+    xp.errors = [];
+    xp.on('pageerror', e => xp.errors.push(e.message));
+    await xp.route(/^https?:/, r => r.abort());
+    await xp.goto('file://' + toolsFile + '#transactions', { waitUntil: 'domcontentloaded' });
+    await xp.waitForSelector('.tx-card');
+    const cards = async () => xp.$$eval('.tx-card', cs => cs.map(c => c.querySelector('.tx-kind').textContent + ' ' + c.querySelector('.tx-head b').textContent));
+    assert.deepStrictEqual(await cards(), ['Add/Drop Will', 'Add Gabe', 'Trade Sam ⇄ Chet', 'Add/Drop Chris', 'Drop Patrick', 'Add/Drop Will']);  // newest first
+    assert.match(await xp.textContent('.tx-card >> nth=0'), /\+Jake Ferguson TE · DALClaim \$14.*−Tyjae Spears/);
+    assert.match(await xp.textContent('.tx-card >> nth=1'), /Ray Davis RB · BUFFree agent/);
+    assert.match(await xp.textContent('.tx-card.trade'), /Sam gets\+Zack Moss.*Chet gets\+Jaylen Waddle/);
+    assert.match(await xp.textContent('.tx-card >> nth=5'), /Jaylen Warren.*[\d.]+ pts\/g since · \d game/);  // how a pickup has done since
+    assert.match(await xp.textContent('.tx-active'), /Most activeWill 2/);
+    await xp.click('#txType button:has-text("Trades")');
+    assert.deepStrictEqual(await cards(), ['Trade Sam ⇄ Chet']);
+    await xp.click('#txType button:has-text("All")');
+    await xp.selectOption('#txWho', { label: 'Will' });
+    assert.deepStrictEqual(await cards(), ['Add/Drop Will', 'Add/Drop Will']);
+    await xp.click('.tx-chip:has-text("Will")');  // tapping again clears it
+    assert.strictEqual((await cards()).length, 6);
+    assert.ok(await noOverflow(xp));
+    assert.deepStrictEqual(xp.errors, []);
+    await xp.close();
+  });
   if (shots) {
     await phone.screenshot({ path: path.join(shots, 'phone.png'), fullPage: true });
     await phone.click('#manageBtn');

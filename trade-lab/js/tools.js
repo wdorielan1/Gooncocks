@@ -68,7 +68,7 @@
     }
     return S.pa !== undefined;
   }
-  var TOOLS = { pa: 'tool-pa', ww: 'tool-ww', ir: 'tool-ir' };
+  var TOOLS = { pa: 'tool-pa', ww: 'tool-ww', tx: 'tool-tx', ir: 'tool-ir' };
   function renderToolNav() {
     var tool = S.tool || 'pa';
     Array.prototype.forEach.call(document.querySelectorAll('#toolNav .tool-b'), function (b) {
@@ -81,6 +81,7 @@
     renderToolNav();
     if (S.tool === 'ww') return renderWW();
     if (S.tool === 'ir') return renderIR();
+    if (S.tool === 'tx') return renderTX();
     var st = $('paState');
     if (!ensurePa()) {
       st.className = 'state'; st.textContent = 'Loading…';
@@ -403,16 +404,20 @@
       S.availLoad = api.available().then(function (d) { S.avail = d; }, function (e) { S.avail = null; S.availErr = e.message; })
         .then(function () { S.availLoad = null; renderTools(); });
     }
-    if (S.nflp === undefined && !S.nflpLoad) {
-      S.nflpLoad = api.nflPlayers(season()).then(function (d) { S.nflp = d; S.nflIdx = null; }, function () { S.nflp = null; })
-        .then(function () { S.nflpLoad = null; renderTools(); });
-    }
+    ensureNflp();
     ensurePa();
     if (S.me && S.me.can_edit && S.lg === undefined && !S.lgLoad) {
       S.lgLoad = api.rosters().then(function (d) { S.lg = d; }, function (e) { S.lg = null; S.lgErr = e.message; })
         .then(function () { S.lgLoad = null; renderTools(); });
     }
     return S.avail !== undefined && S.nflp !== undefined && S.pa !== undefined;
+  }
+  function ensureNflp() {
+    if (S.nflp === undefined && !S.nflpLoad) {
+      S.nflpLoad = api.nflPlayers(season()).then(function (d) { S.nflp = d; S.nflIdx = null; }, function () { S.nflp = null; })
+        .then(function () { S.nflpLoad = null; renderTools(); });
+    }
+    return S.nflp !== undefined;
   }
   var WW_POS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   var DEFAULT_SLOTS = ['QB', 'WR', 'WR', 'WR', 'RB', 'RB', 'TE', 'W/R/T', 'K', 'DEF'];
@@ -586,6 +591,126 @@
   }
 
 
+
+  // ---------- transaction report ----------
+  // The league's adds, drops and trades from the Trade Lab API (read from
+  // Yahoo). For players picked up or traded for, "since" is how he's scored
+  // per game in our scoring in the weeks after the move.
+  function kickoffAt(team, wk) {
+    var k = (((S.pa || {}).kickoffs || {})[nflCode(team)] || {})[wk];
+    var m = k && /^(\d{4})-(\d\d)-(\d\d)(?: (\d\d):(\d\d))?$/.exec(k);
+    return m ? etToUtc(+m[1], +m[2], +m[3], m[4] ? +m[4] : 13, m[5] ? +m[5] : 0) : null;
+  }
+  function sinceMove(p, at) {
+    if (!S.nflp || !S.pa || !S.pa.kickoffs) return null;
+    var w = weeksFor(p);
+    if (!w) return null;
+    var first = null;
+    for (var wk = 1; wk <= 18 && first === null; wk++) { var k = kickoffAt(p.nfl_team, wk); if (k !== null && k > at) first = wk; }
+    if (first === null) return null;
+    var pts = Object.keys(w).map(Number).filter(function (k) { return k >= first; }).map(function (k) { return w[k]; });
+    return { games: pts.length, ppg: pts.length ? avg(pts) : null };
+  }
+  function txTime(at) {
+    var d = new Date(at * 1000);
+    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+  function txDay(at) {
+    return new Date(at * 1000).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  }
+  function txPlayer(p, sign, at, extra) {
+    var since = sign === '+' ? sinceMove(p, at) : null;
+    return h('li', { class: 'tx-p ' + (sign === '+' ? 'add' : sign === '−' ? 'drop' : 'trade') }, [
+      h('span', { class: 'tx-sign', text: sign, 'aria-hidden': 'true' }),
+      h('span', { class: 'tx-pmain' }, [h('b', { text: p.name }), h('span', { class: 'ir-pos', text: ' ' + p.position + (p.nfl_team ? ' · ' + nflCode(p.nfl_team) : '') }),
+        extra ? h('span', { class: 'ww-tag ' + extra[1], text: extra[0] }) : null]),
+      since ? h('span', { class: 'tx-since', title: 'Points per game in our scoring since this move' },
+        since.games ? [h('b', { text: fmt(since.ppg) }), ' pts/g since · ' + plural(since.games, 'game')] : ['No games since yet']) : null
+    ]);
+  }
+  function txCard(t) {
+    var mine = S.me && S.me.team_key && t.teams.some(function (m) { return m.team_key === S.me.team_key; });
+    var who = function (k) { var m = t.teams.filter(function (x) { return x.team_key === k; })[0]; return (m && m.manager) || 'A manager'; };
+    if (t.type === 'trade') {
+      var sides = t.teams.map(function (m) {
+        return h('div', { class: 'tx-side' }, [h('p', { class: 'tx-gets', text: (m.manager || 'A manager') + ' gets' }),
+          h('ul', { class: 'tx-list' }, t.players.filter(function (p) { return p.to_team === m.team_key; }).map(function (p) { return txPlayer(p, '+', t.at); }))]);
+      });
+      return h('li', { class: 'tx-card trade' + (mine ? ' mine' : '') }, [
+        h('div', { class: 'tx-head' }, [h('span', { class: 'tx-kind trade', text: 'Trade' }),
+          h('b', { text: t.teams.map(function (m) { return m.manager || 'A manager'; }).join(' ⇄ ') }), h('span', { class: 'tx-time', text: txTime(t.at) })]),
+        h('div', { class: 'tx-sides' }, sides)]);
+    }
+    var adds = t.players.filter(function (p) { return p.action === 'add'; }), drops = t.players.filter(function (p) { return p.action === 'drop'; });
+    var manager = who((adds[0] || {}).to_team || (drops[0] || {}).from_team || (t.teams[0] || {}).team_key);
+    var how = function (p) { return p.from === 'waivers' ? ['Claim' + (t.faab !== null && t.faab !== undefined && t.faab !== '' ? ' $' + t.faab : ''), 'w'] : ['Free agent', 'fa']; };
+    return h('li', { class: 'tx-card' + (mine ? ' mine' : '') }, [
+      h('div', { class: 'tx-head' }, [h('span', { class: 'tx-kind ' + (adds.length ? 'add' : 'drop'), text: adds.length && drops.length ? 'Add/Drop' : adds.length ? 'Add' : 'Drop' }),
+        h('b', { text: (mine ? '★ ' : '') + manager }), h('span', { class: 'tx-time', text: txTime(t.at) })]),
+      h('ul', { class: 'tx-list' }, adds.map(function (p) { return txPlayer(p, '+', t.at, how(p)); })
+        .concat(drops.map(function (p) { return txPlayer(p, '−', t.at); })))]);
+  }
+  function renderTX() {
+    var st = $('txState');
+    ensurePa(); ensureNflp();  // for "since" points
+    if (S.txd === undefined) {
+      if (!S.txLoad) S.txLoad = api.transactions().then(function (d) { S.txd = d; }, function (e) { S.txd = null; S.txErr = e.message; })
+        .then(function () { S.txLoad = null; renderTools(); });
+      st.className = 'state'; st.textContent = 'Loading…';
+      return;
+    }
+    st.textContent = '';
+    var body = clear($('txBody')), act = clear($('txActive')), tbox = clear($('txType'));
+    $('txNote').textContent = '';
+    if (!S.txd) { st.className = 'state'; st.textContent = S.txErr || 'Transactions can’t be read from Yahoo right now.'; return; }
+    var all = S.txd.transactions || [];
+    // manager menu: everyone who's made a move
+    var managers = {};
+    all.forEach(function (t) { t.teams.forEach(function (m) { if (m.team_key) managers[m.team_key] = m.manager || 'A manager'; }); });
+    var sel = $('txWho'), cur = S.txWho || '';
+    clear(sel);
+    sel.appendChild(h('option', { value: '', text: 'Everyone' }));
+    Object.keys(managers).sort(function (a, b) { return managers[a].localeCompare(managers[b]); }).forEach(function (k) {
+      sel.appendChild(h('option', { value: k, text: managers[k] + (S.me && S.me.team_key === k ? ' (you)' : '') }));
+    });
+    sel.value = managers[cur] ? cur : '';
+    sel.onchange = function () { S.txWho = sel.value; renderTools(); };
+    var type = S.txType || 'all';
+    [['all', 'All'], ['add', 'Adds'], ['drop', 'Drops'], ['trade', 'Trades']].forEach(function (o) {
+      tbox.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (o[0] === type ? ' on' : ''), 'aria-pressed': o[0] === type ? 'true' : 'false',
+        text: o[1], onclick: function () { S.txType = o[0]; renderTools(); } }));
+    });
+    // most active, all season
+    var count = {};
+    all.forEach(function (t) { t.teams.forEach(function (m) { if (m.team_key) count[m.team_key] = (count[m.team_key] || 0) + 1; }); });
+    var order = Object.keys(count).sort(function (a, b) { return count[b] - count[a] || managers[a].localeCompare(managers[b]); });
+    if (order.length) {
+      act.appendChild(h('div', { class: 'tx-active' }, [h('span', { class: 'strip-lab', text: 'Most active' })].concat(order.map(function (k) {
+        return h('button', { type: 'button', class: 'tx-chip' + (k === sel.value ? ' on' : ''), onclick: function () { S.txWho = k === sel.value ? '' : k; renderTools(); } },
+          [managers[k] + ' ', h('b', { text: String(count[k]) })]);
+      }))));
+    }
+    var shown = all.filter(function (t) {
+      if (sel.value && !t.teams.some(function (m) { return m.team_key === sel.value; })) return false;
+      if (type === 'trade') return t.type === 'trade';
+      if (type === 'add' || type === 'drop') return t.type !== 'trade' && t.players.some(function (p) { return p.action === type; });
+      return true;
+    });
+    if (!shown.length) { body.appendChild(h('p', { class: 'fine', text: all.length ? 'No moves match.' : 'No moves yet this season.' })); }
+    var lastDay = null, list = null;
+    shown.forEach(function (t) {
+      var d = txDay(t.at);
+      if (d !== lastDay) {
+        lastDay = d;
+        body.appendChild(h('h4', { class: 'tx-day', text: d }));
+        list = body.appendChild(h('ol', { class: 'tx-feed' }));
+      }
+      list.appendChild(txCard(t));
+    });
+    $('txNote').textContent = 'From Yahoo, ' + (S.txd.stale ? 'last read ' : 'checked ') + L.ago(S.txd.checked_at, now()) +
+      (S.txd.stale ? ' (Yahoo isn’t answering right now)' : '') + '. Times are in your time zone. “Since” uses nflverse stats in our scoring.';
+  }
+
   // ---------- injury report ----------
   // Every injured player on a league roster, from the Trade Lab API (which
   // reads Yahoo and remembers each player's last status, for "coming back").
@@ -730,12 +855,13 @@
   Array.prototype.forEach.call(document.querySelectorAll('#toolNav .tool-b'), function (b) {
     b.addEventListener('click', function () {
       S.tool = b.getAttribute('data-tool'); renderTools();
-      try { history.replaceState(null, '', { ww: '#waivers', ir: '#injuries' }[S.tool] || location.pathname); } catch (e) { /* ignore */ }
+      try { history.replaceState(null, '', { ww: '#waivers', ir: '#injuries', tx: '#transactions' }[S.tool] || location.pathname); } catch (e) { /* ignore */ }
     });
   });
   var m = /^#(qb|rb|wr|te|k|def)$/i.exec(location.hash);
   if (m) S.paView = m[1].toUpperCase();
   if (/^#waivers$/i.test(location.hash)) S.tool = 'ww';
   if (/^#injuries$/i.test(location.hash)) S.tool = 'ir';
+  if (/^#transactions$/i.test(location.hash)) S.tool = 'tx';
   renderTools();
 })();

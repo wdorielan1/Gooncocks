@@ -54,6 +54,7 @@
     <div class="tool-nav" role="group" aria-label="Tools" id="toolNav">
       <button type="button" class="tool-b on" aria-pressed="true" data-tool="pa"><b>Points Against</b><span>Which defenses give up the most to each position</span></button>
       <button type="button" class="tool-b" aria-pressed="false" data-tool="ww"><b>Waiver Wire Report</b><span>The best free agents, and where your team needs help</span></button>
+      <button type="button" class="tool-b" aria-pressed="false" data-tool="tx"><b>Transaction Report</b><span>Every pickup, drop and trade in one place</span></button>
       <button type="button" class="tool-b" aria-pressed="false" data-tool="ir"><b>Injury Report</b><span>Who’s out, who’s a game-time call, and who’s coming back</span></button>
     </div>
     <div id="tool-pa">
@@ -81,6 +82,18 @@
     <div id="wwState" class="state" role="status" aria-live="polite"></div>
     <div class="pa-wrap"><table class="pa pa-full pa-slim ww" id="wwTable"><caption class="sr-only">Best available players</caption></table></div>
     <p class="fine" id="wwNote"></p>
+    </div>
+    <div id="tool-tx" hidden>
+    <h3 class="tool-h">Transaction Report</h3>
+    <p class="pa-intro">Every add, drop and trade in the league this season, newest first, straight from Yahoo. For pickups, <b>“since”</b> is how he’s scored per game in our scoring since the move.</p>
+    <div class="tx-filters">
+      <label class="tx-sel">Manager <select id="txWho"></select></label>
+      <div class="pa-pos" role="group" aria-label="Type" id="txType"></div>
+    </div>
+    <div id="txActive"></div>
+    <div id="txState" class="state" role="status" aria-live="polite"></div>
+    <div id="txBody"></div>
+    <p class="fine" id="txNote"></p>
     </div>
     <div id="tool-ir" hidden>
     <h3 class="tool-h">Injury Report</h3>

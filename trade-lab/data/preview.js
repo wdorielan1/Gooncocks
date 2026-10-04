@@ -211,5 +211,28 @@
     });
   });
   window.TRADE_LAB_SAMPLE.injuries = { injured: injured, back: back };
+  // Transaction Report: made-up adds, drops and trades over the last few weeks.
+  function pk(n) { var f = FA.concat(R.Will, R.Sam, R.Chet, R.Chris, R.Gabe, R.Patrick).filter(function (r) { return r[1] === n; })[0]; return f; }
+  function mv(name, action, fromType, toType, team) {
+    var r = pk(name);
+    return { player_key: '470.p.' + r[0], name: r[1], position: r[2], nfl_team: r[3], action: action, from: fromType, to: toType,
+             from_team: action === 'drop' ? T[team] : null, to_team: action === 'add' ? T[team] : null };
+  }
+  var day = 86400;
+  window.TRADE_LAB_SAMPLE.transactions = [
+    { key: 's1', type: 'move', at: now - 0.3 * day, faab: '14', teams: [{ team_key: T.Will, manager: 'Will' }],
+      players: [mv('Jake Ferguson', 'add', 'waivers', 'team', 'Will'), mv('Tyjae Spears', 'drop', 'team', 'waivers', 'Will')] },
+    { key: 's2', type: 'move', at: now - 1.2 * day, faab: null, teams: [{ team_key: T.Gabe, manager: 'Gabe' }],
+      players: [mv('Ray Davis', 'add', 'freeagents', 'team', 'Gabe')] },
+    { key: 's3', type: 'trade', at: now - 2.4 * day, faab: null, teams: [{ team_key: T.Sam, manager: 'Sam' }, { team_key: T.Chet, manager: 'Chet' }],
+      players: [Object.assign(mv('Jaylen Waddle', 'trade', 'team', 'team', 'Sam'), { from_team: T.Sam, to_team: T.Chet }),
+                Object.assign(mv('Zack Moss', 'trade', 'team', 'team', 'Chet'), { from_team: T.Chet, to_team: T.Sam })] },
+    { key: 's4', type: 'move', at: now - 6.5 * day, faab: '3', teams: [{ team_key: T.Chris, manager: 'Chris' }],
+      players: [mv('Kimani Vidal', 'add', 'waivers', 'team', 'Chris'), mv('Justin Fields', 'drop', 'team', 'waivers', 'Chris')] },
+    { key: 's5', type: 'move', at: now - 7.1 * day, faab: null, teams: [{ team_key: T.Patrick, manager: 'Patrick' }],
+      players: [mv('Javonte Williams', 'drop', 'team', 'waivers', 'Patrick')] },
+    { key: 's6', type: 'move', at: now - 13.4 * day, faab: '21', teams: [{ team_key: T.Will, manager: 'Will' }],
+      players: [mv('Jaylen Warren', 'add', 'waivers', 'team', 'Will'), mv('Ray Davis', 'drop', 'team', 'waivers', 'Will')] }
+  ];
   window.TRADE_LAB_SAMPLE.live = { season: cur, week: 4, updated: Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 20, 2).getTime() / 1000), teams: liveTeams };
 })();
