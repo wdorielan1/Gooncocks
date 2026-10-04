@@ -372,6 +372,25 @@ def get_league_players(access_token, league_key, status="A", position=None, star
     return players
 
 
+def get_week_leaders(access_token, league_key, position, week, count=25):
+    """The league's top fantasy scorers at one position for a week so far,
+    in league scoring, owned or not: [{'player_key', 'name', 'position',
+    'nfl_team', 'points'}], most points first."""
+    url = (f"{FANTASY_BASE}/league/{league_key}/players;position={position};sort=PTS;sort_type=week;sort_week={week};"
+           f"count={count}/stats;type=week;week={week}?format=json")
+    data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+    out = []
+    for entry in _yahoo_collection(_sub_resource(data["fantasy_content"]["league"], "players")):
+        p = _player_record(entry.get("player") if isinstance(entry, dict) else None)
+        total = (p.get("player_points") or {}).get("total")
+        if not p.get("player_key") or total is None:
+            continue
+        out.append({"player_key": p["player_key"], "name": (p.get("name") or {}).get("full") or "",
+                    "position": p.get("display_position") or position, "nfl_team": (p.get("editorial_team_abbr") or "").upper(),
+                    "points": float(total)})
+    return sorted(out, key=lambda r: -r["points"])
+
+
 def get_league_season(access_token, league_key):
     """One season's final standings: {'season', 'name', 'is_finished',
     'renew', 'teams': [{'team', 'manager', 'manager_guid', 'rank'}]}.

@@ -125,6 +125,7 @@ from yahoo_client import (
     get_scoreboard,
     get_team_roster,
     get_transactions,
+    get_week_leaders,
     get_league_season,
     get_league_scoring,
     get_user_leagues,
@@ -630,6 +631,22 @@ def _action_trade_lab_live(event, context=None):
     points = get_player_points(token, league_key, keys, week)
     live = league_history.live_week(season, week, rosters, points, time.time())
     _put(s3, bucket, league_history.LIVE_PUBLIC_KEY, json.dumps(live, separators=(",", ":")), "application/json")
+    try:  # the This Week page's live Fantasy Leaders; never blocks the live snapshot
+        owners = {}
+        for m in raw:
+            for side in ("team_a", "team_b"):
+                t = m[side]
+                for p in rosters.get(t.get("team_key")) or []:
+                    owners[p.get("player_key")] = _manager_name(t) or t.get("name")
+        leaders = {"season": int(season), "week": int(week), "updated": int(time.time()), "positions": {}}
+        for pos in nfl_points.POSITIONS:
+            leaders["positions"][pos] = [[r["name"], nfl_points.team_code(r["nfl_team"]), round(r["points"], 2), owners.get(r["player_key"])]
+                                         for r in get_week_leaders(token, league_key, pos, week)[:LEADERS_SHOWN]]
+        _put(s3, bucket, LEADERS_LIVE_KEY, json.dumps(leaders, separators=(",", ":")), "application/json")
+        print(f"Fantasy Leaders: week {week} saved.")
+    except Exception:
+        traceback.print_exc()
+        print("Skipped the live Fantasy Leaders this run - see the error above.")
     played = sum(r[5] for rows in live["teams"].values() for r in rows)
     print(f"Trade Lab live week: {season} week {week}, {played} of {sum(len(r) for r in live['teams'].values())} players have played.")
     return {"season": live["season"], "week": week, "players_played": played}
@@ -983,6 +1000,7 @@ def _save_standings(s3, bucket, standings):
 
 
 LEADERS_SHOWN = 25  # players per position in the weekly page's Fantasy Leaders
+LEADERS_LIVE_KEY = "leaders/live.json"  # this week's leaders so far, saved by the Sunday/Monday live runs
 
 
 def _week_leaders(s3, bucket, week, rosters):
@@ -996,6 +1014,10 @@ def _week_leaders(s3, bucket, week, rosters):
     data = _load_json(s3, bucket, f"nfl/players_{season}.json", None)
     wk = str(int(week))
     if not data or int(week) not in [int(w) for w in data.get("weeks") or []]:
+        # nflverse hasn't posted the week yet: use Monday night's live snapshot from Yahoo
+        live = _load_json(s3, bucket, LEADERS_LIVE_KEY, None)
+        if live and int(live.get("week") or 0) == int(week):
+            return {pos: [tuple(r) for r in rows] for pos, rows in (live.get("positions") or {}).items()}
         return None
     owner = {}
     for r in rosters or []:

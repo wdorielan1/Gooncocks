@@ -179,6 +179,13 @@ check("the week's leaders come from the NFL points file, newest week only, owner
       isinstance(_wl, dict) and _wl["QB"] == [("Jalen Hurts", "PHI", 31.2, "Will")] and _wl["RB"] == [("Aaron Jones", "MIN", 26.4, None)]
       and _wl["DEF"] == [("DEN", "DEN", 17.5, "Will")], _wl)
 
+_real = webpage.render_html(4, _SM, is_sample=False, leaders=_L, weeks=[4])
+check("the This Week page can show next week's live leaders above this week's final ones",
+      'id="ldrLive" hidden' in _real and 'id="ldrFinal"' in _real and "/leaders/live.json" in _real
+      and "d.week !== PAGE_WEEK + 1" in _real and "var PAGE_WEEK = 4," in _real)
+check("with no final leaders yet, the section waits hidden for the live ones",
+      '<section class="sec" id="leaders" aria-labelledby="leaders-title" hidden>' in webpage.render_html(4, _SM, is_sample=False, weeks=[4]))
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed: {', '.join(failures)}")
