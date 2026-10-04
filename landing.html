@@ -167,9 +167,11 @@
   /* ---------- fantasy leaders ticker (this week so far) ---------- */
   .ldr-band{display:flex; align-items:stretch; border-bottom:1px solid var(--hairline); background:#0a1430; overflow:hidden; text-decoration:none; color:inherit}
   .ldr-band:focus-visible{outline:2px solid var(--gold); outline-offset:-2px}
-  .ldr-tag .ldr-all{margin-top:2px; text-decoration:underline}
+  .ldr-tag .ldr-all{text-decoration:underline; margin-left:4px}
+  #ldrWhen:not(:empty)::after{content:' \00b7 '}
+  #ldrTrack{padding:10px 0}
   .ldr-band[hidden]{display:none}
-  .ldr-tag{flex:none; display:grid; align-content:center; gap:2px; padding:8px 16px; background:var(--gold); color:#141005; text-align:center}
+  .ldr-tag{flex:none; display:grid; align-content:center; gap:2px; padding:6px 16px; background:var(--gold); color:#141005; text-align:center}
   .ldr-tag b{font-family:'Anton','Arial Narrow',sans-serif; font-size:15px; letter-spacing:1px; font-weight:400}
   .ldr-tag small{font-size:10px; font-weight:700; letter-spacing:.8px; text-transform:uppercase}
   @media (max-width:560px){
@@ -376,6 +378,11 @@
   </div>
 </header>
 
+<a class="ldr-band" id="ldrBand" href="https://stats.gooncocks.com/tools.html#leaders" aria-label="This week's fantasy leaders: see the full list" hidden>
+  <span class="ldr-tag"><b id="ldrWeek">LEADERS</b><small><span id="ldrWhen"></span><span class="ldr-all">See all ›</span></small></span>
+  <span class="ldr-view"><span class="ticker-track" id="ldrTrack"></span></span>
+</a>
+
 <div id="top"></div>
 
 <section class="hero" aria-labelledby="heroTitle">
@@ -405,10 +412,6 @@
   <div class="ticker-track" id="tickerTrack"></div>
 </div>
 
-<a class="ldr-band" id="ldrBand" href="https://stats.gooncocks.com/tools.html#leaders" aria-label="This week's fantasy leaders: see the full list" hidden>
-  <span class="ldr-tag"><b id="ldrWeek">LEADERS</b><small id="ldrWhen"></small><small class="ldr-all">See all ›</small></span>
-  <span class="ldr-view"><span class="ticker-track" id="ldrTrack"></span></span>
-</a>
 
 <main class="wrap">
 
