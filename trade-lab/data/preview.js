@@ -243,5 +243,15 @@
   });
   Object.keys(lpos).forEach(function (k) { lpos[k].sort(function (a, b) { return b[2] - a[2]; }); });
   window.TRADE_LAB_SAMPLE.leaders = { season: cur, week: 4, updated: now - 1800, positions: lpos };
+  // Past weeks' final leaders (week 1 left out: not published yet).
+  window.TRADE_LAB_SAMPLE.leadersWeeks = {};
+  [2, 3].forEach(function (wk) {
+    var pp = { QB: [], RB: [], WR: [], TE: [], K: [], DEF: [] };
+    names.map(function (n) { return R[n]; }).concat([FA]).forEach(function (list) {
+      list.forEach(function (r) { if (pp[r[2]]) pp[r[2]].push([r[1], r[3], points(r[1], cur, wk - 1), ownerOf[r[1]] || null]); });
+    });
+    Object.keys(pp).forEach(function (k) { pp[k].sort(function (a, b) { return b[2] - a[2]; }); });
+    window.TRADE_LAB_SAMPLE.leadersWeeks[wk] = { season: cur, week: wk, updated: now - (4 - wk) * 7 * 86400, positions: pp };
+  });
   window.TRADE_LAB_SAMPLE.live = { season: cur, week: 4, updated: Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 20, 2).getTime() / 1000), teams: liveTeams };
 })();

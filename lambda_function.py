@@ -1001,6 +1001,7 @@ def _save_standings(s3, bucket, standings):
 
 LEADERS_SHOWN = 25  # players per position in the weekly page's Fantasy Leaders
 LEADERS_LIVE_KEY = "leaders/live.json"  # this week's leaders so far, saved by the Sunday/Monday live runs
+LEADERS_WEEK_KEY = "leaders/week-{}.json"  # a published week's final leaders, for the Tools page's past weeks
 
 
 def _week_leaders(s3, bucket, week, rosters):
@@ -1034,6 +1035,16 @@ def _week_leaders(s3, bucket, week, rosters):
         if weeks.get(wk) is not None:
             out["DEF"].append((team, team, weeks[wk], owner.get(("DEF", team))))
     return {pos: sorted(rows, key=lambda r: -r[2])[:LEADERS_SHOWN] for pos, rows in out.items()}
+
+
+def _save_week_leaders(s3, bucket, week, leaders):
+    """Saves a published week's leaders in the live file's shape, so the
+    Tools page's Fantasy Leaders can show past weeks next to the live one."""
+    index = _rivalry_store(s3, bucket).load(league_history.INDEX_KEY, None) or {}
+    season = int(index.get("current_season") or time.strftime("%Y"))
+    data = {"season": season, "week": int(week), "updated": int(time.time()),
+            "positions": {pos: [list(r) for r in rows] for pos, rows in leaders.items()}}
+    _put(s3, bucket, LEADERS_WEEK_KEY.format(int(week)), json.dumps(data, separators=(",", ":")), "application/json")
 
 
 def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, transactions=None, notify=True,
@@ -1091,6 +1102,8 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
     if not is_sample:
         try:
             leaders = _week_leaders(s3, bucket, week, rosters)
+            if leaders:
+                _save_week_leaders(s3, bucket, week, leaders)
         except Exception:
             traceback.print_exc()
             print("Skipped the Fantasy Leaders this run - see the error above.")

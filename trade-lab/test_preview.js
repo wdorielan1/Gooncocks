@@ -546,19 +546,31 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.deepStrictEqual(xp.errors, []);
     await xp.close();
   });
-  await check('tools page: fantasy leaders this week, by position, with owners and FA', async () => {
+  await check('tools page: fantasy leaders live and past weeks, by position, with owners and FA', async () => {
     const lp = await browser.newPage({ viewport: { width: 360, height: 780 } });
     lp.errors = [];
     lp.on('pageerror', e => lp.errors.push(e.message));
     await lp.route(/^https?:/, r => r.abort());
     await lp.goto('file://' + toolsFile + '#leaders', { waitUntil: 'domcontentloaded' });
     await lp.waitForSelector('.ld-row');
-    assert.match(await lp.textContent('#ldWhen'), /^Week 4 · as of /);
+    assert.match(await lp.textContent('#ldWhen'), /^Week 4 · live · as of /);
     const qbs = await lp.$$eval('.ld-row', rs => rs.map(r => [r.querySelector('b').textContent, parseFloat(r.querySelector('.ld-pts').textContent), r.querySelector('small').textContent]));
     assert.ok(qbs.length >= 5 && qbs.every((r, i) => i === 0 || qbs[i - 1][1] >= r[1]), JSON.stringify(qbs));  // most points first
     assert.ok(qbs.some(r => /· FA$/.test(r[2])) && qbs.some(r => /· (Will|Sam|Chet|Chris|Gabe|Patrick)$/.test(r[2])), JSON.stringify(qbs));
     await lp.click('#ldPos button:has-text("DEF")');
     assert.match(await lp.textContent('.ld-row'), /D\/ST/);
+    assert.deepStrictEqual(await lp.$$eval('#ldWeeks button', bs => bs.map(b => b.textContent)), ['Live · Wk 4', 'Wk 3', 'Wk 2', 'Wk 1']);
+    const live1 = await lp.textContent('.ld-row');
+    await lp.click('#ldWeeks button:has-text("Wk 3")');
+    await lp.waitForFunction(() => /^Week 3 · final$/.test(document.getElementById('ldWhen').textContent));
+    assert.match(await lp.getAttribute('#ldWeeks button:has-text("Wk 3")', 'aria-pressed'), /true/);
+    assert.match(await lp.textContent('#ldPos .on'), /DEF/);  // keeps the position picked
+    assert.notStrictEqual(await lp.textContent('.ld-row'), live1);
+    await lp.click('#ldWeeks button:has-text("Wk 1")');
+    await lp.waitForFunction(() => /aren’t saved yet/.test(document.getElementById('ldState').textContent));
+    assert.strictEqual(await lp.$$eval('.ld-row', rs => rs.length), 0);
+    await lp.click('#ldWeeks button:has-text("Live")');
+    await lp.waitForFunction(() => /^Week 4 · live · as of /.test(document.getElementById('ldWhen').textContent));
     assert.ok(await noOverflow(lp));
     assert.deepStrictEqual(lp.errors, []);
     await lp.close();

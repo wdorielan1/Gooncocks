@@ -179,6 +179,20 @@ check("the week's leaders come from the NFL points file, newest week only, owner
       isinstance(_wl, dict) and _wl["QB"] == [("Jalen Hurts", "PHI", 31.2, "Will")] and _wl["RB"] == [("Aaron Jones", "MIN", 26.4, None)]
       and _wl["DEF"] == [("DEN", "DEN", 17.5, "Will")], _wl)
 
+class _S3w(_S3):
+    saved = {}
+    def put_object(self, Bucket, Key, Body, **kw):
+        self.saved[Key] = json.loads(Body)
+_s3w = _S3w()
+try:
+    lambda_function._save_week_leaders(_s3w, "b", 4, _wl)
+except Exception as _e:
+    _S3w.saved["error"] = repr(_e)
+_wf = _S3w.saved.get("leaders/week-4.json") or {}
+check("a published week's leaders are saved for the Tools page, in the live file's shape",
+      _wf.get("season") == 2026 and _wf.get("week") == 4 and _wf.get("positions", {}).get("QB") == [["Jalen Hurts", "PHI", 31.2, "Will"]],
+      _S3w.saved)
+
 _real = webpage.render_html(4, _SM, is_sample=False, leaders=_L, weeks=[4])
 check("a week's page shows only that week's leaders, nothing from the week in progress",
       "WEEK 04 &middot; TOP SCORERS" in _real and "leaders/live.json" not in _real and "LIVE" not in _real.split('id="leaders"')[1].split("</section>")[0])

@@ -54,6 +54,9 @@
   LiveApi.prototype.leaders = function () {
     return fetch('/leaders/live.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
   };
+  LiveApi.prototype.leadersWeek = function (week) {
+    return fetch('/leaders/week-' + week + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
+  };
   LiveApi.prototype.liveWeek = function () {
     return fetch('/boxscores/live.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
   };
@@ -131,6 +134,7 @@
     return later({ transactions: this.s.transactions || [], checked_at: this.s.now - 120, stale: false });
   };
   PreviewApi.prototype.leaders = function () { return later(this.s.leaders || null); };
+  PreviewApi.prototype.leadersWeek = function (week) { return later((this.s.leadersWeeks || {})[week] || null); };
   PreviewApi.prototype.injuries = function () {
     var i = this.s.injuries || { injured: [], back: [] };
     return later({ injured: i.injured, back: i.back, checked_at: this.s.now - 300, stale: false });

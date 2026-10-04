@@ -594,8 +594,9 @@
 
 
 
-  // ---------- fantasy leaders (this week, live) ----------
-  // leaders/live.json, saved by the Sunday/Monday live runs from Yahoo:
+  // ---------- fantasy leaders (live week + past weeks) ----------
+  // leaders/live.json, saved by the Sunday/Monday live runs from Yahoo, and
+  // leaders/week-N.json, saved when week N is published (final numbers):
   // {season, week, updated, positions: {pos: [[name, team, points, manager|null]]}}.
   function renderLD() {
     var st = $('ldState');
@@ -606,17 +607,38 @@
       return;
     }
     st.textContent = '';
-    var list = clear($('ldList')), box = clear($('ldPos'));
+    var list = clear($('ldList')), box = clear($('ldPos')), weeks = clear($('ldWeeks'));
     $('ldWhen').textContent = '';
-    if (!S.ld || !S.ld.positions) { st.className = 'state'; st.textContent = 'This week’s leaders show up after the early games on Sunday.'; return; }
-    $('ldWhen').textContent = 'Week ' + S.ld.week + ' · as of ' + new Date(S.ld.updated * 1000).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    var live = S.ld && S.ld.positions ? S.ld : null, wk = S.ldWk || null;
+    var top = live ? live.week : 0;
+    for (var w = top; w >= 1; w--) {
+      (function (w) {
+        var on = wk ? w === wk : w === top;
+        weeks.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (on ? ' on' : '') + (w === top ? ' ld-live' : ''), 'aria-pressed': on ? 'true' : 'false',
+          text: (w === top ? 'Live · Wk ' : 'Wk ') + w, onclick: function () { S.ldWk = w === top ? null : w; renderTools(); } }));
+      })(w);
+    }
+    var d = live;
+    if (wk) {
+      S.ldPast = S.ldPast || {};
+      if (S.ldPast[wk] === undefined) {
+        if (!S.ldPastLoad) S.ldPastLoad = api.leadersWeek(wk).then(function (x) { S.ldPast[wk] = x; }, function () { S.ldPast[wk] = null; })
+          .then(function () { S.ldPastLoad = null; renderTools(); });
+        st.className = 'state'; st.textContent = 'Loading…';
+        return;
+      }
+      d = S.ldPast[wk];
+      if (!d || !d.positions) { st.className = 'state'; st.textContent = 'Week ' + wk + '’s leaders aren’t saved yet. They’re saved when the week’s recap is published.'; return; }
+      $('ldWhen').textContent = 'Week ' + d.week + ' · final';
+    } else if (!live) { st.className = 'state'; st.textContent = 'This week’s leaders show up after the early games on Sunday.'; return; }
+    else $('ldWhen').textContent = 'Week ' + live.week + ' · live · as of ' + new Date(live.updated * 1000).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
     var pos = S.ldPos || 'QB';
     WW_POS.forEach(function (p) {
       box.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (p === pos ? ' on' : ''), 'aria-pressed': p === pos ? 'true' : 'false',
         text: p, onclick: function () { S.ldPos = p; renderTools(); } }));
     });
-    var rows = S.ld.positions[pos] || [];
-    if (!rows.length) { list.appendChild(h('li', { class: 'fine', text: 'No ' + PA_WHO[pos] + ' have scored yet this week.' })); return; }
+    var rows = d.positions[pos] || [];
+    if (!rows.length) { list.appendChild(h('li', { class: 'fine', text: wk ? 'No ' + PA_WHO[pos] + ' scored that week.' : 'No ' + PA_WHO[pos] + ' have scored yet this week.' })); return; }
     rows.forEach(function (r, i) {
       var mine = S.me && S.me.manager && r[3] === S.me.manager;
       list.appendChild(h('li', { class: 'ld-row' + (mine ? ' mine' : '') }, [
