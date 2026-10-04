@@ -255,6 +255,32 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
     got = body(iapp.handle(event("GET", "/injuries")))
 check("when Yahoo is down the report uses the last rosters, marked stale", got["stale"] is True and len(got["injured"]) == 1, got)
 
+# ---------------------------------------------------------------- long sign-ins, re-checked
+lapp, lclock = new_app()
+lw, lcsrf, r = sign_in(lapp, "code-will")
+check("a sign-in cookie lasts 30 days", "Max-Age=%d" % (30 * 86400) in parse_cookies(r)[SESSION_COOKIE][1])
+lclock.t += 20 * 86400
+me = body(lapp.handle(event("GET", "/me", cookies=lw)))
+check("still signed in and able to edit after 20 days (re-checked with Yahoo along the way)", me["signed_in"] and me["can_edit"], me)
+lapp.yahoo.league_teams_real = lapp.yahoo.league_teams
+lapp.yahoo.league_teams = lambda league_key: [dict(t, guids=[g for g in t["guids"] if g != "guid-will"]) for t in lapp.yahoo.league_teams_real(league_key)]
+lclock.t += trade_lab.REVERIFY_AFTER + 1
+with contextlib.redirect_stdout(io.StringIO()):
+    me = body(lapp.handle(event("GET", "/me", cookies=lw)))
+check("an account that no longer manages its team drops to browsing only", me["signed_in"] and not me["can_edit"] and me["team_key"] is None, me)
+r = save(lapp, lw, me["csrf"], [{"player_key": "470.p.1", "status": "available", "wants": []}])
+check("...and can't list players any more", r["statusCode"] == 403 and body(r)["error"] == "not_in_league", body(r))
+lapp2, lclock2 = new_app()
+lw2, _, _ = sign_in(lapp2, "code-will")
+lapp2.yahoo.down = True
+lclock2.t += trade_lab.REVERIFY_AFTER + 1
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    me = body(lapp2.handle(event("GET", "/me", cookies=lw2)))
+check("if Yahoo can't be reached for the re-check, the sign-in is left as it was", me["can_edit"] and me["team_key"] == WILL, me)
+lapp2.yahoo.down = False
+lclock2.t += trade_lab.SESSION_TTL
+check("after 30 days the sign-in ends", body(lapp2.handle(event("GET", "/me", cookies=lw2)))["signed_in"] is False)
+
 # ---------------------------------------------------------------- transaction report
 tapp, tclock = new_app()
 got = body(tapp.handle(event("GET", "/transactions")))
