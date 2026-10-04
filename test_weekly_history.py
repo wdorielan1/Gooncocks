@@ -159,8 +159,9 @@ check("position scores count starters only, by each player's own position",
       _ps[0]["by"] == {"QB": 22.0, "RB": 10.0, "WR": 7.0, "TE": 0.0, "K": 0.0, "DEF": 0.0} and _ps[0]["total"] == 39.0, _ps[0])
 check("position scores list highest total first", [t["total"] for t in _ps] == sorted((t["total"] for t in _ps), reverse=True))
 _html = webpage.render_html(4, _SM, is_sample=True, positions=_ps)
-check("weekly page has the Position by Position table with best and worst marked",
-      'id="positions"' in _html and _html.count('class="r best"') >= 2 and 'class="r worst"' in _html and "QB One 22.0" in _html)
+check("weekly page has the Position by Position table, points only (no best/worst grading)",
+      'id="positions"' in _html and "best" not in _html.split('id="positions"')[1].split("</section>")[0]
+      and "QB One 22.0" in _html and "63.0</span><small>21.0 per team" in _html)
 check("no lineups, no Position by Position table", 'id="positions"' not in webpage.render_html(4, _SM, is_sample=True))
 
 print()
