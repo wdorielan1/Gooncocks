@@ -290,30 +290,6 @@ def trade_winner(rosters: list, transactions: list) -> Optional[dict]:
     return best
 
 
-POSITIONS = ("QB", "RB", "WR", "TE", "K", "DEF")
-
-
-def position_scores(rosters) -> list:
-    """Each team's points that week from its starters at each position
-    (a flex starter counts at his own position): [{"team", "manager",
-    "by": {pos: points}, "who": {pos: [(name, points)]}, "total"}], highest
-    total first. Bench and IR players don't count."""
-    out = []
-    for r in rosters or []:
-        by = {pos: 0.0 for pos in POSITIONS}
-        who = {pos: [] for pos in POSITIONS}
-        for p in r["players"]:
-            if not _is_starter(p) or p.get("slot") in ("IR+", "NA"):
-                continue
-            pos = (p.get("position") or "").split(",")[0].strip()
-            if pos in by:
-                by[pos] += p.get("points") or 0.0
-                who[pos].append((p.get("name") or "", p.get("points") or 0.0))
-        out.append({"team": r.get("team"), "manager": r.get("manager"), "by": by, "who": who,
-                    "total": sum(by.values())})
-    return sorted(out, key=lambda t: -t["total"])
-
-
 def compute_extra_awards(matchups: List[Matchup], standings: Optional[dict] = None,
                          rosters: Optional[list] = None, transactions: Optional[list] = None) -> dict:
     """Awards that need more than one week's scoreboard. A key is present

@@ -325,20 +325,6 @@ STYLE_BLOCK = """
   .g-box:hover{text-decoration:underline}
 
   /* tables */
-  .pos-leaders{list-style:none;margin:14px 0 14px;padding:0;display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
-  .pos-leaders li{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:10px 12px;display:grid;gap:2px;min-width:0}
-  .pos-leaders .pl-pos{font-size:10px;font-weight:700;letter-spacing:1.6px;color:var(--gold)}
-  .pos-leaders b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .pos-leaders .pl-pts{font:400 22px/1 var(--display)}
-  .pos-leaders small{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-  .pos-card{padding:8px 8px 6px}
-  .pos-wrap{overflow-x:auto}
-  .tbl.pos{min-width:560px}
-  .tbl.pos td.r{font-size:15px}
-  .tbl.pos td.best{background:var(--gold);color:#141005}
-  .tbl.pos td.worst{background:#3a1015;color:#ff9b9b}
-  .tbl.pos td.tot{font-weight:700;color:var(--gold)}
   .tables{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   .tables.solo{grid-template-columns:1fr}
   .tcard{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:18px 18px 14px}
@@ -382,7 +368,6 @@ STYLE_BLOCK = """
     .big-art{width:58%;object-position:100% 30%}
     .awards{grid-template-columns:1fr}
     .tables{grid-template-columns:1fr}
-    .pos-leaders{grid-template-columns:repeat(3,1fr)}
     .game{grid-template-columns:62px minmax(0,1fr) minmax(0,1fr)}
     .g-meta{grid-column:2/-1;border-left:0;border-top:1px solid var(--line);padding:8px 16px}
     .g-status{grid-row:span 2}
@@ -429,16 +414,6 @@ STYLE_BLOCK = """
     .av-lg{width:54px;height:54px;font-size:28px}
     .sec{margin-top:36px}
     .sec-head h2{font-size:28px}
-    .pos-leaders{grid-template-columns:repeat(2,1fr)}
-    .tbl.pos .av{display:none}
-    .tbl.pos{min-width:0;table-layout:fixed}
-    .tbl.pos th:first-child,.tbl.pos td:first-child{display:none}
-    .tbl.pos td,.tbl.pos th{padding:7px 2px}
-    .tbl.pos th:nth-child(2){width:24%}
-    .tbl.pos td.r{font-size:13px}
-    .tbl.pos th.r{text-align:right;letter-spacing:.6px}
-    .tbl.pos .nm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
-    .pos-card{padding:6px 4px}
     .aw{grid-template-columns:36px minmax(0,1fr);padding:14px}
     .ico{width:30px;height:30px}
     .aw-side{grid-column:1/-1;border-left:0;border-top:1px solid var(--line);padding:10px 0 0;margin-top:6px}
@@ -811,49 +786,6 @@ def _pecking_html(standings, rankings):
     </aside>"""
 
 
-_POS = ("QB", "RB", "WR", "TE", "K", "DEF")
-
-
-def _positions_html(week, positions):
-    """Position by Position: each team's points from its starters at each
-    spot, best in gold and worst in red, plus the top scorer at each."""
-    if not positions:
-        return ""
-    best = {p: max(t["by"][p] for t in positions) for p in _POS}
-    worst = {p: min(t["by"][p] for t in positions) for p in _POS}
-
-    def cell(t, p):
-        v, cls = t["by"][p], ""
-        if len(positions) > 1 and best[p] != worst[p]:
-            cls = " best" if v == best[p] else " worst" if v == worst[p] else ""
-        who = ", ".join(f"{n} {pts:.1f}" for n, pts in t["who"][p]) or "nobody started"
-        return f'<td class="r{cls}" title="{escape(who, quote=True)}">{v:.1f}</td>'
-
-    rows = "".join(
-        f'<tr><td>{i + 1}</td><td><span class="nm">{_avatar(t["team"], t.get("manager"), "blue")}{_who(t["team"], t.get("manager"))}</span></td>'
-        + "".join(cell(t, p) for p in _POS) + f'<td class="r tot">{t["total"]:.1f}</td></tr>'
-        for i, t in enumerate(positions))
-    leaders = ""
-    for p in _POS:
-        top = max(positions, key=lambda t: t["by"][p])
-        if not top["by"][p]:
-            continue
-        names = ", ".join(n for n, _pts in sorted(top["who"][p], key=lambda x: -x[1]))
-        leaders += (f'<li><span class="pl-pos">{p}</span><b>{_who(top["team"], top.get("manager"))}</b>'
-                    f'<span class="pl-pts">{top["by"][p]:.1f}</span><small>{escape(names)}</small></li>')
-    return f"""
-  <section class="sec" id="positions" aria-labelledby="positions-title">
-    <div class="sec-head"><h2 id="positions-title">POSITION BY POSITION</h2></div>
-    <p class="sec-sub">WEEK {week:02d} &middot; POINTS FROM EACH TEAM'S STARTERS &middot; GOLD = BEST, RED = WORST</p>
-    <ul class="pos-leaders" aria-label="Top scorer at each position">{leaders}</ul>
-    <div class="tcard pos-card"><div class="pos-wrap">
-      <table class="tbl pos"><caption class="sr-only">Week {week} points by position for every team</caption>
-        <thead><tr><th>#</th><th>MANAGER</th>{"".join(f'<th class="r">{p}</th>' for p in _POS)}<th class="r">TOTAL</th></tr></thead>
-        <tbody>{rows}</tbody></table>
-    </div></div>
-  </section>"""
-
-
 def _tables_html(week, rankings, standings):
     n = len(rankings)
     weekly = "".join(
@@ -973,14 +905,12 @@ _WEEK_SCRIPT = """
 
 
 def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None, extras=None, details=None,
-                weeks=None, history=None, positions=None):
+                weeks=None, history=None):
     """`weeks` is every week number published so far this season (for the
     week menu and previous/next buttons); `standings` is power_rankings()
     output, or None to leave the season tables out. `history` is the league
     history file (rivalry-history.json); with it, the Rivalry Watch and New
-    Record Broken banners go under the Goon/Cock cards. `positions` is
-    awards.position_scores() output, for the Position by Position table
-    (left out when the week's lineups couldn't be read)."""
+    Record Broken banners go under the Goon/Cock cards."""
     details = details or {}
     extras = extras or {}
     week = int(week)
@@ -1113,7 +1043,6 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     </div>
   </section>
 
-{_positions_html(week, positions)}
   <div class="sec">{_tables_html(week, rankings, standings)}</div>
 </main>
 {week_nav}
