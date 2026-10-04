@@ -336,6 +336,8 @@ STYLE_BLOCK = """
   .pos-wrap{overflow-x:auto}
   .tbl.pos{min-width:560px}
   .tbl.pos td.r{font-size:15px}
+  .tbl.pos td.best{background:var(--gold);color:#141005}
+  .tbl.pos td.worst{background:#3a1015;color:#ff9b9b}
   .tbl.pos td.tot{font-weight:700;color:var(--gold)}
   .tables{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   .tables.solo{grid-template-columns:1fr}
@@ -814,28 +816,36 @@ _POS = ("QB", "RB", "WR", "TE", "K", "DEF")
 
 def _positions_html(week, positions):
     """Position by Position: each team's points from its starters at each
-    spot, plus the league's overall points at each position that week."""
+    spot, best in gold and worst in red, plus the top scorer at each."""
     if not positions:
         return ""
+    best = {p: max(t["by"][p] for t in positions) for p in _POS}
+    worst = {p: min(t["by"][p] for t in positions) for p in _POS}
 
     def cell(t, p):
+        v, cls = t["by"][p], ""
+        if len(positions) > 1 and best[p] != worst[p]:
+            cls = " best" if v == best[p] else " worst" if v == worst[p] else ""
         who = ", ".join(f"{n} {pts:.1f}" for n, pts in t["who"][p]) or "nobody started"
-        return f'<td class="r" title="{escape(who, quote=True)}">{t["by"][p]:.1f}</td>'
+        return f'<td class="r{cls}" title="{escape(who, quote=True)}">{v:.1f}</td>'
 
     rows = "".join(
         f'<tr><td>{i + 1}</td><td><span class="nm">{_avatar(t["team"], t.get("manager"), "blue")}{_who(t["team"], t.get("manager"))}</span></td>'
         + "".join(cell(t, p) for p in _POS) + f'<td class="r tot">{t["total"]:.1f}</td></tr>'
         for i, t in enumerate(positions))
-    n = len(positions)
-    overall = "".join(
-        f'<li><span class="pl-pos">{p}</span><span class="pl-pts">{sum(t["by"][p] for t in positions):.1f}</span>'
-        f'<small>{sum(t["by"][p] for t in positions) / n:.1f} per team</small></li>'
-        for p in _POS)
+    leaders = ""
+    for p in _POS:
+        top = max(positions, key=lambda t: t["by"][p])
+        if not top["by"][p]:
+            continue
+        names = ", ".join(n for n, _pts in sorted(top["who"][p], key=lambda x: -x[1]))
+        leaders += (f'<li><span class="pl-pos">{p}</span><b>{_who(top["team"], top.get("manager"))}</b>'
+                    f'<span class="pl-pts">{top["by"][p]:.1f}</span><small>{escape(names)}</small></li>')
     return f"""
   <section class="sec" id="positions" aria-labelledby="positions-title">
     <div class="sec-head"><h2 id="positions-title">POSITION BY POSITION</h2></div>
-    <p class="sec-sub">WEEK {week:02d} &middot; FANTASY POINTS FROM EACH TEAM'S STARTERS, BY POSITION</p>
-    <ul class="pos-leaders" aria-label="League-wide points at each position this week">{overall}</ul>
+    <p class="sec-sub">WEEK {week:02d} &middot; POINTS FROM EACH TEAM'S STARTERS &middot; GOLD = BEST, RED = WORST</p>
+    <ul class="pos-leaders" aria-label="Top scorer at each position">{leaders}</ul>
     <div class="tcard pos-card"><div class="pos-wrap">
       <table class="tbl pos"><caption class="sr-only">Week {week} points by position for every team</caption>
         <thead><tr><th>#</th><th>MANAGER</th>{"".join(f'<th class="r">{p}</th>' for p in _POS)}<th class="r">TOTAL</th></tr></thead>
