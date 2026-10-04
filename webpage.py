@@ -325,6 +325,19 @@ STYLE_BLOCK = """
   .g-box:hover{text-decoration:underline}
 
   /* tables */
+  .ldr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px;align-items:start}
+  .ldr{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:14px 16px 10px;min-width:0}
+  .ldr h3{font:400 26px/1 var(--display);letter-spacing:.5px;color:var(--gold);margin:0 0 8px}
+  .ldr-list{list-style:none;margin:0;padding:0}
+  .ldr-list li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #ffffff0a}
+  .ldr-list li:last-child{border-bottom:0}
+  .ldr .lr{font-weight:700;color:var(--muted);text-align:center}
+  .ldr .ln{display:grid;min-width:0}
+  .ldr .ln b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ldr .ln small{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ldr .fa{color:#5fd08f;font-weight:700}
+  .ldr .lp{font:400 20px/1 var(--display);letter-spacing:.3px}
+  .ldr-more summary{cursor:pointer;padding:8px 0 4px;font-size:12px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold)}
   .tables{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   .tables.solo{grid-template-columns:1fr}
   .tcard{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:18px 18px 14px}
@@ -368,6 +381,7 @@ STYLE_BLOCK = """
     .big-art{width:58%;object-position:100% 30%}
     .awards{grid-template-columns:1fr}
     .tables{grid-template-columns:1fr}
+    .ldr-grid{grid-template-columns:1fr 1fr}
     .game{grid-template-columns:62px minmax(0,1fr) minmax(0,1fr)}
     .g-meta{grid-column:2/-1;border-left:0;border-top:1px solid var(--line);padding:8px 16px}
     .g-status{grid-row:span 2}
@@ -414,6 +428,7 @@ STYLE_BLOCK = """
     .av-lg{width:54px;height:54px;font-size:28px}
     .sec{margin-top:36px}
     .sec-head h2{font-size:28px}
+    .ldr-grid{grid-template-columns:1fr}
     .aw{grid-template-columns:36px minmax(0,1fr);padding:14px}
     .ico{width:30px;height:30px}
     .aw-side{grid-column:1/-1;border-left:0;border-top:1px solid var(--line);padding:10px 0 0;margin-top:6px}
@@ -786,6 +801,53 @@ def _pecking_html(standings, rankings):
     </aside>"""
 
 
+NFL_NAMES = {"ARI": "Cardinals", "ATL": "Falcons", "BAL": "Ravens", "BUF": "Bills", "CAR": "Panthers", "CHI": "Bears",
+             "CIN": "Bengals", "CLE": "Browns", "DAL": "Cowboys", "DEN": "Broncos", "DET": "Lions", "GB": "Packers",
+             "HOU": "Texans", "IND": "Colts", "JAX": "Jaguars", "KC": "Chiefs", "LAC": "Chargers", "LAR": "Rams",
+             "LV": "Raiders", "MIA": "Dolphins", "MIN": "Vikings", "NE": "Patriots", "NO": "Saints", "NYG": "Giants",
+             "NYJ": "Jets", "PHI": "Eagles", "PIT": "Steelers", "SEA": "Seahawks", "SF": "49ers", "TB": "Buccaneers",
+             "TEN": "Titans", "WAS": "Commanders"}
+LEADER_POSITIONS = ("QB", "RB", "WR", "TE", "K", "DEF")
+LEADERS_TOP = 5  # shown before "See all"
+
+
+def _leaders_html(week, leaders):
+    """Fantasy Leaders: the week's top scorers at each position across the
+    NFL, in league scoring, with who owns each (or FA). Top 5 shown, the
+    rest of the list behind "See all"."""
+    if not leaders or not any(leaders.get(p) for p in LEADER_POSITIONS):
+        return ""
+
+    def row(i, r):
+        name, team, pts, manager = r
+        label = f"{NFL_NAMES.get(team, team)} D/ST" if name == team else name
+        own = (f'<small>{escape(team)} &middot; {escape(manager)}</small>' if manager
+               else f'<small>{escape(team)} &middot; <span class="fa">FA</span></small>')
+        return (f'<li><span class="lr">{i + 1}</span><span class="ln"><b>{escape(label)}</b>{own}</span>'
+                f'<span class="lp">{pts:.1f}</span></li>')
+
+    cards = ""
+    for pos in LEADER_POSITIONS:
+        rows = leaders.get(pos) or []
+        if not rows:
+            continue
+        top = "".join(row(i, r) for i, r in enumerate(rows[:LEADERS_TOP]))
+        more = "".join(row(i + LEADERS_TOP, r) for i, r in enumerate(rows[LEADERS_TOP:]))
+        cards += f"""
+      <article class="ldr" aria-label="Top {pos}s">
+        <h3>{pos}</h3>
+        <ol class="ldr-list">{top}</ol>
+        {f'<details class="ldr-more"><summary>See top {len(rows)}</summary><ol class="ldr-list" start="{LEADERS_TOP + 1}">{more}</ol></details>' if more else ''}
+      </article>"""
+    return f"""
+  <section class="sec" id="leaders" aria-labelledby="leaders-title">
+    <div class="sec-head"><h2 id="leaders-title">FANTASY LEADERS</h2></div>
+    <p class="sec-sub">WEEK {week:02d} &middot; TOP SCORERS AT EVERY POSITION, IN OUR SCORING &middot; FA = AVAILABLE</p>
+    <div class="ldr-grid">{cards}
+    </div>
+  </section>"""
+
+
 def _tables_html(week, rankings, standings):
     n = len(rankings)
     weekly = "".join(
@@ -905,12 +967,14 @@ _WEEK_SCRIPT = """
 
 
 def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None, extras=None, details=None,
-                weeks=None, history=None):
+                weeks=None, history=None, leaders=None):
     """`weeks` is every week number published so far this season (for the
     week menu and previous/next buttons); `standings` is power_rankings()
     output, or None to leave the season tables out. `history` is the league
     history file (rivalry-history.json); with it, the Rivalry Watch and New
-    Record Broken banners go under the Goon/Cock cards."""
+    Record Broken banners go under the Goon/Cock cards. `leaders` is the
+    week's top scorers by position ({pos: [(name, team, points, manager)]})
+    for the Fantasy Leaders section, left out when None."""
     details = details or {}
     extras = extras or {}
     week = int(week)
@@ -1043,6 +1107,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     </div>
   </section>
 
+{_leaders_html(week, leaders)}
   <div class="sec">{_tables_html(week, rankings, standings)}</div>
 </main>
 {week_nav}

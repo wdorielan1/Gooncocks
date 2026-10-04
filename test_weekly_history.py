@@ -144,6 +144,41 @@ check("landing page has The Pot above Rivalry Watch", "<h2>The Pot</h2>" in land
 check("landing page hides the banner until it has a pick", 'id="rivalryWatch" class="rwh-sec" hidden' in landing
       and "renderRivalry(d.next_rivalry)" in landing)
 
+# Fantasy Leaders: top scorers at each position across the NFL, owner or FA
+from sample_data import SAMPLE_MATCHUPS as _SM
+_L = {"QB": [("Jalen Hurts", "PHI", 31.24, "Will"), ("Joe Burrow", "CIN", 28.0, None)] + [("QB %d" % i, "KC", 20 - i, None) for i in range(6)],
+      "DEF": [("DEN", "DEN", 17.5, "Sam")]}
+_html = webpage.render_html(4, _SM, is_sample=True, leaders=_L)
+_sec = _html.split('id="leaders"')[1].split("</section>")[0] if 'id="leaders"' in _html else ""
+check("weekly page shows Fantasy Leaders by position, with owners and FA",
+      "FANTASY LEADERS" in _sec and "Jalen Hurts" in _sec and "PHI &middot; Will" in _sec and ">31.2<" in _sec
+      and 'class="fa">FA' in _sec and "Broncos D/ST" in _sec and "See top 8" in _sec and 'start="6"' in _sec)
+check("no leaders file for the week, no Fantasy Leaders section", 'id="leaders"' not in webpage.render_html(4, _SM, is_sample=True))
+_box = {"players": [["jalen hurts", "Jalen Hurts", "QB", "PHI", {"4": 31.2, "3": 10.0}], ["aaron jones", "Aaron Jones", "RB", "MIN", {"4": 26.4}],
+                    ["bench rb", "Bench RB", "RB", "NYG", {"3": 40.0}]],
+        "defenses": {"DEN": {"4": 17.5}}, "weeks": [1, 2, 3, 4]}
+
+
+class _S3:
+    def get_object(self, Bucket, Key):
+        import io as _io
+        body = {"nfl/players_2026.json": _box, league_history_index_key: {"current_season": "2026"}}.get(Key)
+        if body is None:
+            raise KeyError(Key)
+        return {"Body": _io.BytesIO(json.dumps(body).encode())}
+
+
+import league_history as _lh
+league_history_index_key = _lh.INDEX_KEY
+_ros = [{"manager": "Will", "players": [{"name": "Jalen Hurts", "position": "QB", "nfl_team": "PHI"}, {"name": "Denver", "position": "DEF", "nfl_team": "DEN"}]}]
+try:
+    _wl = lambda_function._week_leaders(_S3(), "b", 4, _ros)
+except Exception as _e:
+    _wl = repr(_e)
+check("the week's leaders come from the NFL points file, newest week only, owners matched",
+      isinstance(_wl, dict) and _wl["QB"] == [("Jalen Hurts", "PHI", 31.2, "Will")] and _wl["RB"] == [("Aaron Jones", "MIN", 26.4, None)]
+      and _wl["DEF"] == [("DEN", "DEN", 17.5, "Will")], _wl)
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed: {', '.join(failures)}")

@@ -982,6 +982,38 @@ def _save_standings(s3, bucket, standings):
     )
 
 
+LEADERS_SHOWN = 25  # players per position in the weekly page's Fantasy Leaders
+
+
+def _week_leaders(s3, bucket, week, rosters):
+    """The week's top fantasy scorers at each position across the NFL, in
+    league scoring (from the nfl_points run's players file), each with the
+    manager who had him that week, or None for a free agent:
+    {pos: [(name, nfl team, points, manager)]}. None if that week isn't
+    in the file yet."""
+    index = _rivalry_store(s3, bucket).load(league_history.INDEX_KEY, None) or {}
+    season = str(index.get("current_season") or time.strftime("%Y"))
+    data = _load_json(s3, bucket, f"nfl/players_{season}.json", None)
+    wk = str(int(week))
+    if not data or int(week) not in [int(w) for w in data.get("weeks") or []]:
+        return None
+    owner = {}
+    for r in rosters or []:
+        for p in r["players"]:
+            pos = (p.get("position") or "").split(",")[0].strip()
+            key = ("DEF", nfl_points.team_code(p.get("nfl_team"))) if pos == "DEF" else (pos, nfl_points.name_key(p.get("name")))
+            owner[key] = r.get("manager") or r.get("team")
+    out = {pos: [] for pos in nfl_points.POSITIONS}
+    for _key, name, pos, team, weeks in data.get("players") or []:
+        pts = weeks.get(wk)
+        if pos in out and pts is not None:
+            out[pos].append((name, team, pts, owner.get((pos, nfl_points.name_key(name)))))
+    for team, weeks in (data.get("defenses") or {}).items():
+        if weeks.get(wk) is not None:
+            out["DEF"].append((team, team, weeks[wk], owner.get(("DEF", team))))
+    return {pos: sorted(rows, key=lambda r: -r[2])[:LEADERS_SHOWN] for pos, rows in out.items()}
+
+
 def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, transactions=None, notify=True,
                   league_key=None):
     """Renders the webpage, uploads it to S3, and posts a Discord teaser
@@ -1033,9 +1065,16 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
         except Exception:
             traceback.print_exc()
             print("Skipped the Rivalry Watch and record banners this run - see the error above.")
+    leaders = None
+    if not is_sample:
+        try:
+            leaders = _week_leaders(s3, bucket, week, rosters)
+        except Exception:
+            traceback.print_exc()
+            print("Skipped the Fantasy Leaders this run - see the error above.")
     html = render_html(
         week, matchups, is_sample=is_sample, bonus_note=bonus_note, standings=standings_ranked, extras=extras,
-        details=details, weeks=published_weeks, history=history,
+        details=details, weeks=published_weeks, history=history, leaders=leaders,
     )
     website_url = os.environ.get("S3_WEBSITE_URL")
     page_url = f"{website_url.rstrip('/')}/recap.html" if website_url else f"s3://{bucket}/recap.html"
