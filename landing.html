@@ -185,6 +185,8 @@
   .ldr-band:hover .ticker-track{animation-play-state:paused}
   #ldrTrack > span{font-family:'Anton','Arial Narrow',sans-serif; font-size:15px; letter-spacing:1px; color:var(--fog); padding:0 20px; border-right:1px solid var(--hairline)}
   #ldrTrack .pos{color:var(--gold); margin-right:8px}
+  #ldrTrack > .grp{align-self:stretch; display:inline-flex; align-items:center; margin-left:10px; padding:0 14px; border:0; background:#1d3a68; color:#fff; text-transform:uppercase; letter-spacing:1.5px; font-size:14px}
+  #ldrTrack > .grp::after{content:' \203A'; color:var(--gold); margin-left:8px}
   #ldrTrack .name{color:var(--paper)}
   #ldrTrack .pts{color:var(--paper); margin-left:8px}
   #ldrTrack .own{margin-left:8px; font-family:'Work Sans',sans-serif; font-size:12px; font-weight:600; letter-spacing:.4px}
@@ -738,12 +740,18 @@
       DEN:'Broncos',DET:'Lions',GB:'Packers',HOU:'Texans',IND:'Colts',JAX:'Jaguars',KC:'Chiefs',LAC:'Chargers',LAR:'Rams',LV:'Raiders',
       MIA:'Dolphins',MIN:'Vikings',NE:'Patriots',NO:'Saints',NYG:'Giants',NYJ:'Jets',PHI:'Eagles',PIT:'Steelers',SEA:'Seahawks',
       SF:'49ers',TB:'Buccaneers',TEN:'Titans',WAS:'Commanders'};
+    var GROUP = {QB: 'Quarterbacks', RB: 'Running Backs', WR: 'Wide Receivers', TE: 'Tight Ends', K: 'Kickers', DEF: 'Defenses'};
     for (var loop = 0; loop < 2; loop++){
       ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].forEach(function(pos){
-        (d.positions[pos] || []).slice(0, 3).forEach(function(r, i){
+        var rows = (d.positions[pos] || []).slice(0, 10);
+        if (!rows.length) return;
+        var head = el('span', 'grp', GROUP[pos]);  // each position starts with its own label
+        if (loop) head.setAttribute('aria-hidden', 'true');
+        track.appendChild(head);
+        rows.forEach(function(r, i){
           var s = el('span');
           if (loop) s.setAttribute('aria-hidden', 'true');
-          s.appendChild(el('span', 'pos', pos + (i + 1)));
+          s.appendChild(el('span', 'pos', String(i + 1)));
           s.appendChild(el('span', 'name', pos === 'DEF' ? (NFL[r[1]] || r[1]) + ' D/ST' : r[0]));
           s.appendChild(el('span', 'pts', (Math.round(r[2] * 10) / 10).toFixed(1)));
           s.appendChild(el('span', 'own' + (r[3] ? '' : ' fa'), r[3] || 'FA'));
@@ -753,7 +761,7 @@
       });
     }
     if (!n) return;
-    track.style.animationDuration = Math.max(40, n * 4) + 's';
+    track.style.animationDuration = Math.max(40, n * 3.5) + 's';
     document.getElementById('ldrWeek').textContent = 'WK ' + pad(d.week) + ' LEADERS';
     document.getElementById('ldrWhen').textContent = 'As of ' + new Date(d.updated * 1000)
       .toLocaleString(undefined, {weekday: 'short', hour: 'numeric', minute: '2-digit'});
