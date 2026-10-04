@@ -180,11 +180,9 @@ check("the week's leaders come from the NFL points file, newest week only, owner
       and _wl["DEF"] == [("DEN", "DEN", 17.5, "Will")], _wl)
 
 _real = webpage.render_html(4, _SM, is_sample=False, leaders=_L, weeks=[4])
-check("the This Week page can show next week's live leaders above this week's final ones",
-      'id="ldrLive" hidden' in _real and 'id="ldrFinal"' in _real and "/leaders/live.json" in _real
-      and "d.week !== PAGE_WEEK + 1" in _real and "var PAGE_WEEK = 4," in _real)
-check("with no final leaders yet, the section waits hidden for the live ones",
-      '<section class="sec" id="leaders" aria-labelledby="leaders-title" hidden>' in webpage.render_html(4, _SM, is_sample=False, weeks=[4]))
+check("a week's page shows only that week's leaders, nothing from the week in progress",
+      "WEEK 04 &middot; TOP SCORERS" in _real and "leaders/live.json" not in _real and "LIVE" not in _real.split('id="leaders"')[1].split("</section>")[0])
+check("with no leaders for the week, the section is left out", 'id="leaders"' not in webpage.render_html(4, _SM, is_sample=False, weeks=[4]))
 
 print()
 if failures:

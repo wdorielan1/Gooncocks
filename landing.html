@@ -164,6 +164,28 @@
   .ticker-track .rec{margin-left:8px}
   @keyframes scroll{ from{transform:translateX(0)} to{transform:translateX(-50%)} }
 
+  /* ---------- fantasy leaders ticker (this week so far) ---------- */
+  .ldr-band{display:flex; align-items:stretch; border-bottom:1px solid var(--hairline); background:#0a1430; overflow:hidden}
+  .ldr-band[hidden]{display:none}
+  .ldr-tag{flex:none; display:grid; align-content:center; gap:2px; padding:8px 16px; background:var(--gold); color:#141005; text-align:center}
+  .ldr-tag b{font-family:'Anton','Arial Narrow',sans-serif; font-size:15px; letter-spacing:1px; font-weight:400}
+  .ldr-tag small{font-size:10px; font-weight:700; letter-spacing:.8px; text-transform:uppercase}
+  @media (max-width:560px){
+    .ldr-tag{padding:6px 10px; max-width:96px}
+    .ldr-tag b{font-size:13px; line-height:1.05}
+    .ldr-tag small{font-size:9px; letter-spacing:.3px}
+    #ldrTrack > span{font-size:14px; padding:0 14px}
+  }
+  .ldr-view{flex:1; min-width:0; overflow:hidden; white-space:nowrap}
+  .ldr-band:hover .ticker-track{animation-play-state:paused}
+  #ldrTrack > span{font-family:'Anton','Arial Narrow',sans-serif; font-size:15px; letter-spacing:1px; color:var(--fog); padding:0 20px; border-right:1px solid var(--hairline)}
+  #ldrTrack .pos{color:var(--gold); margin-right:8px}
+  #ldrTrack .name{color:var(--paper)}
+  #ldrTrack .pts{color:var(--paper); margin-left:8px}
+  #ldrTrack .own{margin-left:8px; font-family:'Work Sans',sans-serif; font-size:12px; font-weight:600; letter-spacing:.4px}
+  #ldrTrack .own.fa{color:#5fd08f}
+
+
   .rwh-sec{padding-bottom:8px}
   .rwh{display:block; text-decoration:none; border:1px solid var(--hairline); border-radius:6px; overflow:hidden; background:var(--slate); transition:border-color .2s}
   .rwh:hover{border-color:var(--gold)}
@@ -378,6 +400,11 @@
 
 <div class="ticker-band" aria-label="Season standings">
   <div class="ticker-track" id="tickerTrack"></div>
+</div>
+
+<div class="ldr-band" id="ldrBand" role="region" aria-label="Fantasy leaders this week" hidden>
+  <span class="ldr-tag"><b id="ldrWeek">LEADERS</b><small id="ldrWhen"></small></span>
+  <div class="ldr-view"><div class="ticker-track" id="ldrTrack"></div></div>
 </div>
 
 <main class="wrap">
@@ -695,6 +722,41 @@
     art.setAttribute('aria-label', r.a.name + ' versus ' + r.b.name);
     sec.hidden = false;
   }
+
+  // Fantasy Leaders ticker: the week in progress, saved by the Sunday
+  // afternoon/night and Monday night live runs (leaders/live.json).
+  function renderLeaders(d){
+    if (!d || !d.positions) return;
+    var track = document.getElementById('ldrTrack'), n = 0;
+    var NFL = {ARI:'Cardinals',ATL:'Falcons',BAL:'Ravens',BUF:'Bills',CAR:'Panthers',CHI:'Bears',CIN:'Bengals',CLE:'Browns',DAL:'Cowboys',
+      DEN:'Broncos',DET:'Lions',GB:'Packers',HOU:'Texans',IND:'Colts',JAX:'Jaguars',KC:'Chiefs',LAC:'Chargers',LAR:'Rams',LV:'Raiders',
+      MIA:'Dolphins',MIN:'Vikings',NE:'Patriots',NO:'Saints',NYG:'Giants',NYJ:'Jets',PHI:'Eagles',PIT:'Steelers',SEA:'Seahawks',
+      SF:'49ers',TB:'Buccaneers',TEN:'Titans',WAS:'Commanders'};
+    for (var loop = 0; loop < 2; loop++){
+      ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].forEach(function(pos){
+        (d.positions[pos] || []).slice(0, 3).forEach(function(r, i){
+          var s = el('span');
+          if (loop) s.setAttribute('aria-hidden', 'true');
+          s.appendChild(el('span', 'pos', pos + (i + 1)));
+          s.appendChild(el('span', 'name', pos === 'DEF' ? (NFL[r[1]] || r[1]) + ' D/ST' : r[0]));
+          s.appendChild(el('span', 'pts', (Math.round(r[2] * 10) / 10).toFixed(1)));
+          s.appendChild(el('span', 'own' + (r[3] ? '' : ' fa'), r[3] || 'FA'));
+          track.appendChild(s);
+          if (!loop) n++;
+        });
+      });
+    }
+    if (!n) return;
+    track.style.animationDuration = Math.max(40, n * 4) + 's';
+    document.getElementById('ldrWeek').textContent = 'WK ' + pad(d.week) + ' LEADERS';
+    document.getElementById('ldrWhen').textContent = 'As of ' + new Date(d.updated * 1000)
+      .toLocaleString(undefined, {weekday: 'short', hour: 'numeric', minute: '2-digit'});
+    document.getElementById('ldrBand').hidden = false;
+  }
+  fetch('leaders/live.json', {cache: 'no-cache'})
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(renderLeaders)
+    .catch(function(){ /* no leaders yet: the band stays hidden */ });
 
   fetch('landing.json', {cache: 'no-cache'})
     .then(function(r){ if (!r.ok) throw new Error(r.status); return r.json(); })

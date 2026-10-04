@@ -337,10 +337,6 @@ STYLE_BLOCK = """
   .ldr .ln small{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ldr .fa{color:#5fd08f;font-weight:700}
   .ldr .lp{font:400 20px/1 var(--display);letter-spacing:.3px}
-  .ldr-when{margin:14px 0 0;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted)}
-  .ldr-when.live{color:#5fd08f}
-  .ldr-toggle{margin-top:10px;padding:8px 12px;background:none;border:1px solid var(--line2);border-radius:3px;color:var(--gold);font:700 12px/1 'Work Sans',sans-serif;letter-spacing:1.2px;text-transform:uppercase;cursor:pointer}
-  #ldrLive .ldr-grid{margin-bottom:8px}
   .ldr-more summary{cursor:pointer;padding:8px 0 4px;font-size:12px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold)}
   .tables{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   .tables.solo{grid-template-columns:1fr}
@@ -815,15 +811,13 @@ LEADER_POSITIONS = ("QB", "RB", "WR", "TE", "K", "DEF")
 LEADERS_TOP = 5  # shown before "See all"
 
 
-def _leaders_html(week, leaders, live=False):
+def _leaders_html(week, leaders):
     """Fantasy Leaders: the week's top scorers at each position across the
     NFL, in league scoring, with who owns each (or FA). Top 5 shown, the
-    rest of the list behind "See all". With live=True the section also has
-    room for next week's leaders so far, filled in by the page's script
-    from leaders/live.json (saved by the Sunday/Monday live runs); with
-    neither, it's left out."""
+    rest of the list behind "See all". Only that week's numbers - the
+    week in progress is on the home page's leaders ticker."""
     have = bool(leaders) and any(leaders.get(p) for p in LEADER_POSITIONS)
-    if not have and not live:
+    if not have:
         return ""
 
     def row(i, pos, r):
@@ -835,7 +829,7 @@ def _leaders_html(week, leaders, live=False):
                 f'<span class="lp">{pts:.1f}</span></li>')
 
     cards = ""
-    for pos in LEADER_POSITIONS if have else ():
+    for pos in LEADER_POSITIONS:
         rows = leaders.get(pos) or []
         if not rows:
             continue
@@ -847,83 +841,13 @@ def _leaders_html(week, leaders, live=False):
         <ol class="ldr-list">{top}</ol>
         {f'<details class="ldr-more"><summary>See top {len(rows)}</summary><ol class="ldr-list" start="{LEADERS_TOP + 1}">{more}</ol></details>' if more else ''}
       </article>"""
-    final = (f"""
-    <div id="ldrFinal">
-      <p class="ldr-when">WEEK {week:02d} &middot; FINAL</p>
-      <div class="ldr-grid">{cards}
-      </div>
-    </div>""" if have else "")
     return f"""
-  <section class="sec" id="leaders" aria-labelledby="leaders-title"{"" if have else " hidden"}>
+  <section class="sec" id="leaders" aria-labelledby="leaders-title">
     <div class="sec-head"><h2 id="leaders-title">FANTASY LEADERS</h2></div>
-    <p class="sec-sub">TOP SCORERS AT EVERY POSITION, IN OUR SCORING &middot; FA = AVAILABLE</p>
-    <div id="ldrLive" hidden></div>{final}
+    <p class="sec-sub">WEEK {week:02d} &middot; TOP SCORERS AT EVERY POSITION, IN OUR SCORING &middot; FA = AVAILABLE</p>
+    <div class="ldr-grid">{cards}
+    </div>
   </section>"""
-
-
-_LEADERS_SCRIPT = """
-<script>
-// Fantasy Leaders for the week in progress, saved by the Sunday/Monday
-// live runs. Shown above last week's final leaders on that week's page.
-(function () {
-  var PAGE_WEEK = __WEEK__, PAGE_SEASON = __SEASON__, TOP = __TOP__, NFL = __NFL__;
-  var box = document.getElementById('ldrLive'), sec = document.getElementById('leaders');
-  if (!box || !window.fetch) return;
-  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
-  function row(i, pos, r) {
-    var li = el('li'), ln = el('span', 'ln'), own = el('small');
-    li.appendChild(el('span', 'lr', String(i + 1)));
-    ln.appendChild(el('b', '', pos === 'DEF' ? (NFL[r[1]] || r[1]) + ' D/ST' : r[0]));
-    own.appendChild(document.createTextNode(r[1] + ' \u00b7 '));
-    if (r[3]) own.appendChild(document.createTextNode(r[3])); else own.appendChild(el('span', 'fa', 'FA'));
-    ln.appendChild(own); li.appendChild(ln);
-    li.appendChild(el('span', 'lp', (Math.round(r[2] * 10) / 10).toFixed(1)));
-    return li;
-  }
-  fetch('/leaders/live.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
-    if (!d || d.season !== PAGE_SEASON || d.week !== PAGE_WEEK + 1 || !d.positions) return;
-    var when = new Date(d.updated * 1000).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-    box.appendChild(el('p', 'ldr-when live', 'WEEK ' + (d.week < 10 ? '0' : '') + d.week + ' \u00b7 LIVE \u00b7 UPDATED ' + when.toUpperCase()));
-    var grid = el('div', 'ldr-grid');
-    ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].forEach(function (pos) {
-      var rows = d.positions[pos] || [];
-      if (!rows.length) return;
-      var card = el('article', 'ldr'), list = el('ol', 'ldr-list');
-      card.setAttribute('aria-label', 'Top ' + pos + 's so far');
-      card.appendChild(el('h3', '', pos));
-      rows.slice(0, TOP).forEach(function (r, i) { list.appendChild(row(i, pos, r)); });
-      card.appendChild(list);
-      if (rows.length > TOP) {
-        var det = el('details', 'ldr-more'), more = el('ol', 'ldr-list');
-        det.appendChild(el('summary', '', 'See top ' + rows.length));
-        more.setAttribute('start', String(TOP + 1));
-        rows.slice(TOP).forEach(function (r, i) { more.appendChild(row(i + TOP, pos, r)); });
-        det.appendChild(more); card.appendChild(det);
-      }
-      grid.appendChild(card);
-    });
-    box.appendChild(grid);
-    box.hidden = false; sec.hidden = false;
-    // last week's final leaders fold away behind a button while this week is live
-    var fin = document.getElementById('ldrFinal');
-    if (fin) {
-      var btn = el('button', 'ldr-toggle', 'Show Week ' + (PAGE_WEEK < 10 ? '0' : '') + PAGE_WEEK + ' final leaders');
-      btn.type = 'button'; btn.setAttribute('aria-expanded', 'false');
-      fin.hidden = true;
-      btn.onclick = function () {
-        fin.hidden = !fin.hidden; btn.setAttribute('aria-expanded', fin.hidden ? 'false' : 'true');
-        btn.textContent = (fin.hidden ? 'Show' : 'Hide') + ' Week ' + (PAGE_WEEK < 10 ? '0' : '') + PAGE_WEEK + ' final leaders';
-      };
-      fin.parentNode.insertBefore(btn, fin);
-    }
-  }, function () {});
-})();
-</script>"""
-
-
-def _leaders_script(week, season):
-    return (_LEADERS_SCRIPT.replace("__WEEK__", str(int(week))).replace("__SEASON__", str(int(season)))
-            .replace("__TOP__", str(LEADERS_TOP)).replace("__NFL__", json.dumps(NFL_NAMES)))
 
 
 def _tables_html(week, rankings, standings):
@@ -1096,7 +1020,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     <a class="wn-mid" href="{HOME_URL}/#archive">{season} SEASON ARCHIVE</a>
     {_week_step(week, weeks, 1)}
   </nav>"""
-    script = "" if is_sample else _WEEK_SCRIPT.replace("__WEEK__", str(week)) + _box_script() + _leaders_script(week, season)
+    script = "" if is_sample else _WEEK_SCRIPT.replace("__WEEK__", str(week)) + _box_script()
 
     return f"""<!doctype html>
 <html lang="en">
@@ -1185,7 +1109,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     </div>
   </section>
 
-{_leaders_html(week, leaders, live=not is_sample)}
+{_leaders_html(week, leaders)}
   <div class="sec">{_tables_html(week, rankings, standings)}</div>
 </main>
 {week_nav}
