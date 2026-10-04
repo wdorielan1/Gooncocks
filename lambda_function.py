@@ -109,7 +109,8 @@ from concurrent.futures import ThreadPoolExecutor
 import boto3
 
 from awards import (
-    Matchup, award_details, compute_awards, compute_extra_awards, generate_recap, identity, power_rankings, week_records,
+    Matchup, award_details, compute_awards, compute_extra_awards, generate_recap, identity, position_scores, power_rankings,
+    week_records,
 )
 import league_history
 import weekly_history
@@ -1033,9 +1034,15 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
         except Exception:
             traceback.print_exc()
             print("Skipped the Rivalry Watch and record banners this run - see the error above.")
+    try:
+        positions = position_scores(rosters) if rosters else None
+    except Exception:
+        traceback.print_exc()
+        print("Skipped the Position by Position table this run - see the error above.")
+        positions = None
     html = render_html(
         week, matchups, is_sample=is_sample, bonus_note=bonus_note, standings=standings_ranked, extras=extras,
-        details=details, weeks=published_weeks, history=history,
+        details=details, weeks=published_weeks, history=history, positions=positions,
     )
     website_url = os.environ.get("S3_WEBSITE_URL")
     page_url = f"{website_url.rstrip('/')}/recap.html" if website_url else f"s3://{bucket}/recap.html"

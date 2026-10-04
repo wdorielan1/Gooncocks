@@ -144,6 +144,25 @@ check("landing page has The Pot above Rivalry Watch", "<h2>The Pot</h2>" in land
 check("landing page hides the banner until it has a pick", 'id="rivalryWatch" class="rwh-sec" hidden' in landing
       and "renderRivalry(d.next_rivalry)" in landing)
 
+# Position by Position: starters only, flex counted at his own position, best/worst marked
+from awards import position_scores
+from sample_data import SAMPLE_MATCHUPS as _SM
+_r = [{"team": m.team_a_name, "manager": m.team_a_manager, "players": [
+          {"name": "QB One", "position": "QB", "slot": "QB", "points": 20.0 + i},
+          {"name": "Flex RB", "position": "RB", "slot": "W/R/T", "points": 10.0},
+          {"name": "Two Way", "position": "WR,TE", "slot": "TE", "points": 5.0 + i},
+          {"name": "Benched", "position": "RB", "slot": "BN", "points": 40.0},
+          {"name": "Hurt", "position": "WR", "slot": "IR", "points": 9.0}]}
+      for i, m in enumerate(_SM)]
+_ps = position_scores(_r)
+check("position scores count starters only, by each player's own position",
+      _ps[0]["by"] == {"QB": 22.0, "RB": 10.0, "WR": 7.0, "TE": 0.0, "K": 0.0, "DEF": 0.0} and _ps[0]["total"] == 39.0, _ps[0])
+check("position scores list highest total first", [t["total"] for t in _ps] == sorted((t["total"] for t in _ps), reverse=True))
+_html = webpage.render_html(4, _SM, is_sample=True, positions=_ps)
+check("weekly page has the Position by Position table with best and worst marked",
+      'id="positions"' in _html and _html.count('class="r best"') >= 2 and 'class="r worst"' in _html and "QB One 22.0" in _html)
+check("no lineups, no Position by Position table", 'id="positions"' not in webpage.render_html(4, _SM, is_sample=True))
+
 print()
 if failures:
     print(f"{len(failures)} check(s) failed: {', '.join(failures)}")
