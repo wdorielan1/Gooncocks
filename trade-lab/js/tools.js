@@ -68,7 +68,7 @@
     }
     return S.pa !== undefined;
   }
-  var TOOLS = { pa: 'tool-pa', ww: 'tool-ww', tx: 'tool-tx', ir: 'tool-ir' };
+  var TOOLS = { pa: 'tool-pa', ww: 'tool-ww', ld: 'tool-ld', tx: 'tool-tx', ir: 'tool-ir' };
   function renderToolNav() {
     var tool = S.tool || 'pa';
     Array.prototype.forEach.call(document.querySelectorAll('#toolNav .tool-b'), function (b) {
@@ -82,6 +82,7 @@
     if (S.tool === 'ww') return renderWW();
     if (S.tool === 'ir') return renderIR();
     if (S.tool === 'tx') return renderTX();
+    if (S.tool === 'ld') return renderLD();
     var st = $('paState');
     if (!ensurePa()) {
       st.className = 'state'; st.textContent = 'Loading…';
@@ -592,6 +593,40 @@
 
 
 
+
+  // ---------- fantasy leaders (this week, live) ----------
+  // leaders/live.json, saved by the Sunday/Monday live runs from Yahoo:
+  // {season, week, updated, positions: {pos: [[name, team, points, manager|null]]}}.
+  function renderLD() {
+    var st = $('ldState');
+    if (S.ld === undefined) {
+      if (!S.ldLoad) S.ldLoad = api.leaders().then(function (d) { S.ld = d; }, function () { S.ld = null; })
+        .then(function () { S.ldLoad = null; renderTools(); });
+      st.className = 'state'; st.textContent = 'Loading…';
+      return;
+    }
+    st.textContent = '';
+    var list = clear($('ldList')), box = clear($('ldPos'));
+    $('ldWhen').textContent = '';
+    if (!S.ld || !S.ld.positions) { st.className = 'state'; st.textContent = 'This week’s leaders show up after the early games on Sunday.'; return; }
+    $('ldWhen').textContent = 'Week ' + S.ld.week + ' · as of ' + new Date(S.ld.updated * 1000).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    var pos = S.ldPos || 'QB';
+    WW_POS.forEach(function (p) {
+      box.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (p === pos ? ' on' : ''), 'aria-pressed': p === pos ? 'true' : 'false',
+        text: p, onclick: function () { S.ldPos = p; renderTools(); } }));
+    });
+    var rows = S.ld.positions[pos] || [];
+    if (!rows.length) { list.appendChild(h('li', { class: 'fine', text: 'No ' + PA_WHO[pos] + ' have scored yet this week.' })); return; }
+    rows.forEach(function (r, i) {
+      var mine = S.me && S.me.manager && r[3] === S.me.manager;
+      list.appendChild(h('li', { class: 'ld-row' + (mine ? ' mine' : '') }, [
+        h('span', { class: 'ld-rk', text: String(i + 1) }),
+        h('span', { class: 'ld-nm' }, [h('b', { text: pos === 'DEF' ? (NFL[r[1]] || r[1]) + ' D/ST' : r[0] }),
+          h('small', {}, [r[1] + ' · ', r[3] ? h('span', { text: (mine ? '★ ' : '') + r[3] }) : h('span', { class: 'ld-fa', text: 'FA' })])]),
+        h('span', { class: 'ld-pts', text: fmt(r[2]) })]));
+    });
+  }
+
   // ---------- transaction report ----------
   // The league's adds, drops and trades from the Trade Lab API (read from
   // Yahoo). For players picked up or traded for, "since" is how he's scored
@@ -855,7 +890,7 @@
   Array.prototype.forEach.call(document.querySelectorAll('#toolNav .tool-b'), function (b) {
     b.addEventListener('click', function () {
       S.tool = b.getAttribute('data-tool'); renderTools();
-      try { history.replaceState(null, '', { ww: '#waivers', ir: '#injuries', tx: '#transactions' }[S.tool] || location.pathname); } catch (e) { /* ignore */ }
+      try { history.replaceState(null, '', { ww: '#waivers', ir: '#injuries', tx: '#transactions', ld: '#leaders' }[S.tool] || location.pathname); } catch (e) { /* ignore */ }
     });
   });
   var m = /^#(qb|rb|wr|te|k|def)$/i.exec(location.hash);
@@ -863,5 +898,6 @@
   if (/^#waivers$/i.test(location.hash)) S.tool = 'ww';
   if (/^#injuries$/i.test(location.hash)) S.tool = 'ir';
   if (/^#transactions$/i.test(location.hash)) S.tool = 'tx';
+  if (/^#leaders$/i.test(location.hash)) S.tool = 'ld';
   renderTools();
 })();

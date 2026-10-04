@@ -165,7 +165,9 @@
   @keyframes scroll{ from{transform:translateX(0)} to{transform:translateX(-50%)} }
 
   /* ---------- fantasy leaders ticker (this week so far) ---------- */
-  .ldr-band{display:flex; align-items:stretch; border-bottom:1px solid var(--hairline); background:#0a1430; overflow:hidden}
+  .ldr-band{display:flex; align-items:stretch; border-bottom:1px solid var(--hairline); background:#0a1430; overflow:hidden; text-decoration:none; color:inherit}
+  .ldr-band:focus-visible{outline:2px solid var(--gold); outline-offset:-2px}
+  .ldr-tag .ldr-all{margin-top:2px; text-decoration:underline}
   .ldr-band[hidden]{display:none}
   .ldr-tag{flex:none; display:grid; align-content:center; gap:2px; padding:8px 16px; background:var(--gold); color:#141005; text-align:center}
   .ldr-tag b{font-family:'Anton','Arial Narrow',sans-serif; font-size:15px; letter-spacing:1px; font-weight:400}
@@ -174,9 +176,10 @@
     .ldr-tag{padding:6px 10px; max-width:96px}
     .ldr-tag b{font-size:13px; line-height:1.05}
     .ldr-tag small{font-size:9px; letter-spacing:.3px}
+    #ldrWhen{display:none}
     #ldrTrack > span{font-size:14px; padding:0 14px}
   }
-  .ldr-view{flex:1; min-width:0; overflow:hidden; white-space:nowrap}
+  .ldr-view{display:block; flex:1; min-width:0; overflow:hidden; white-space:nowrap}
   .ldr-band:hover .ticker-track{animation-play-state:paused}
   #ldrTrack > span{font-family:'Anton','Arial Narrow',sans-serif; font-size:15px; letter-spacing:1px; color:var(--fog); padding:0 20px; border-right:1px solid var(--hairline)}
   #ldrTrack .pos{color:var(--gold); margin-right:8px}
@@ -402,10 +405,10 @@
   <div class="ticker-track" id="tickerTrack"></div>
 </div>
 
-<div class="ldr-band" id="ldrBand" role="region" aria-label="Fantasy leaders this week" hidden>
-  <span class="ldr-tag"><b id="ldrWeek">LEADERS</b><small id="ldrWhen"></small></span>
-  <div class="ldr-view"><div class="ticker-track" id="ldrTrack"></div></div>
-</div>
+<a class="ldr-band" id="ldrBand" href="https://stats.gooncocks.com/tools.html#leaders" aria-label="This week's fantasy leaders: see the full list" hidden>
+  <span class="ldr-tag"><b id="ldrWeek">LEADERS</b><small id="ldrWhen"></small><small class="ldr-all">See all ›</small></span>
+  <span class="ldr-view"><span class="ticker-track" id="ldrTrack"></span></span>
+</a>
 
 <main class="wrap">
 

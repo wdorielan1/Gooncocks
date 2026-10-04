@@ -234,5 +234,14 @@
     { key: 's6', type: 'move', at: now - 13.4 * day, faab: '21', teams: [{ team_key: T.Will, manager: 'Will' }],
       players: [mv('Jaylen Warren', 'add', 'waivers', 'team', 'Will'), mv('Ray Davis', 'drop', 'team', 'waivers', 'Will')] }
   ];
+  // Fantasy Leaders (this week so far): every sample player, best first, with owner or FA.
+  var ownerOf = {};
+  names.forEach(function (n) { R[n].forEach(function (r) { ownerOf[r[1]] = n; }); });
+  var lpos = { QB: [], RB: [], WR: [], TE: [], K: [], DEF: [] };
+  names.map(function (n) { return R[n]; }).concat([FA]).forEach(function (list) {
+    list.forEach(function (r) { if (r[4] && lpos[r[2]]) lpos[r[2]].push([r[1], r[3], points(r[1], cur, 3), ownerOf[r[1]] || null]); });
+  });
+  Object.keys(lpos).forEach(function (k) { lpos[k].sort(function (a, b) { return b[2] - a[2]; }); });
+  window.TRADE_LAB_SAMPLE.leaders = { season: cur, week: 4, updated: now - 1800, positions: lpos };
   window.TRADE_LAB_SAMPLE.live = { season: cur, week: 4, updated: Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 20, 2).getTime() / 1000), teams: liveTeams };
 })();

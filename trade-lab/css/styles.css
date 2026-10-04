@@ -416,6 +416,15 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .ww-picks { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
 .ww-picks > li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; background: #0f1d36; border-radius: 3px; }
 .ww-picks > li > div > b { display: block; }
+.ld-when { margin-top: 10px; font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: #5fd08f; }
+.ld-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; max-width: 560px; }
+.ld-row { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 10px; padding: 8px 12px; background: #0c1831; border: 1px solid var(--line-2); border-radius: 3px; }
+.ld-row.mine { border-color: var(--gold); }
+.ld-rk { font-weight: 700; color: var(--muted); text-align: center; }
+.ld-nm { display: grid; min-width: 0; } .ld-nm b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ld-nm small { font-size: 12px; color: var(--muted); }
+.ld-fa { color: #5fd08f; font-weight: 700; }
+.ld-pts { font: 400 22px/1 var(--headline); }
 .tx-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 14px; }
 .tx-filters .pa-pos { margin-top: 0; }
 .tx-sel { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }

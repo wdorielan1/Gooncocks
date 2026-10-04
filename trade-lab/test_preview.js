@@ -546,6 +546,23 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.deepStrictEqual(xp.errors, []);
     await xp.close();
   });
+  await check('tools page: fantasy leaders this week, by position, with owners and FA', async () => {
+    const lp = await browser.newPage({ viewport: { width: 360, height: 780 } });
+    lp.errors = [];
+    lp.on('pageerror', e => lp.errors.push(e.message));
+    await lp.route(/^https?:/, r => r.abort());
+    await lp.goto('file://' + toolsFile + '#leaders', { waitUntil: 'domcontentloaded' });
+    await lp.waitForSelector('.ld-row');
+    assert.match(await lp.textContent('#ldWhen'), /^Week 4 · as of /);
+    const qbs = await lp.$$eval('.ld-row', rs => rs.map(r => [r.querySelector('b').textContent, parseFloat(r.querySelector('.ld-pts').textContent), r.querySelector('small').textContent]));
+    assert.ok(qbs.length >= 5 && qbs.every((r, i) => i === 0 || qbs[i - 1][1] >= r[1]), JSON.stringify(qbs));  // most points first
+    assert.ok(qbs.some(r => /· FA$/.test(r[2])) && qbs.some(r => /· (Will|Sam|Chet|Chris|Gabe|Patrick)$/.test(r[2])), JSON.stringify(qbs));
+    await lp.click('#ldPos button:has-text("DEF")');
+    assert.match(await lp.textContent('.ld-row'), /D\/ST/);
+    assert.ok(await noOverflow(lp));
+    assert.deepStrictEqual(lp.errors, []);
+    await lp.close();
+  });
   if (shots) {
     await phone.screenshot({ path: path.join(shots, 'phone.png'), fullPage: true });
     await phone.click('#manageBtn');

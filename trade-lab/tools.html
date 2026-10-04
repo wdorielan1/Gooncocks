@@ -54,6 +54,7 @@
     <div class="tool-nav" role="group" aria-label="Tools" id="toolNav">
       <button type="button" class="tool-b on" aria-pressed="true" data-tool="pa"><b>Points Against</b><span>Which defenses give up the most to each position</span></button>
       <button type="button" class="tool-b" aria-pressed="false" data-tool="ww"><b>Waiver Wire Report</b><span>The best free agents, and where your team needs help</span></button>
+      <button type="button" class="tool-b" aria-pressed="false" data-tool="ld"><b>Fantasy Leaders</b><span>This week’s top scorers at every position, live</span></button>
       <button type="button" class="tool-b" aria-pressed="false" data-tool="tx"><b>Transaction Report</b><span>Every pickup, drop and trade in one place</span></button>
       <button type="button" class="tool-b" aria-pressed="false" data-tool="ir"><b>Injury Report</b><span>Who’s out, who’s a game-time call, and who’s coming back</span></button>
     </div>
@@ -82,6 +83,14 @@
     <div id="wwState" class="state" role="status" aria-live="polite"></div>
     <div class="pa-wrap"><table class="pa pa-full pa-slim ww" id="wwTable"><caption class="sr-only">Best available players</caption></table></div>
     <p class="fine" id="wwNote"></p>
+    </div>
+    <div id="tool-ld" hidden>
+    <h3 class="tool-h">Fantasy Leaders</h3>
+    <p class="pa-intro">The week’s top scorers at every position across the NFL, in our scoring, straight from Yahoo. It updates Sunday after the early games, Sunday night and Monday night. <b>FA</b> means nobody in our league has him.</p>
+    <p class="ld-when" id="ldWhen"></p>
+    <div class="pa-pos" role="group" aria-label="Position" id="ldPos"></div>
+    <div id="ldState" class="state" role="status" aria-live="polite"></div>
+    <ol class="ld-list" id="ldList"></ol>
     </div>
     <div id="tool-tx" hidden>
     <h3 class="tool-h">Transaction Report</h3>
