@@ -192,6 +192,40 @@
     });
   });
   window.TRADE_LAB_SAMPLE.nflPlayers = nflp;
+  // Player pop-up game logs: made-up box scores that add up to each week's points.
+  var GL = {
+    QB: [['Passing', 'Cmp'], ['Passing', 'Att'], ['Passing', 'Yds'], ['Passing', 'TD'], ['Passing', 'Int'], ['Rushing', 'Car'], ['Rushing', 'Yds'], ['Rushing', 'TD']],
+    RB: [['Rushing', 'Car'], ['Rushing', 'Yds'], ['Rushing', 'TD'], ['Receiving', 'Tgt'], ['Receiving', 'Rec'], ['Receiving', 'Yds'], ['Receiving', 'TD']],
+    WR: [['Receiving', 'Tgt'], ['Receiving', 'Rec'], ['Receiving', 'Yds'], ['Receiving', 'TD'], ['Rushing', 'Car'], ['Rushing', 'Yds'], ['Rushing', 'TD']],
+    K: [['Field goals', 'Made'], ['Field goals', 'Att'], ['Field goals', 'Long'], ['Extra points', 'Made'], ['Extra points', 'Att']],
+    DEF: [['Defense', 'Sack'], ['Defense', 'Int'], ['Defense', 'Fum Rec'], ['Defense', 'TD'], ['Defense', 'Safety'], ['Defense', 'Pts Allow']]
+  };
+  GL.TE = GL.WR;
+  function line(pos, p, j) {
+    var r = Math.round, f = Math.floor;
+    if (pos === 'QB') { var att = 26 + j % 12; return [r(att * 0.66), att, r(p * 11), f(p / 9), p < 14 ? 1 : 0, 2 + j % 5, r(p * 0.9), p > 26 ? 1 : 0]; }
+    if (pos === 'RB') { var tg = 2 + j % 4; return [9 + r(p * 0.6), r(p * 4.1), f(p / 14), tg, Math.max(1, tg - 1), r(p * 1.1), 0]; }
+    if (pos === 'WR' || pos === 'TE') { var t = 4 + r(p * 0.35); return [t, r(t * 0.66), r(p * 5.2), f(p / 13), j % 7 === 0 ? 1 : 0, j % 7 === 0 ? 6 : 0, 0]; }
+    if (pos === 'K') { var m = f(p / 4); return [m, m + (j % 3 === 0 ? 1 : 0), m ? 33 + j % 22 : 0, 1 + j % 4, 1 + j % 4]; }
+    return [f(p / 3), p > 9 ? 1 : 0, j % 4 === 0 ? 1 : 0, p > 14 ? 1 : 0, 0, Math.max(3, 31 - r(p * 1.6))];
+  }
+  var home = {};
+  NFLT.forEach(function (t, i) { home[t] = Object.keys(schedule[t]).map(Number).filter(function (w) { return (w + i) % 2 === 0; }); });
+  var gl = { season: cur, weeks: [1, 2, 3], updated: now - 7200, cols: GL, players: [], defenses: {}, schedule: schedule, home: home };
+  names.map(function (n) { return R[n]; }).concat([FA]).forEach(function (list) {
+    list.forEach(function (r) {
+      if (!r[4]) return;
+      var wk = {};
+      [1, 2, 3].forEach(function (w) {
+        if (r[1] === 'Mark Andrews' && w === 3) return;  // hurt: did not play
+        if (!schedule[r[3]][w]) return;  // bye
+        var p = points(r[1], cur, w);
+        wk[w] = [p, schedule[r[3]][w]].concat(line(r[2], p, r[0] + w));
+      });
+      if (r[2] === 'DEF') gl.defenses[r[3]] = wk; else gl.players.push([nk(r[1]), r[1], r[2], r[3], wk]);
+    });
+  });
+  window.TRADE_LAB_SAMPLE.gameLog = gl;
   window.TRADE_LAB_SAMPLE.available = FA.map(function (r) {
     return { player_key: '470.p.' + r[0], name: r[1], position: r[2], nfl_team: r[3], headshot: '', injury: r[6] || null, waivers: !!r[5] };
   });

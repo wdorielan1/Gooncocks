@@ -38,6 +38,9 @@
   function season() { var d = new Date(); return d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear(); }
   function ordinal(n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
   function fmt(n) { return n === null || n === undefined || isNaN(n) ? '—' : (Math.round(n * 10) / 10).toFixed(1); }
+  // A player's name that opens his game log (js/playercard.js).
+  function pl(p, text, cls) { return window.PlayerCard ? PlayerCard.link(p, text, cls) : document.createTextNode(text === undefined ? p.name : text); }
+  if (window.PlayerCard) PlayerCard.source(function () { return api.gameLog(season()); });
 
   // ---------- details window ----------
   function trapFocus(container, e) {
@@ -292,7 +295,7 @@
       return h('li', {}, [
         h('div', { class: 'pa-gh' }, [h('b', { text: 'Week ' + w + (opp ? ' vs ' + opp : '') }), h('span', { class: 'pa-gt', text: fmt((t.weeks[w] || {})[pos] || 0) + ' pts' })]),
         who.length ? h('ul', {}, who.map(function (p) {
-          return h('li', {}, [h('div', {}, [h('span', { class: 'pa-pn', text: p[0] }), p[3] ? h('span', { class: 'pa-pl', text: p[3] }) : null]),
+          return h('li', {}, [h('div', {}, [h('span', { class: 'pa-pn' }, [pos === 'DEF' ? p[0] : pl({ name: p[0], position: pos, nfl_team: p[1] })]), p[3] ? h('span', { class: 'pa-pl', text: p[3] }) : null]),
             h('b', { class: 'pa-pp', text: fmt(p[2]) })]);
         })) : h('p', { class: 'fine', text: 'No points scored.' })
       ]);
@@ -463,23 +466,18 @@
       h('th', { scope: 'col', class: 'pa-nexth ww-col-season', text: 'Season' }),
       wk ? h('th', { scope: 'col', class: byProj ? 'pa-ptsh' : 'pa-nexth', text: 'Wk ' + wk + ' proj', 'aria-sort': byProj ? 'descending' : null }) : null,
       wk ? h('th', { scope: 'col', class: 'pa-nexth', text: 'Wk ' + wk + ' vs' }) : null])]));
-    S.wwWeeks = S.wwWeeks || {};
     var body = [];
     rows.forEach(function (r, i) {
-      var open = !!S.wwWeeks[r.p.player_key];
-      body.push(h('tr', { class: open ? 'ww-open' : null }, [h('td', { class: 'pa-rank', text: String(i + 1) }),
-        h('th', { scope: 'row' }, [h('button', { type: 'button', class: 'ww-name', 'aria-expanded': open ? 'true' : 'false',
-            title: open ? 'Hide his weeks' : 'Show his points each week', text: r.p.name,
-            onclick: function () { S.wwWeeks[r.p.player_key] = !open; renderTools(); } }),
+      body.push(h('tr', {}, [h('td', { class: 'pa-rank', text: String(i + 1) }),
+        h('th', { scope: 'row' }, [pl(Object.assign({ manager: null }, r.p), undefined, 'ww-name'),
           h('span', { class: 'ww-sub' }, [h('span', { text: nflCode(r.p.nfl_team) + ' · ' + plural(r.f.games, 'game') })].concat(tags(r.p)))]),
         h('td', { class: byProj ? 'ww-season' : 'ww-pts', text: fmt(r.f.last4) }), h('td', { class: 'ww-season ww-col-season', text: fmt(r.f.season) }),
         wk ? h('td', { class: 'ww-proj' + (byProj ? ' on' : ''), text: r.m && r.m.bye ? '0.0' : fmt(r.proj) }) : null,
         wk ? h('td', { class: 'ww-next' }, [matchupChip(r.m)]) : null]));
-      if (open) body.push(h('tr', { class: 'ww-weeks-row' }, [h('td'), h('td', { colspan: wk ? '5' : '3' }, [weekChips(r.p, r.f)])]));
     });
     tbl.appendChild(h('tbody', {}, body.length ? body : [h('tr', {}, [h('td', { colspan: '6', class: 'fine', text: 'No available ' + PA_WHO[pos] + ' with stats this season.' })])]));
     var hidden = all.length - all.filter(function (r) { return r.f; }).length, ws = S.nflp.weeks || [];
-    $('wwNote').textContent = 'Tap a player to see his points each week. Free agents and waivers from Yahoo, ' + (S.avail.stale ? 'last read ' : 'checked ') + L.ago(S.avail.checked_at, now()) +
+    $('wwNote').textContent = 'Tap a player for his game log. Free agents and waivers from Yahoo, ' + (S.avail.stale ? 'last read ' : 'checked ') + L.ago(S.avail.checked_at, now()) +
       (S.avail.stale ? ' (Yahoo isn’t answering right now)' : '') + '. Points per game in our scoring from nflverse' +
       (ws.length ? ', weeks ' + ws[0] + (ws.length > 1 ? '–' + ws[ws.length - 1] : '') : '') + '. ' +
       (wk ? 'Wk ' + wk + ' proj is our estimate: last-4 average adjusted for how many points his opponent gives up to his position. ' : '') +
@@ -579,10 +577,10 @@
       var w = r.weakest;
       card.appendChild(h('div', { class: 'ww-weak' }, [
         h('p', { class: 'ww-weak-h' }, [h('b', { text: r.pos }), ' · ' + ordinal(r.rank) + ' of ' + r.n + ' in the league']),
-        h('p', { class: 'ww-weak-s', text: w && w.v ? (r.many ? 'Your weakest starter: ' : 'Your starter: ') + w.p.name + ', ' + fmt(w.v) + ' pts/game (last 4)'
-          : 'You don’t have a ' + r.pos + ' scoring right now.' }),
+        h('p', { class: 'ww-weak-s' }, w && w.v ? [(r.many ? 'Your weakest starter: ' : 'Your starter: '), pl(w.p), ', ' + fmt(w.v) + ' pts/game (last 4)']
+          : ['You don’t have a ' + r.pos + ' scoring right now.']),
         r.picks.length ? h('ol', { class: 'ww-picks' }, r.picks.map(function (k) {
-          return h('li', {}, [h('div', {}, [h('b', { text: k.p.name }), h('span', { class: 'ww-sub' },
+          return h('li', {}, [h('div', {}, [h('b', {}, [pl(Object.assign({ manager: null }, k.p))]), h('span', { class: 'ww-sub' },
             [h('span', { text: nflCode(k.p.nfl_team) + ' · ' + fmt(k.f.last4) + ' last 4' + (k.m ? ' · ' + (k.m.bye ? 'bye' : fmt(projection(k.p, k.f, k.m)) + ' proj') : '') })]
             .concat(tags(k.p))), weekChips(k.p, k.f)]), matchupChip(k.m)]);
         })) : h('p', { class: 'fine', text: 'Nobody on the wire has outscored ' + (w ? w.p.name : 'that spot') + ' lately. Hold.' })
@@ -643,7 +641,7 @@
       var mine = S.me && S.me.manager && r[3] === S.me.manager;
       list.appendChild(h('li', { class: 'ld-row' + (mine ? ' mine' : '') }, [
         h('span', { class: 'ld-rk', text: String(i + 1) }),
-        h('span', { class: 'ld-nm' }, [h('b', { text: pos === 'DEF' ? (NFL[r[1]] || r[1]) + ' D/ST' : r[0] }),
+        h('span', { class: 'ld-nm' }, [h('b', {}, [pl({ name: r[0], position: pos, nfl_team: r[1], manager: r[3] || null }, pos === 'DEF' ? (NFL[r[1]] || r[1]) + ' D/ST' : r[0])]),
           h('small', {}, [r[1] + ' · ', r[3] ? h('span', { text: (mine ? '★ ' : '') + r[3] }) : h('span', { class: 'ld-fa', text: 'FA' })])]),
         h('span', { class: 'ld-pts', text: fmt(r[2]) })]));
     });
@@ -679,7 +677,7 @@
     var since = sign === '+' ? sinceMove(p, at) : null;
     return h('li', { class: 'tx-p ' + (sign === '+' ? 'add' : sign === '−' ? 'drop' : 'trade') }, [
       h('span', { class: 'tx-sign', text: sign, 'aria-hidden': 'true' }),
-      h('span', { class: 'tx-pmain' }, [h('b', { text: p.name }), h('span', { class: 'ir-pos', text: ' ' + p.position + (p.nfl_team ? ' · ' + nflCode(p.nfl_team) : '') }),
+      h('span', { class: 'tx-pmain' }, [h('b', {}, [pl(p)]), h('span', { class: 'ir-pos', text: ' ' + p.position + (p.nfl_team ? ' · ' + nflCode(p.nfl_team) : '') }),
         extra ? h('span', { class: 'ww-tag ' + extra[1], text: extra[0] }) : null]),
       since ? h('span', { class: 'tx-since', title: 'Points per game in our scoring since this move' },
         since.games ? [h('b', { text: fmt(since.ppg) }), ' pts/g since · ' + plural(since.games, 'game')] : ['No games since yet']) : null
@@ -814,7 +812,7 @@
         (k && k.bye ? ' · bye this week' : '');
     return h('li', { class: 'ir-row' + (mine ? ' mine' : '') }, [chip,
       h('div', { class: 'ir-main' }, [
-        h('p', {}, [h('b', { text: p.name }), h('span', { class: 'ir-pos', text: ' ' + p.position + ' · ' + nflCode(p.nfl_team) })]),
+        h('p', {}, [h('b', {}, [pl(Object.assign({}, p, { manager: p.manager || undefined }))]), h('span', { class: 'ir-pos', text: ' ' + p.position + ' · ' + nflCode(p.nfl_team) })]),
         h('p', { class: 'ir-status', text: status }),
         k && !k.bye ? h('p', { class: 'ir-kickoff', text: 'Kickoff ' + k.day + (k.time ? ' ' + k.time + ' ET' : '') + (k.opp ? ' vs ' + k.opp : '') }) : null,
         h('p', { class: 'ir-who' }, [(mine ? '★ ' : '') + (p.manager || 'A manager') + (slotText(p) ? ' · ' + slotText(p) : ''), newsLink(p) ? ' · ' : null, newsLink(p)])])]);

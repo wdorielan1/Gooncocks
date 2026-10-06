@@ -227,7 +227,7 @@
     return h('li', { class: 'card' + (own ? ' mine' : ''), 'data-player': l.player_key }, [
       shot(l),
       h('div', { class: 'col-name' }, [
-        h('h3', { class: 'pname', text: l.name }),
+        h('h3', { class: 'pname' }, [pl({ name: l.name, position: l.position, nfl_team: l.nfl_team, manager: l.manager })]),
         h('div', { class: 'pmeta' }, [posBadge(l.position), l.nfl_team ? h('span', { class: 'nfl', text: l.nfl_team }) : null,
           ratingTag(l), own ? h('span', { class: 'mine-tag', text: 'Your Listing' }) : null])
       ]),
@@ -709,6 +709,9 @@
 
   // ---------- league data: rosters + scores, shared by Scouting, Matchmaker and the Calculator ----------
   function season() { var d = new Date(); return d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear(); }
+  // A player's name that opens his game log (js/playercard.js).
+  function pl(p, text) { return window.PlayerCard ? PlayerCard.link(p, text) : document.createTextNode(text === undefined ? p.name : text); }
+  if (window.PlayerCard) PlayerCard.source(function () { return api.gameLog(season()); });
   var GROUP_NAME = { QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', FLEX: 'Flex', K: 'K', DEF: 'DEF' };
   function loadLeague() {
     if (S.leagueLoad) return S.leagueLoad;
@@ -813,7 +816,7 @@
             ]),
             h('td', { text: ordinal(c.rank) + ' of ' + sc.count }),
             h('td', { class: 'starters' }, grp.starters.length ? grp.starters.map(function (x) {
-              return h('span', { class: 'st-p' }, [x.player.name + ' ', h('small', { text: x.rating.value === null ? 'no scores' : fmt(x.rating.value) + ' pts/wk' })]);
+              return h('span', { class: 'st-p' }, [pl(x.player), ' ', h('small', { text: x.rating.value === null ? 'no scores' : fmt(x.rating.value) + ' pts/wk' })]);
             }) : [h('small', { text: 'Nobody to start' })])
           ]);
         }))
@@ -884,7 +887,7 @@
         function chips(listx, label) {
           if (!listx.length) return null;
           return h('div', { class: 'offer' }, [h('small', { text: label })].concat(listx.slice(0, 4).map(function (o) {
-            return h('span', { class: 'chip' + (o.listed ? ' listed' : '') }, [posBadge(o.player.position), ' ' + o.player.name + ' ',
+            return h('span', { class: 'chip' + (o.listed ? ' listed' : '') }, [posBadge(o.player.position), ' ', pl(o.player), ' ',
               h('small', { text: (o.rating.value === null ? 'no scores' : fmt(o.rating.value) + ' pts/wk') + ' · ' + (o.listed ? 'On the block' : o.role === 'bench' ? 'Bench' : 'Starter') })]);
           })));
         }
@@ -1103,7 +1106,7 @@
         var r = sd.ratings[i];
         var inj = p.injury;
         rows.push(h('tr', { class: 'side-' + sd.side.toLowerCase() + ' p-main' }, [
-          h('td', {}, [p.name + ' ', h('span', { class: 'nfl', text: p.position + (p.nfl_team ? ' · ' + p.nfl_team : '') }),
+          h('td', {}, [pl(p), ' ', h('span', { class: 'nfl', text: p.position + (p.nfl_team ? ' · ' + p.nfl_team : '') }),
             inj ? h('span', { class: 'ww-tag inj' + (inj.code === 'Q' || inj.code === 'D' ? '' : ' out'), title: inj.label, text: inj.code + (inj.note ? ' · ' + inj.note : '') }) : null]),
           h('td', { text: String(r.games) }), h('td', { class: 'num', text: fmt(r.ppg) }), h('td', { class: 'num', text: fmt(r.recent) }),
           h('td', { class: 'num', text: fmt(r.lastPpg) }), h('td', { class: 'num strong', text: fmt(r.value) })

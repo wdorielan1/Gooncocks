@@ -423,12 +423,14 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.ok(await wp.isHidden('#tool-pa'));
     assert.strictEqual(await wp.getAttribute('#toolNav .tool-b[data-tool="ww"]', 'aria-pressed'), 'true');
     const rows = await wp.$$eval('#wwTable tbody tr', trs => trs.map(t => [t.querySelector('.ww-name').textContent, parseFloat(t.querySelector('.ww-pts').textContent), t.textContent]));
-    // tapping a player shows every week's points; tapping again hides them
+    // tapping a player opens his game log; Escape closes it and puts focus back
     await wp.click('#wwTable .ww-name >> nth=0');
-    assert.strictEqual(await wp.getAttribute('#wwTable .ww-name >> nth=0', 'aria-expanded'), 'true');
-    assert.match(await wp.textContent('#wwTable .ww-weeks-row'), /^W1[\d.–]+W2[\d.–]+W3[\d.–]+$/);
-    await wp.click('#wwTable .ww-name >> nth=0');
-    assert.strictEqual(await wp.$('#wwTable .ww-weeks-row'), null);
+    await wp.waitForSelector('#playerCard .pc-log');
+    assert.strictEqual(await wp.textContent('#pcName'), rows[0][0]);
+    assert.match(await wp.textContent('#playerCard .pc-sub'), /Free agent$/);
+    await wp.keyboard.press('Escape');
+    assert.ok(await wp.isHidden('#playerCard'));
+    assert.strictEqual(await wp.evaluate(() => document.activeElement.textContent), rows[0][0]);
     assert.ok(rows.length >= 3 && rows.every((r, i) => i === 0 || rows[i - 1][1] >= r[1]), JSON.stringify(rows));  // best last 4 first
     assert.ok(rows.some(r => r[0] === 'Tyrone Tracy Jr.' && /Claim/.test(r[2])), 'waiver players are marked; Jr. names match');
     assert.ok(rows.every(r => /(NO|[A-Z]{2,3}) ?#\d+|BYE/.test(r[2])), 'each has a next matchup');
@@ -574,6 +576,51 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.ok(await noOverflow(lp));
     assert.deepStrictEqual(lp.errors, []);
     await lp.close();
+  });
+  await check('player pop-up: game log with box-score stats, byes, totals, from any page', async () => {
+    const cp = await browser.newPage({ viewport: { width: 1000, height: 900 } });
+    cp.errors = [];
+    cp.on('pageerror', e => cp.errors.push(e.message));
+    await cp.route(/^https?:/, r => r.abort());
+    await cp.goto('file://' + toolsFile + '#leaders', { waitUntil: 'domcontentloaded' });
+    await cp.waitForSelector('.ld-row .pc-link');
+    const qb = await cp.textContent('.ld-row .pc-link >> nth=0');
+    await cp.click('.ld-row .pc-link >> nth=0');
+    await cp.waitForSelector('#playerCard .pc-log');
+    assert.strictEqual(await cp.textContent('#pcName'), qb);
+    assert.deepStrictEqual(await cp.$$eval('#playerCard thead tr:first-child th.pc-grp', t => t.map(x => x.textContent).filter(Boolean)), ['Passing', 'Rushing']);
+    assert.deepStrictEqual(await cp.$$eval('#playerCard thead tr:nth-child(2) th', t => t.map(x => x.textContent)),
+      ['Wk', 'Opp', 'Pts', 'Cmp', 'Att', 'Yds', 'TD', 'Int', 'Car', 'Yds', 'TD']);
+    const body = await cp.$$eval('#playerCard tbody tr', t => t.map(x => [...x.children].map(c => c.textContent)));
+    assert.ok(body.length >= 3 && body.every((r, i) => r[0] === String(i + 1) && /^(@ |vs )[A-Z]{2,3}$|^BYE$/.test(r[1])), JSON.stringify(body));
+    const played = body.filter(r => r.length === 11), tot = await cp.$$eval('#playerCard tfoot td', t => t.map(x => x.textContent));
+    assert.strictEqual(parseFloat(tot[1]), Math.round(played.reduce((a, r) => a + parseFloat(r[2]), 0) * 10) / 10);
+    assert.strictEqual(+tot[4], played.reduce((a, r) => a + +r[5], 0));  // passing yards add up
+    assert.match(await cp.textContent('#playerCard .pc-tiles'), /Pts \/ game.*Last 4.*Total.*Best · Wk \d/);
+    await cp.click('#playerCard .pc-x');
+    assert.ok(await cp.isHidden('#playerCard'));
+    // a defense, a kicker, a player who missed a game, and someone with no stats
+    await cp.click('#ldPos button:has-text("DEF")');
+    await cp.click('.ld-row .pc-link >> nth=0');
+    await cp.waitForSelector('#playerCard .pc-log');
+    assert.match(await cp.textContent('#pcName'), /D\/ST$/);
+    assert.match(await cp.textContent('#playerCard thead'), /Pts Allow/);
+    await cp.keyboard.press('Escape');
+    await cp.evaluate(() => PlayerCard.open({ name: 'Mark Andrews', position: 'TE', nfl_team: 'BAL', manager: 'Chris' }));
+    await cp.waitForSelector('#playerCard .pc-log');
+    assert.match(await cp.textContent('#playerCard .pc-sub'), /Ravens \(BAL\) · On Chris’s team/);
+    assert.match(await cp.textContent('#playerCard tbody'), /Did not play/);
+    await cp.evaluate(() => PlayerCard.open({ name: 'Brand New Rookie', position: 'WR', nfl_team: 'CHI', manager: null }));
+    assert.match(await cp.textContent('#playerCard .pc-state'), /No game log yet/);
+    await cp.keyboard.press('Escape');
+    // a phone: bottom sheet, table scrolls sideways inside it, page doesn't
+    await cp.setViewportSize({ width: 360, height: 760 });
+    await cp.click('#ldPos button:has-text("QB")');
+    await cp.click('.ld-row .pc-link >> nth=0');
+    await cp.waitForSelector('#playerCard .pc-log');
+    assert.ok(await noOverflow(cp));
+    assert.deepStrictEqual(cp.errors, []);
+    await cp.close();
   });
   if (shots) {
     await phone.screenshot({ path: path.join(shots, 'phone.png'), fullPage: true });

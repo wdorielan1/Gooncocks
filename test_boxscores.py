@@ -294,6 +294,16 @@ check("check vs Yahoo: exact matches, misses and players not found",
       ck["by_position"]["QB"]["exact"] == 1 and ck["by_position"]["DEF"]["exact"] == 1
       and ck["by_position"]["RB"]["exact"] == 0 and ck["biggest_misses"][0]["diff"] == 1.4
       and ck["by_position"]["WR"]["not_found"] == 1, ck)
+gl = nfl_points.game_log(nfl_points.season_points(2025, R, PCSV, TCSV, G2))
+glp = {p[1]: p for p in gl["players"]}
+check("game log: a QB's week with completions, attempts, yards, TDs and rushing",
+      gl["cols"]["QB"][:2] == [["Passing", "Cmp"], ["Passing", "Att"]] and glp["Josh Allen"][:4] == ["josh allen", "Josh Allen", "QB", "BUF"]
+      and glp["Josh Allen"][4][1] == [60.26, "BAL", 33, 46, 394, 2, 0, 0, 30, 2], glp["Josh Allen"])
+check("game log: RB rushing then receiving, kicker field goals, defense with points allowed",
+      glp["Kenneth Walker III"][4][1][2:] == [0, 104, 0, 0, 3, 20, 0] and len(glp["Brandon Aubrey"][4][1]) == 2 + len(gl["cols"]["K"])
+      and gl["defenses"]["BAL"][1][:2] == [11.0, "BUF"] and gl["defenses"]["BAL"][1][2] == 3 and gl["defenses"]["BAL"][1][-1] == 17, gl["defenses"])
+check("game log: schedule with home games, for byes and @ / vs",
+      gl["schedule"]["BUF"] == {1: "BAL", 2: "BAL", 3: "SF"} and gl["home"]["BUF"] == [1, 3] and gl["home"]["BAL"] == [2], gl["home"])
 check("names match across sources (suffixes and punctuation)", nfl_points.name_key("Kenneth Walker III") == nfl_points.name_key("Kenneth Walker")
       and nfl_points.name_key("D.J. Moore") == nfl_points.name_key("DJ Moore") and nfl_points.name_key("Ja'Marr Chase") == "jamarr chase")
 

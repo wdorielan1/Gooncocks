@@ -189,6 +189,24 @@ STAT_COLS = {
             ("TD", ("_def_tds",)), ("Safety", ("def_safeties",)), ("Blk Kick", ("def_punt_blocks", "def_fg_blocks", "def_pat_blocks")),
             ("Pts Allow", ("_points_allowed",))],
 }
+# The player pop-up's game log columns per position: (group, label,
+# nflverse columns summed), like a box score.
+GAME_LOG = {
+    "QB": [("Passing", "Cmp", ("completions",)), ("Passing", "Att", ("attempts",)), ("Passing", "Yds", ("passing_yards",)),
+           ("Passing", "TD", ("passing_tds",)), ("Passing", "Int", ("passing_interceptions",)),
+           ("Rushing", "Car", ("carries",)), ("Rushing", "Yds", ("rushing_yards",)), ("Rushing", "TD", ("rushing_tds",))],
+    "RB": [("Rushing", "Car", ("carries",)), ("Rushing", "Yds", ("rushing_yards",)), ("Rushing", "TD", ("rushing_tds",)),
+           ("Receiving", "Tgt", ("targets",)), ("Receiving", "Rec", ("receptions",)), ("Receiving", "Yds", ("receiving_yards",)),
+           ("Receiving", "TD", ("receiving_tds",))],
+    "WR": [("Receiving", "Tgt", ("targets",)), ("Receiving", "Rec", ("receptions",)), ("Receiving", "Yds", ("receiving_yards",)),
+           ("Receiving", "TD", ("receiving_tds",)), ("Rushing", "Car", ("carries",)), ("Rushing", "Yds", ("rushing_yards",)),
+           ("Rushing", "TD", ("rushing_tds",))],
+    "K": [("Field goals", "Made", ("fg_made",)), ("Field goals", "Att", ("fg_att",)), ("Field goals", "Long", ("fg_long",)),
+          ("Extra points", "Made", ("pat_made",)), ("Extra points", "Att", ("pat_att",))],
+    "DEF": [("Defense", "Sack", ("def_sacks",)), ("Defense", "Int", ("def_interceptions",)), ("Defense", "Fum Rec", ("fumble_recovery_opp",)),
+            ("Defense", "TD", ("_def_tds",)), ("Defense", "Safety", ("def_safeties",)), ("Defense", "Pts Allow", ("_points_allowed",))],
+}
+GAME_LOG["TE"] = GAME_LOG["WR"]
 # How much a player was used in a game, to tell who a team's starters are.
 USAGE = {"QB": ("attempts",), "RB": ("carries", "targets"), "WR": ("targets",), "TE": ("targets",), "K": ("fg_att", "pat_att")}
 STARTERS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "K": 1}
@@ -196,6 +214,10 @@ STARTERS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "K": 1}
 
 def stat_values(row, position):
     return [_n(_num(row, *cols)) for _label, cols in STAT_COLS[position]]
+
+
+def game_log_values(row, position):
+    return [_n(_num(row, *cols)) for _group, _label, cols in GAME_LOG[position]]
 
 
 def team_code(code):
@@ -235,18 +257,21 @@ def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
     """Every player's and defense's regular-season weekly points (stops:
     fourth_down_stops' result, for leagues that score them):
     {"players": [{"id", "name", "position", "team",
-                  "weeks": {week: [pts, opp, stat line, stat columns, usage]}}],
-     "defenses": {team: {week: [pts, opp, stat line, stat columns]}},
-     "schedule": {team: {week: opponent}}} - the schedule has every
-    regular-season week, played or not (a missing week is a bye)."""
+                  "weeks": {week: [pts, opp, stat line, stat columns, usage, game log columns]}}],
+     "defenses": {team: {week: [pts, opp, stat line, stat columns, game log columns]}},
+     "schedule": {team: {week: opponent}}, "home": {team: [weeks at home]}} -
+    the schedule has every regular-season week, played or not (a missing
+    week is a bye)."""
     allowed = {}   # (team, week) -> points its opponent scored
     schedule = {}  # team -> {week: opponent}, future weeks too
+    home_weeks = {}  # team -> weeks it plays at home
     for g in _csv(games_csv):
         if g.get("season") != str(season) or g.get("game_type") not in ("REG", None, ""):
             continue
         wk, home, away = int(g["week"]), team_code(g["home_team"]), team_code(g["away_team"])
         schedule.setdefault(home, {})[wk] = away
         schedule.setdefault(away, {})[wk] = home
+        home_weeks.setdefault(home, []).append(wk)
         if not g.get("home_score"):
             continue
         allowed[(home, wk)] = int(float(g["away_score"]))
@@ -259,7 +284,8 @@ def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
                                                 "position": r["position"], "team": team_code(r["team"]), "weeks": {}})
         p["team"] = team_code(r["team"])  # the latest team he played for
         p["weeks"][int(r["week"])] = [player_points(r, rules), team_code(r.get("opponent_team")), stat_line(r, r["position"]),
-                                      stat_values(r, r["position"]), _n(_num(r, *USAGE[r["position"]]))]
+                                      stat_values(r, r["position"]), _n(_num(r, *USAGE[r["position"]])),
+                                      game_log_values(r, r["position"])]
     defenses = {}
     for r in _csv(team_csv):
         if r.get("season_type") not in ("REG", None, ""):
@@ -271,8 +297,9 @@ def season_points(season, rules, player_csv, team_csv, games_csv, stops=None):
         r["_points_allowed"] = allowed[(team, wk)]
         r["_def_tds"] = _num(r, "def_tds") + min(_num(r, "fumble_recovery_tds"), _num(r, "fumble_recovery_opp")) + _num(r, "special_teams_tds")
         defenses.setdefault(team, {})[wk] = [def_points(r, allowed[(team, wk)], rules), team_code(r.get("opponent_team")),
-                                             def_line(r, allowed[(team, wk)]), stat_values(r, "DEF")]
-    return {"season": int(season), "players": list(players.values()), "defenses": defenses, "schedule": schedule}
+                                             def_line(r, allowed[(team, wk)]), stat_values(r, "DEF"), game_log_values(r, "DEF")]
+    return {"season": int(season), "players": list(players.values()), "defenses": defenses, "schedule": schedule,
+            "home": {team: sorted(set(wks)) for team, wks in home_weeks.items()}}
 
 
 def kickoffs(season, games_csv):
@@ -298,6 +325,21 @@ def player_weeks(points):
                         for p in points["players"] if p["weeks"]],
             "defenses": {team: {wk: round(w[0], 2) for wk, w in weeks.items()}
                          for team, weeks in points["defenses"].items()}}
+
+
+def game_log(points):
+    """Every player's and defense's game log for the player pop-up:
+    {"cols": {pos: [[group, label]]}, "players": [[name key, name,
+    position, team, {week: [pts, opp, *columns]}]], "defenses": {team:
+    {week: [pts, opp, *columns]}}, "schedule": {team: {week: opp}},
+    "home": {team: [weeks]}}. The name key is name_key(name)."""
+    return {"cols": {pos: [[g, label] for g, label, _c in cols] for pos, cols in GAME_LOG.items()},
+            "players": [[name_key(p["name"]), p["name"], p["position"], p["team"],
+                         {wk: [round(w[0], 2), w[1]] + list(w[5]) for wk, w in p["weeks"].items()}]
+                        for p in points["players"] if p["weeks"]],
+            "defenses": {team: {wk: [round(w[0], 2), w[1]] + list(w[4]) for wk, w in weeks.items()}
+                         for team, weeks in points["defenses"].items()},
+            "schedule": points["schedule"], "home": points.get("home") or {}}
 
 
 def starters(points):

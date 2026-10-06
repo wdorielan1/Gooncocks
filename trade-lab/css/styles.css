@@ -372,9 +372,6 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .pa-mine-chip { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--gold); white-space: normal; }
 .pa tr.pa-mine-row th, .pa tr.pa-mine-row td.pa-rank { background: #1a2238; }
 .ww .ww-name { display: block; padding: 0; border: 0; background: none; color: var(--text); font: 600 15px/1.3 var(--body); text-align: left; white-space: normal; cursor: pointer; text-decoration: underline dotted #ffffff55; text-underline-offset: 4px; }
-.ww .ww-name[aria-expanded="true"] { color: var(--gold); }
-.ww tr.ww-open th, .ww tr.ww-open td { border-bottom: 0; }
-.ww tr.ww-weeks-row td { padding-top: 0; background: none; text-align: left; }
 .ww-weeks { margin-top: 6px; }
 .ww-picks .ww-weeks li { min-width: 38px; background: #13213d; }
 .ww-picks .ww-weeks li.hi { background: #1f5a3a; } .ww-picks .ww-weeks li.lo { background: #5a2a2a; }
