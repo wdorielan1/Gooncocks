@@ -82,34 +82,39 @@
     }) };
   }
   // A player's two cells: name then points for the left team, mirrored for the right.
-  function cells(p, side, best) {
+  // With the player pop-up on the page (shared/playercard.js), the name opens his game log.
+  function cells(p, side, best, game) {
     var name, num;
     if (!p) {
       name = '<td class="bx-p ' + side + ' bx-none">—</td>';
       num = '<td class="bx-n ' + side + '"></td>';
     } else {
       var sub = [p[2], p[3]].filter(Boolean).join(' · ');
-      name = '<td class="bx-p ' + side + '"><span class="bx-fn">' + esc(p[1]) + '</span><span class="bx-sn">' + esc(short(p[1])) + '</span>' +
-        (sub ? '<small>' + esc(sub) + '</small>' : '') + '</td>';
+      var label = '<span class="bx-fn">' + esc(p[1]) + '</span><span class="bx-sn">' + esc(short(p[1])) + '</span>';
+      if (window.PlayerCard && game) {
+        label = '<button type="button" class="pc-link bx-pl" title="Game log" data-pn="' + esc(p[1]) + '" data-pp="' + esc(p[2]) + '" data-pt="' + esc(p[3]) +
+          '" data-pm="' + esc(game[side].name) + '" data-ps="' + esc(game.season) + '">' + label + '</button>';
+      }
+      name = '<td class="bx-p ' + side + '">' + label + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</td>';
       num = '<td class="bx-n ' + side + (best ? ' bx-best' : '') + '">' + pts(p[4]) + '</td>';
     }
     return side === 'a' ? name + num : num + name;
   }
-  function rows(list, cls) {
+  function rows(list, cls, game) {
     return list.map(function (r) {
       var va = r[0] && typeof r[0][4] === 'number' ? r[0][4] : null, vb = r[1] && typeof r[1][4] === 'number' ? r[1][4] : null;
-      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '>' + cells(r[0], 'a', va != null && (vb == null || va > vb)) +
-        '<td class="bx-s">' + esc(r[2]) + '</td>' + cells(r[1], 'b', vb != null && (va == null || vb > va)) + '</tr>';
+      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '>' + cells(r[0], 'a', va != null && (vb == null || va > vb), game) +
+        '<td class="bx-s">' + esc(r[2]) + '</td>' + cells(r[1], 'b', vb != null && (va == null || vb > va), game) + '</tr>';
     }).join('');
   }
   function lineupHTML(box, game) {
     var L = pairUp(box.a, box.b), t = L.totals;
     var html = '<table class="bx-t"><colgroup><col><col class="bx-cn"><col class="bx-cs"><col class="bx-cn"><col></colgroup><caption class="bx-sr">Lineups: ' + esc(game.a.name) + ' and ' + esc(game.b.name) + '</caption>' +
       '<thead><tr><th colspan="2" class="a">' + esc(game.a.name) + '</th><th class="bx-s">Pos</th><th colspan="2" class="b">' + esc(game.b.name) + '</th></tr></thead><tbody>' +
-      rows(L.starters, '') +
+      rows(L.starters, '', game) +
       '<tr class="bx-tot"><td class="a">Starters</td><td class="bx-n a">' + pts(t[0][0]) + '</td><td class="bx-s"></td><td class="bx-n b">' + pts(t[1][0]) + '</td><td class="b">Starters</td></tr>';
     if (L.bench.length) {
-      html += '<tr class="bx-sub"><td colspan="5">Bench</td></tr>' + rows(L.bench, 'bx-bn') +
+      html += '<tr class="bx-sub"><td colspan="5">Bench</td></tr>' + rows(L.bench, 'bx-bn', game) +
         '<tr class="bx-tot"><td class="a">Bench</td><td class="bx-n a">' + pts(t[0][1]) + '</td><td class="bx-s"></td><td class="bx-n b">' + pts(t[1][1]) + '</td><td class="b">Bench</td></tr>';
     }
     html += '</tbody></table>';
@@ -142,7 +147,10 @@
     m.innerHTML = '<div class="bx-card" role="dialog" aria-modal="true" aria-labelledby="bxTitle"><button type="button" class="bx-x" aria-label="Close">&times;</button><div class="bx-body"></div></div>';
     document.body.appendChild(m);
     m.addEventListener('click', function (e) { if (e.target === m || e.target.closest('.bx-x')) close(); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !m.hidden) { e.stopPropagation(); close(); } }, true);
+    document.addEventListener('keydown', function (e) {
+      var pc = document.getElementById('playerCard');  // a player's game log open on top: Escape closes that first
+      if (e.key === 'Escape' && !m.hidden && !(pc && !pc.hidden)) { e.stopPropagation(); close(); }
+    }, true);
     return m;
   }
   function close() {
@@ -209,6 +217,7 @@
       '.bx-p{overflow:hidden}',
       '.bx-p .bx-fn,.bx-p .bx-sn{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}',
       '.bx-p .bx-sn{display:none}',
+      '.bx-p .bx-pl{display:block;max-width:100%;text-align:inherit}',
       '.bx-p small{display:block;font-size:11px;color:#98a6c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.bx-none{color:#6c7d9f}',
       '.bx-cn{width:58px}.bx-cs{width:44px}',

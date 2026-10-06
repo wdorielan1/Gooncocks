@@ -711,7 +711,7 @@
   function season() { var d = new Date(); return d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear(); }
   // A player's name that opens his game log (js/playercard.js).
   function pl(p, text) { return window.PlayerCard ? PlayerCard.link(p, text) : document.createTextNode(text === undefined ? p.name : text); }
-  if (window.PlayerCard) PlayerCard.source(function () { return api.gameLog(season()); });
+  if (window.PlayerCard) PlayerCard.source(function (s) { return api.gameLog(s); });
   var GROUP_NAME = { QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', FLEX: 'Flex', K: 'K', DEF: 'DEF' };
   function loadLeague() {
     if (S.leagueLoad) return S.leagueLoad;

@@ -1111,9 +1111,11 @@ def _publish_page(week, matchups, is_sample, bonus_note=None, rosters=None, tran
         except Exception:
             traceback.print_exc()
             print("Skipped the Fantasy Leaders this run - see the error above.")
+    players = {p["name"]: ((p.get("position") or "").split(",")[0].strip(), p.get("nfl_team"), r.get("manager") or r.get("team"))
+               for r in rosters or [] for p in r["players"] if p.get("name")}
     html = render_html(
         week, matchups, is_sample=is_sample, bonus_note=bonus_note, standings=standings_ranked, extras=extras,
-        details=details, weeks=published_weeks, history=history, leaders=leaders,
+        details=details, weeks=published_weeks, history=history, leaders=leaders, players=players,
     )
     website_url = os.environ.get("S3_WEBSITE_URL")
     page_url = f"{website_url.rstrip('/')}/recap.html" if website_url else f"s3://{bucket}/recap.html"

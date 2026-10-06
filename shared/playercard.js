@@ -5,12 +5,15 @@
  * Lambda's nfl_points action from nflverse stats). Self-contained so any
  * page can use it:
  *
- *   PlayerCard.source(function () { return promise of the game log JSON });  // optional
- *   PlayerCard.link({name, position, nfl_team, manager}, text?)  // a button that opens it
- *   PlayerCard.open({name, position, nfl_team, manager}, opener)
+ *   PlayerCard.source(function (season) { return promise of that season's game log });  // optional
+ *   PlayerCard.link({name, position, nfl_team, manager, season}, text?)  // a button that opens it
+ *   PlayerCard.open({name, position, nfl_team, manager, season}, opener)
  *
- * manager: who has him in our league, null for a free agent, undefined if
- * the page doesn't know. Everything is put on the page as text, never HTML.
+ * or, in HTML built elsewhere (recap pages, box scores), any element with
+ *   data-pn="name" data-pp="position" data-pt="NFL team" [data-pm="manager"] [data-ps="season"]
+ * opens it when clicked. manager: who has him in our league, "" / null for
+ * a free agent, left out if the page doesn't know. season defaults to this
+ * one. Everything is put on the page as text, never HTML.
  */
 (function () {
   'use strict';
@@ -20,8 +23,8 @@
     NYJ: 'Jets', PHI: 'Eagles', PIT: 'Steelers', SEA: 'Seahawks', SF: '49ers', TB: 'Buccaneers', TEN: 'Titans', WAS: 'Commanders' };
   var TEAM_FIX = { JAC: 'JAX', WSH: 'WAS', LA: 'LAR', LVR: 'LV', OAK: 'LV', SD: 'LAC', STL: 'LAR' };
   var POS_FIX = { 'D/ST': 'DEF', DST: 'DEF', PK: 'K' };
-  var load = function () {
-    var d = new Date(), season = d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear();
+  function thisSeason() { var d = new Date(); return d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear(); }
+  var load = function (season) {
     return fetch('/nfl/gamelog_' + season + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; });
   };
   var CSS = [
@@ -76,7 +79,7 @@
     st.textContent = CSS;
     document.head.appendChild(st);
   }
-  var data, pending = null, idx = null, box = null, lastFocus = null, current = null;
+  var cache = {}, pending = {}, data, box = null, lastFocus = null, current = null;  // cache: season -> game log | null
 
   function h(tag, attrs, kids) {
     var el = document.createElement(tag);
@@ -103,14 +106,15 @@
       .replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean).join(' ');
   }
 
-  function ensure() {
-    if (data !== undefined) return Promise.resolve(data);
-    if (!pending) {
-      pending = Promise.resolve().then(load).then(function (d) { data = d && d.players ? d : null; }, function () { data = null; })
-        .then(function () { pending = null; idx = null; return data; });
+  function ensure(season) {
+    if (cache[season] !== undefined) return Promise.resolve(cache[season]);
+    if (!pending[season]) {
+      pending[season] = Promise.resolve(season).then(load).then(function (d) { cache[season] = d && d.players ? d : null; }, function () { cache[season] = null; })
+        .then(function () { delete pending[season]; return cache[season]; });
     }
-    return pending;
+    return pending[season];
   }
+  function seasonOf(p) { return Number(p.season) || thisSeason(); }
   // The player's row in the game log: [key, name, pos, team, {wk: [pts, opp, ...]}],
   // matched by name and position (team breaks ties), the way the Lambda does it.
   function find(p) {
@@ -119,8 +123,9 @@
       var d = (data.defenses || {})[t];
       return d ? [t, (TEAMS[t] || t) + ' D/ST', 'DEF', t, d] : null;
     }
+    var idx = data._idx;
     if (!idx) {
-      idx = {};
+      idx = data._idx = {};
       data.players.forEach(function (r) { (idx[r[0] + '|' + r[2]] = idx[r[0] + '|' + r[2]] || []).push(r); (idx[r[0]] = idx[r[0]] || []).push(r); });
     }
     var k = nameKey(p.name), list = idx[k + '|' + ps] || idx[k] || [];
@@ -162,12 +167,16 @@
         h('p', { class: 'pc-sub', text: [ps !== 'DEF' && TEAMS[t] ? TEAMS[t] + ' (' + t + ')' : t, who].filter(Boolean).join(' · ') })])]);
   }
   function render(p) {
-    var body = document.getElementById('pcBody');
+    var body = document.getElementById('pcBody'), yr = seasonOf(p);
+    data = cache[yr];
     while (body.firstChild) body.removeChild(body.firstChild);
     if (data === undefined) { body.appendChild(head(p, null)); body.appendChild(h('p', { class: 'pc-state', text: 'Loading his games…' })); return; }
     var row = data && find(p);
     body.appendChild(head(p, row));
-    if (!data) { body.appendChild(h('p', { class: 'pc-state', text: 'Game logs can’t be loaded right now. Try again in a minute.' })); return; }
+    if (!data) {
+      body.appendChild(h('p', { class: 'pc-state', text: yr < thisSeason() ? 'No game logs saved for the ' + yr + ' season.' : 'Game logs can’t be loaded right now. Try again in a minute.' }));
+      return;
+    }
     if (!row) { body.appendChild(h('p', { class: 'pc-state', text: 'No game log yet: he hasn’t played an NFL snap this season, or his stats haven’t posted.' })); return; }
     var ps = row[2], weeks = row[4], cols = (data.cols || {})[ps] || [], t = row[3];
     var last = Math.max.apply(null, (data.weeks || []).concat(Object.keys(weeks).map(Number)));
@@ -229,7 +238,7 @@
     document.documentElement.classList.add('pc-lock');
     box.querySelector('.pc-x').focus();
     box.querySelector('.pc-card').scrollTop = 0;
-    if (data === undefined) ensure().then(function () { if (current === p) render(p); });
+    if (cache[seasonOf(p)] === undefined) ensure(seasonOf(p)).then(function () { if (current === p) render(p); });
   }
   function link(p, text, cls) {
     style();
@@ -239,8 +248,19 @@
   }
 
   window.PlayerCard = {
-    source: function (fn) { load = fn; data = undefined; idx = null; },
-    open: open, link: link, close: close,
-    _find: function (p) { return ensure().then(function () { return data && find(p); }); }
+    source: function (fn) { load = fn; cache = {}; },
+    open: open, link: link, close: close
   };
+  // Names marked up with data-pn anywhere on the page open the pop-up.
+  function attr(el, k) { return el.hasAttribute(k) ? el.getAttribute(k) : undefined; }
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest && e.target.closest('[data-pn]');
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var pm = attr(el, 'data-pm');
+    open({ name: el.getAttribute('data-pn'), position: attr(el, 'data-pp'), nfl_team: attr(el, 'data-pt'),
+           manager: pm === undefined ? undefined : pm || null, season: attr(el, 'data-ps') }, el);
+  }, true);
+  if (document.head) style(); else document.addEventListener('DOMContentLoaded', style);
 })();

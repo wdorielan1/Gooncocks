@@ -487,24 +487,53 @@ def _icon(key):
     return f'<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">{_ICONS[key]}</svg></span>'
 
 
-def _detail_list(lines, css_class=None):
+def _pc_button(label, name, pos, team, manager, season):
+    """A player's name that opens his game log pop-up (shared/playercard.js).
+    `label` is already-escaped HTML; manager None = free agent."""
+    return (f'<button type="button" class="pc-link" title="Game log" data-pn="{escape(name)}" data-pp="{escape(pos or "")}" '
+            f'data-pt="{escape(team or "")}" data-pm="{escape(manager or "")}" data-ps="{season}">{label}</button>')
+
+
+def _linker(players, season):
+    """A function that turns every rostered player's name in a piece of
+    escaped HTML text into a game log button. `players` is {name: (position,
+    NFL team, manager)}; with none, text comes back unchanged."""
+    # Defenses are left out: their names are cities, which turn up in team names too.
+    players = {n: v for n, v in (players or {}).items() if v[0] != "DEF" and len(n) > 4}
+    if not players:
+        return lambda html: html
+    names = sorted(players, key=len, reverse=True)
+    pattern = re.compile(r"(?<![A-Za-z0-9])(" + "|".join(re.escape(escape(n)) for n in names) + r")(?![A-Za-z0-9])")
+    by_html = {escape(n): n for n in names}
+
+    def link(html):
+        def one(m):
+            name = by_html[m.group(1)]
+            pos, team, manager = players[name]
+            return _pc_button(m.group(1), name, pos, team, manager, season)
+        return pattern.sub(one, html)
+    return link
+
+
+def _detail_list(lines, css_class=None, link=None):
     """The short 'how it happened' lines under an award (see
     awards.award_details). Names come from Yahoo team/player data, so
-    they're escaped."""
+    they're escaped; with `link`, player names open their game log."""
     if not lines:
         return ""
-    items = "".join(f"<li>{escape(line)}</li>" for line in lines)
+    link = link or (lambda html: html)
+    items = "".join(f"<li>{link(escape(line))}</li>" for line in lines)
     cls = f' class="{css_class}"' if css_class else ""
     return f"<ul{cls}>{items}</ul>"
 
 
-def _receipts(lines):
+def _receipts(lines, link=None):
     if not lines:
         return ""
-    return f'<details class="rc"><summary>See the receipts</summary>{_detail_list(lines)}</details>'
+    return f'<details class="rc"><summary>See the receipts</summary>{_detail_list(lines, link=link)}</details>'
 
 
-def _award_row(key, title, team, manager, value, unit, context, lines):
+def _award_row(key, title, team, manager, value, unit, context, lines, link=None):
     art = (f'<img src="{AWARD_ART[key]}" alt="" loading="lazy">' if key in AWARD_ART else _icon(key))
     return f"""
       <article class="awc">
@@ -513,8 +542,8 @@ def _award_row(key, title, team, manager, value, unit, context, lines):
           <h3>{title}</h3>
           <div class="awc-who">{_avatar(team, manager, "ring")}<span>{_who(team, manager)}</span></div>
           <div class="awc-stat"><b>{value}</b><small>{unit}</small></div>
-          <p>{context}</p>
-          {_detail_list(lines, "awc-rc")}
+          <p>{link(context) if link else context}</p>
+          {_detail_list(lines, "awc-rc", link)}
         </div>
       </article>"""
 
@@ -532,7 +561,7 @@ def _find(matchups, winner, loser):
     return next(m for m in matchups if m.winner == winner and m.loser == loser)
 
 
-def _award_rows(matchups, awards, extras, details):
+def _award_rows(matchups, awards, extras, details, link=None):
     """(rows, empties): one row per award someone won, in the mockup's
     order, and a compact 'No qualifying team' line for each category that
     was checked but nobody earned. Categories whose data wasn't available
@@ -544,7 +573,7 @@ def _award_rows(matchups, awards, extras, details):
             empties.append(_empty_row(key, title))
         else:
             team, manager, value, unit, context = build(award)
-            rows.append(_award_row(key, title, team, manager, value, unit, context, details.get(key)))
+            rows.append(_award_row(key, title, team, manager, value, unit, context, details.get(key), link))
 
     b, h = awards["blowout"], awards["heartbreaker"]
     bm, hm = _find(matchups, b["winner"], b["loser"]), _find(matchups, h["winner"], h["loser"])
@@ -811,7 +840,7 @@ LEADER_POSITIONS = ("QB", "RB", "WR", "TE", "K", "DEF")
 LEADERS_TOP = 5  # shown before "See all"
 
 
-def _leaders_html(week, leaders):
+def _leaders_html(week, leaders, season=None):
     """Fantasy Leaders: the week's top scorers at each position across the
     NFL, in league scoring, with who owns each (or FA). Top 5 shown, the
     rest of the list behind "See all". Only that week's numbers - the
@@ -825,7 +854,8 @@ def _leaders_html(week, leaders):
         label = f"{NFL_NAMES.get(team, team)} D/ST" if pos == "DEF" else name
         own = (f'<small>{escape(team)} &middot; {escape(manager)}</small>' if manager
                else f'<small>{escape(team)} &middot; <span class="fa">FA</span></small>')
-        return (f'<li><span class="lr">{i + 1}</span><span class="ln"><b>{escape(label)}</b>{own}</span>'
+        shown = _pc_button(escape(label), name, pos, team, manager, season) if season else escape(label)
+        return (f'<li><span class="lr">{i + 1}</span><span class="ln"><b>{shown}</b>{own}</span>'
                 f'<span class="lp">{pts:.1f}</span></li>')
 
     cards = ""
@@ -920,6 +950,7 @@ def _week_step(week, weeks, step):
 # Clicking a game opens its box score (both lineups), from the
 # boxscores/<season>.json files the Lambda publishes.
 _BOX_JS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shared", "boxscore.js")
+_CARD_JS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shared", "playercard.js")
 _BOX_CLICK = """
 <script>
 document.addEventListener('click', function(e){
@@ -930,11 +961,15 @@ document.addEventListener('click', function(e){
 
 
 def _box_script():
-    try:
-        with open(_BOX_JS, encoding="utf-8") as f:
-            return "<script>\n" + f.read() + "\n</script>" + _BOX_CLICK
-    except OSError:
-        return ""
+    """The player pop-up (game logs) and the box score pop-up, inlined."""
+    out = ""
+    for path in (_CARD_JS, _BOX_JS):
+        try:
+            with open(path, encoding="utf-8") as f:
+                out += "<script>\n" + f.read() + "\n</script>"
+        except OSError:
+            pass
+    return out + _BOX_CLICK if out else ""
 
 
 _WEEK_SCRIPT = """
@@ -969,14 +1004,16 @@ _WEEK_SCRIPT = """
 
 
 def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None, extras=None, details=None,
-                weeks=None, history=None, leaders=None):
+                weeks=None, history=None, leaders=None, players=None):
     """`weeks` is every week number published so far this season (for the
     week menu and previous/next buttons); `standings` is power_rankings()
     output, or None to leave the season tables out. `history` is the league
     history file (rivalry-history.json); with it, the Rivalry Watch and New
     Record Broken banners go under the Goon/Cock cards. `leaders` is the
     week's top scorers by position ({pos: [(name, team, points, manager)]})
-    for the Fantasy Leaders section, left out when None."""
+    for the Fantasy Leaders section, left out when None. `players` is every
+    rostered player this week ({name: (position, NFL team, manager)}); their
+    names in the award details open their game logs."""
     details = details or {}
     extras = extras or {}
     week = int(week)
@@ -986,12 +1023,13 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     rankings = rank_teams(matchups)
     status = "DEMO" if is_sample else "FINAL"
     season = _season()
+    link = _linker(None if is_sample else players, season)
 
     goon_name = _who(g["team"], g.get("manager"))
     cock_name = _who(c["team"], c.get("manager"))
     goon_lines = details.get("goon") or []
     hero_sub = f"{g['score']:.2f} points. $50 richer. "
-    hero_sub += escape(goon_lines[0]) + "." if goon_lines else "Plenty to say in the group chat."
+    hero_sub += link(escape(goon_lines[0])) + "." if goon_lines else "Plenty to say in the group chat."
     headline_class = ' class="long"' if len(identity(g["team"], g.get("manager"))) > 9 else ""
 
     b, h = awards["blowout"], awards["heartbreaker"]
@@ -1001,7 +1039,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
                   None if is_sample else _box_data(m, season, week))
         for m in sorted(matchups, key=lambda m: -max(m.team_a_score, m.team_b_score))
     )
-    award_rows, empty_rows = _award_rows(matchups, awards, extras, details)
+    award_rows, empty_rows = _award_rows(matchups, awards, extras, details, link)
     banners = _banners_html(week, season, matchups, history) if history and not is_sample else ""
     empties = (f'<p class="aw-none"><span>No qualifying team this week: {" · ".join(escape(e) for e in empty_rows)}</span></p>'
                if empty_rows else "")
@@ -1076,7 +1114,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
         <p class="big-name{_name_size(g)}">{goon_name}</p>
         <p class="big-pts">{g['score']:.2f} POINTS</p>
         <p class="big-tag">$50 and bragging rights</p>
-        {_receipts(goon_lines[1:])}
+        {_receipts(goon_lines[1:], link)}
       </div>
     </article>
     <article class="big cock" aria-labelledby="cock-title">
@@ -1086,7 +1124,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
         <p class="big-name{_name_size(c)}">{cock_name}</p>
         <p class="big-pts">{c['score']:.2f} POINTS</p>
         <p class="big-tag">Mute the chat. It won't help.</p>
-        {_receipts(details.get("cock"))}
+        {_receipts(details.get("cock"), link)}
       </div>
     </article>
   </div>
@@ -1109,7 +1147,7 @@ def render_html(week, matchups, is_sample=True, bonus_note=None, standings=None,
     </div>
   </section>
 
-{_leaders_html(week, leaders)}
+{_leaders_html(week, leaders, None if is_sample else season)}
   <div class="sec">{_tables_html(week, rankings, standings)}</div>
 </main>
 {week_nav}

@@ -40,7 +40,7 @@
   function fmt(n) { return n === null || n === undefined || isNaN(n) ? '—' : (Math.round(n * 10) / 10).toFixed(1); }
   // A player's name that opens his game log (js/playercard.js).
   function pl(p, text, cls) { return window.PlayerCard ? PlayerCard.link(p, text, cls) : document.createTextNode(text === undefined ? p.name : text); }
-  if (window.PlayerCard) PlayerCard.source(function () { return api.gameLog(season()); });
+  if (window.PlayerCard) PlayerCard.source(function (s) { return api.gameLog(s); });
 
   // ---------- details window ----------
   function trapFocus(container, e) {

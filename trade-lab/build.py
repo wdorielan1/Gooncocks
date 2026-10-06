@@ -37,7 +37,7 @@ def build(preview=False, source="index.html"):
     if preview:
         data = "<script>window.TRADE_LAB_PREVIEW = true;</script>\n<script>\n" + _read("data/preview.js") + "\n</script>\n"
     page = page[:start] + data + page[end:]
-    page = re.sub(r'<script src="(js/[\w.-]+)"></script>', lambda m: "<script>\n" + _read(m.group(1)) + "\n</script>", page)
+    page = re.sub(r'<script src="((?:js|\.\./shared)/[\w.-]+)"></script>', lambda m: "<script>\n" + _read(m.group(1)) + "\n</script>", page)
     if preview:
         page = page.replace("<title>Gooncocks Trade Lab</title>", "<title>Trade Lab Preview</title>")
         page = page.replace("<title>Gooncocks Tools</title>", "<title>Tools Preview</title>")

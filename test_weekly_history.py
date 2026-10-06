@@ -193,6 +193,18 @@ check("a published week's leaders are saved for the Tools page, in the live file
       _wf.get("season") == 2026 and _wf.get("week") == 4 and _wf.get("positions", {}).get("QB") == [["Jalen Hurts", "PHI", 31.2, "Will"]],
       _S3w.saved)
 
+_pl = {"Josh Allen": ("QB", "BUF", "Will"), "Ja'Marr Chase": ("WR", "CIN", "Sam"), "Philadelphia": ("DEF", "PHI", "Will")}
+_lk = webpage._linker(_pl, 2026)
+_out = _lk(webpage.escape("Carried by Josh Allen (31.2) and Ja'Marr Chase (20.0); Philadelphia Phreaks; Josh Allenby"))
+check("award details: rostered players' names open their game log, nothing else does",
+      _out.count('class="pc-link"') == 2 and 'data-pn="Josh Allen" data-pp="QB" data-pt="BUF" data-pm="Will" data-ps="2026">Josh Allen</button>' in _out
+      and "data-pn=\"Ja&#x27;Marr Chase\"" in _out and "Philadelphia Phreaks" in _out and "Josh Allenby" in _out, _out)
+check("award details: no rosters, no links", webpage._linker(None, 2026)("Josh Allen") == "Josh Allen")
+_lead = webpage._leaders_html(4, _L, 2026)
+check("Fantasy Leaders names open the game log, free agents marked as such",
+      _lead.count('class="pc-link"') == sum(len(v) for v in _L.values()) and 'data-pm=""' in _lead, _lead[:400])
+check("the week page loads the player pop-up with the box scores", "window.PlayerCard" in webpage._box_script() and "BoxScore" in webpage._box_script())
+
 _real = webpage.render_html(4, _SM, is_sample=False, leaders=_L, weeks=[4])
 check("a week's page shows only that week's leaders, nothing from the week in progress",
       "WEEK 04 &middot; TOP SCORERS" in _real and "leaders/live.json" not in _real and "LIVE" not in _real.split('id="leaders"')[1].split("</section>")[0])
