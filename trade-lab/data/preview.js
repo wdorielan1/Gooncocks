@@ -268,6 +268,14 @@
     { key: 's6', type: 'move', at: now - 13.4 * day, faab: '21', teams: [{ team_key: T.Will, manager: 'Will' }],
       players: [mv('Jaylen Warren', 'add', 'waivers', 'team', 'Will'), mv('Ray Davis', 'drop', 'team', 'waivers', 'Will')] }
   ];
+  // Older winning claims, so the FAAB habits card has something to say.
+  [['Will', 'Demario Douglas', 12, 15.4], ['Will', 'Cole Kmet', 4, 22.2], ['Gabe', 'Hunter Henry', 31, 16.1], ['Gabe', 'Wil Lutz', 1, 23.3],
+   ['Gabe', 'Jalen McMillan', 27, 27.5], ['Sam', 'Jaleel McLaughlin', 6, 15.8], ['Sam', 'Cameron Dicker', 0, 21.6], ['Chris', 'Rashid Shaheed', 9, 28.2],
+   ['Patrick', "Wan'Dale Robinson", 45, 17.4]].forEach(function (c, i) {
+    window.TRADE_LAB_SAMPLE.transactions.push({ key: 'f' + i, type: 'move', at: now - c[3] * day, faab: String(c[2]),
+      teams: [{ team_key: T[c[0]], manager: c[0] }], players: [mv(c[1], 'add', 'waivers', 'team', c[0])] });
+  });
+  window.TRADE_LAB_SAMPLE.transactions.sort(function (a, b) { return b.at - a.at; });
   // Fantasy Leaders (this week so far): every sample player, best first, with owner or FA.
   var ownerOf = {};
   names.forEach(function (n) { R[n].forEach(function (r) { ownerOf[r[1]] = n; }); });

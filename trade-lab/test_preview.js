@@ -523,7 +523,7 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.deepStrictEqual(ip.errors, []);
     await ip.close();
   });
-  await check('tools page: transaction report, adds/drops/trades with filters', async () => {
+  await check('tools page: transaction report, adds/drops/trades with filters, and FAAB habits', async () => {
     const xp = await browser.newPage({ viewport: { width: 360, height: 780 } });
     xp.errors = [];
     xp.on('pageerror', e => xp.errors.push(e.message));
@@ -531,19 +531,29 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     await xp.goto('file://' + toolsFile + '#transactions', { waitUntil: 'domcontentloaded' });
     await xp.waitForSelector('.tx-card');
     const cards = async () => xp.$$eval('.tx-card', cs => cs.map(c => c.querySelector('.tx-kind').textContent + ' ' + c.querySelector('.tx-head b').textContent));
-    assert.deepStrictEqual(await cards(), ['Add/Drop Will', 'Add Gabe', 'Trade Sam ⇄ Chet', 'Add/Drop Chris', 'Drop Patrick', 'Add/Drop Will']);  // newest first
+    assert.deepStrictEqual((await cards()).slice(0, 6), ['Add/Drop Will', 'Add Gabe', 'Trade Sam ⇄ Chet', 'Add/Drop Chris', 'Drop Patrick', 'Add/Drop Will']);  // newest first
     assert.match(await xp.textContent('.tx-card >> nth=0'), /\+Jake Ferguson TE · DALClaim \$14.*−Tyjae Spears/);
     assert.match(await xp.textContent('.tx-card >> nth=1'), /Ray Davis RB · BUFFree agent/);
     assert.match(await xp.textContent('.tx-card.trade'), /Sam gets\+Zack Moss.*Chet gets\+Jaylen Waddle/);
     assert.match(await xp.textContent('.tx-card >> nth=5'), /Jaylen Warren.*[\d.]+ pts\/g since · \d game/);  // how a pickup has done since
-    assert.match(await xp.textContent('.tx-active'), /Most activeWill 2/);
+    assert.match(await xp.textContent('.tx-active'), /Most activeGabe 4Will 4/);
+    // FAAB habits, on top: usual (middle) winning bid per manager, biggest usual bid first
+    const fb = await xp.$$eval('.fb-t tbody tr', rs => rs.map(r => [...r.children].map(c => c.textContent)));
+    assert.deepStrictEqual(fb.map(r => r[0]), ['Patrick', 'Gabe', 'Will', 'Chris', 'Sam'], JSON.stringify(fb));
+    assert.deepStrictEqual(fb[1].slice(0, 6), ['Gabe', '$27', '$19.7', '$31', '3', '$59']);
+    assert.deepStrictEqual(fb[2].slice(0, 6), ['Will', '$13', '$12.8', '$21', '4', '$51']);  // even count: middle two averaged
+    assert.match(await xp.textContent('.fb-note'), /only shows the bid that won.*No winning claims yet: Chet\./);
+    await xp.click('.fb-who:has-text("Gabe")');  // a manager's row filters the feed to him
+    assert.ok((await cards()).every(c => / Gabe$/.test(c)));
+    assert.match(await xp.getAttribute('.fb-t tbody tr >> nth=1', 'class'), /on/);
+    await xp.click('.fb-who:has-text("Gabe")');
     await xp.click('#txType button:has-text("Trades")');
     assert.deepStrictEqual(await cards(), ['Trade Sam ⇄ Chet']);
     await xp.click('#txType button:has-text("All")');
     await xp.selectOption('#txWho', { label: 'Will' });
-    assert.deepStrictEqual(await cards(), ['Add/Drop Will', 'Add/Drop Will']);
+    assert.deepStrictEqual(await cards(), ['Add/Drop Will', 'Add/Drop Will', 'Add Will', 'Add Will']);
     await xp.click('.tx-chip:has-text("Will")');  // tapping again clears it
-    assert.strictEqual((await cards()).length, 6);
+    assert.strictEqual((await cards()).length, 15);
     assert.ok(await noOverflow(xp));
     assert.deepStrictEqual(xp.errors, []);
     await xp.close();

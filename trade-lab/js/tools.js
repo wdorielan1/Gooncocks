@@ -683,6 +683,51 @@
         since.games ? [h('b', { text: fmt(since.ppg) }), ' pts/g since · ' + plural(since.games, 'game')] : ['No games since yet']) : null
     ]);
   }
+  // FAAB habits: each manager's winning waiver bids this season. Yahoo only
+  // shows the bid that won a claim, never the ones that lost.
+  function faabOf(t) {
+    if (t.type === 'trade' || t.faab === null || t.faab === undefined || t.faab === '' || isNaN(Number(t.faab))) return null;
+    if (!t.players.some(function (p) { return p.action === 'add' && p.from === 'waivers'; })) return null;
+    return Number(t.faab);
+  }
+  function median(a) { var s = a.slice().sort(function (x, y) { return x - y; }), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+  function money(n) { return '$' + (Math.round(n * 10) / 10).toString().replace(/\.0$/, ''); }
+  function renderFaab(all, managers, sel) {
+    var box = clear($('txFaab')), by = {};
+    all.forEach(function (t) {
+      var bid = faabOf(t), k = bid === null ? null : (t.teams[0] || {}).team_key;
+      if (k) (by[k] = by[k] || []).push({ bid: bid, at: t.at });
+    });
+    var keys = Object.keys(by);
+    if (!keys.length) return;
+    keys.sort(function (a, b) { return median(by[b].map(function (x) { return x.bid; })) - median(by[a].map(function (x) { return x.bid; })) || by[b].length - by[a].length; });
+    var none = Object.keys(managers).filter(function (k) { return !by[k]; }).map(function (k) { return managers[k]; }).sort();
+    var rows = keys.map(function (k) {
+      var bids = by[k].map(function (x) { return x.bid; }), sum = bids.reduce(function (a, b) { return a + b; }, 0);
+      var last = by[k].slice().sort(function (a, b) { return b.at - a.at; })[0];
+      var mine = S.me && S.me.team_key === k;
+      return h('tr', { class: (k === sel ? 'on' : '') + (mine ? ' mine' : '') }, [
+        h('th', { scope: 'row' }, [h('button', { type: 'button', class: 'fb-who', title: 'Show only ' + (managers[k] || 'this manager') + '’s moves',
+          onclick: function () { S.txWho = k === sel ? '' : k; renderTools(); } }, [(mine ? '★ ' : '') + (managers[k] || 'A manager')])]),
+        h('td', { class: 'fb-usual', text: money(median(bids)) }),
+        h('td', { class: 'fb-avg', text: money(sum / bids.length) }),
+        h('td', { text: money(Math.max.apply(null, bids)) }),
+        h('td', { text: String(bids.length) }),
+        h('td', { text: money(sum) }),
+        h('td', { class: 'fb-last', text: money(last.bid) })]);
+    });
+    box.appendChild(h('section', { class: 'fb', 'aria-labelledby': 'fbTitle' }, [
+      h('div', { class: 'fb-head' }, [h('h4', { id: 'fbTitle', text: 'FAAB habits' }),
+        h('p', { text: 'What each manager usually bids on a waiver claim, from every claim they’ve won this season.' })]),
+      h('div', { class: 'fb-wrap' }, [h('table', { class: 'fb-t' }, [
+        h('caption', { class: 'sr-only', text: 'Winning FAAB bids by manager this season' }),
+        h('thead', {}, [h('tr', {}, ['Manager', 'Usual bid', 'Average', 'Biggest', 'Claims', 'Spent', 'Last bid'].map(function (c, i) {
+          return h('th', { scope: 'col', class: ['', 'fb-usual', 'fb-avg', '', '', '', 'fb-last'][i] || null, text: c }); }))]),
+        h('tbody', {}, rows)])]),
+      h('p', { class: 'fine fb-note', text: 'Usual bid is the middle of their winning bids, so one big splurge doesn’t skew it. ' +
+        'Yahoo only shows the bid that won a claim, not losing bids, so someone who bids often but loses looks quieter than they are.' +
+        (none.length ? ' No winning claims yet: ' + none.join(', ') + '.' : '') })]));
+  }
   function txCard(t) {
     var mine = S.me && S.me.team_key && t.teams.some(function (m) { return m.team_key === S.me.team_key; });
     var who = function (k) { var m = t.teams.filter(function (x) { return x.team_key === k; })[0]; return (m && m.manager) || 'A manager'; };
@@ -730,6 +775,7 @@
     });
     sel.value = managers[cur] ? cur : '';
     sel.onchange = function () { S.txWho = sel.value; renderTools(); };
+    renderFaab(all, managers, sel.value);
     var type = S.txType || 'all';
     [['all', 'All'], ['add', 'Adds'], ['drop', 'Drops'], ['trade', 'Trades']].forEach(function (o) {
       tbox.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (o[0] === type ? ' on' : ''), 'aria-pressed': o[0] === type ? 'true' : 'false',
