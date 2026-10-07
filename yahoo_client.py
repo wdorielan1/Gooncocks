@@ -267,9 +267,10 @@ def get_login_teams(access_token, game_key):
 
 
 def get_league_teams(access_token, league_key):
-    """[{'team_key', 'name', 'manager', 'guids'}] for every team in a
-    league. guids holds the Yahoo account ID of every manager and
-    co-manager - permanent per account, unlike names."""
+    """[{'team_key', 'name', 'manager', 'guids', 'commish_guids'}] for every
+    team in a league. guids holds the Yahoo account ID of every manager and
+    co-manager - permanent per account, unlike names; commish_guids the
+    ones Yahoo marks as the league's commissioner."""
     url = f"{FANTASY_BASE}/league/{league_key}/teams?format=json"
     data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
     teams = []
@@ -277,8 +278,11 @@ def get_league_teams(access_token, league_key):
         t = _player_record(entry.get("team") if isinstance(entry, dict) else None)
         nickname, _guid = _extract_manager(t)
         guids = [g for g in _find_values(t.get("managers") or [], "guid") if isinstance(g, str) and g]
+        managers = [e.get("manager") for e in t.get("managers") or [] if isinstance(e, dict)]
+        commish = [m["guid"] for m in managers if isinstance(m, dict) and str(m.get("is_commissioner")) == "1" and m.get("guid")]
         if t.get("team_key"):
-            teams.append({"team_key": t["team_key"], "name": t.get("name") or "", "manager": nickname, "guids": guids})
+            teams.append({"team_key": t["team_key"], "name": t.get("name") or "", "manager": nickname, "guids": guids,
+                          "commish_guids": commish})
     return teams
 
 

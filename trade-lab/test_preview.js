@@ -587,6 +587,38 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.deepStrictEqual(lp.errors, []);
     await lp.close();
   });
+  await check('commissioner tab: hidden until the commissioner signs in, then who has been on the site', async () => {
+    const cp = await browser.newPage({ viewport: { width: 1000, height: 900 } });
+    cp.errors = [];
+    cp.on('pageerror', e => cp.errors.push(e.message));
+    await cp.route(/^https?:/, r => r.abort());
+    await cp.goto('file://' + toolsFile + '#commissioner', { waitUntil: 'domcontentloaded' });
+    await cp.waitForSelector('#paState, #paTable tbody tr');
+    await cp.waitForTimeout(400);
+    assert.ok(await cp.isHidden('#toolNav .tool-cm'), 'no tab when signed out');
+    assert.ok(await cp.isHidden('#tool-cm'), 'a #commissioner link falls back to the first tool');
+    assert.match(await cp.textContent('.foot'), /visits to Tools and the Trade Lab are counted for the commissioner/);
+    await cp.click('#tool-pa button:has-text("Sign in (preview)")');
+    await cp.waitForSelector('#toolNav .tool-cm:not([hidden])');
+    await cp.click('#toolNav .tool-cm');
+    await cp.waitForSelector('.cm-t tbody tr');
+    const rows = await cp.$$eval('.cm-t tbody tr', rs => rs.map(r => [...r.children].map(c => c.textContent)));
+    assert.deepStrictEqual(rows.map(r => r[0]), ['★ Will', 'Gabe', 'Sam', 'Chris', 'Chet', 'Patrick'], JSON.stringify(rows));
+    assert.match(rows[1][2], /^\d+\d? days?$/);
+    assert.strictEqual(rows[5][1], 'Not yet');
+    assert.strictEqual((await cp.$$('.cm-t tbody tr:nth-child(1) .cm-strip i')).length, 14);
+    assert.match(await cp.textContent('.cm-sum'), /^\d+ of 6 managers/);
+    assert.match(await cp.textContent('#cmNote'), /Not seen yet: Patrick\./);
+    // the signed-in visit and each tool opened were counted, once each
+    await cp.click('#toolNav .tool-b[data-tool="ww"]');
+    await cp.click('#toolNav .tool-b[data-tool="cm"]');
+    assert.deepStrictEqual(await cp.evaluate(() => TradeApi.visits), [['tools', 'pa'], ['tools', 'cm'], ['tools', 'ww']]);
+    assert.ok(await noOverflow(cp));
+    await cp.setViewportSize({ width: 360, height: 760 });
+    assert.ok(await noOverflow(cp));
+    assert.deepStrictEqual(cp.errors, []);
+    await cp.close();
+  });
   await check('player pop-up: game log with box-score stats, byes, totals, from any page', async () => {
     const cp = await browser.newPage({ viewport: { width: 1000, height: 900 } });
     cp.errors = [];

@@ -226,6 +226,19 @@
     });
   });
   window.TRADE_LAB_SAMPLE.gameLog = gl;
+  // Commissioner page: made-up signed-in visits over the last two weeks.
+  var cmDays = [], hr = 3600, cday = 86400;
+  for (var di = 13; di >= 0; di--) { var dd = new Date((now - di * cday) * 1000); cmDays.push(dd.getFullYear() + '-' + two(dd.getMonth() + 1) + '-' + two(dd.getDate())); }
+  var cmRows = [['Will', 0.2 * hr, [1, 0, 2, 1, 0, 0, 3, 1, 0, 2, 1, 0, 2, 1], ['tools:cm', 'tools:ww', 'trade-lab']],
+    ['Gabe', 2.5 * hr, [0, 1, 0, 0, 2, 0, 1, 0, 3, 1, 0, 0, 1, 2], ['tools:ww', 'tools:tx', 'tools:ld']],
+    ['Sam', 26 * hr, [0, 0, 1, 0, 0, 0, 2, 0, 0, 1, 0, 0, 1, 0], ['trade-lab', 'tools:pa']],
+    ['Chris', 4.2 * cday, [0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], ['tools:ir']],
+    ['Chet', 12 * cday, [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], ['tools:ld']], ['Patrick', null, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], []]];
+  window.TRADE_LAB_SAMPLE.commissioner = { days: cmDays, since: now - 20 * cday, checked_at: now, managers: cmRows.map(function (r) {
+    var wkv = r[2].slice(-7);
+    return { team_key: T[r[0]], manager: r[0], you: r[0] === 'Will', last_seen: r[1] === null ? null : now - r[1], daily: r[2], top: r[3],
+             visits_week: wkv.reduce(function (a, b) { return a + b; }, 0), days_week: wkv.filter(Boolean).length };
+  }) };
   window.TRADE_LAB_SAMPLE.available = FA.map(function (r) {
     return { player_key: '470.p.' + r[0], name: r[1], position: r[2], nfl_team: r[3], headshot: '', injury: r[6] || null, waivers: !!r[5] };
   });

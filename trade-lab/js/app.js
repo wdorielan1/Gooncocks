@@ -164,7 +164,7 @@
     return api.me().then(function (m) {
       S.me = m;
       renderAccount(); renderBlock(); if (S.data) renderNeedsEdit();
-      if (m.signed_in && m.can_edit) loadMine(); else renderEditor();
+      if (m.signed_in && m.can_edit) { loadMine(); if (!S.visited) { S.visited = true; api.visit('trade-lab'); } } else renderEditor();
       if (fromPreviewSignIn) toast('Signed in as ' + m.manager + ' (preview).');
       if (!$('panel-match').hidden) renderMatch();
     }, function (e) { S.meError = e.message; renderEditor(); });

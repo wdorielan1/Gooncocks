@@ -57,6 +57,7 @@
       <button type="button" class="tool-b" aria-pressed="false" data-tool="ld"><b>Fantasy Leaders</b><span>This week’s top scorers at every position, live</span></button>
       <button type="button" class="tool-b" aria-pressed="false" data-tool="tx"><b>Transaction Report</b><span>Every pickup, drop and trade in one place</span></button>
       <button type="button" class="tool-b" aria-pressed="false" data-tool="ir"><b>Injury Report</b><span>Who’s out, who’s a game-time call, and who’s coming back</span></button>
+      <button type="button" class="tool-b tool-cm" aria-pressed="false" data-tool="cm" hidden><b>Commissioner</b><span>Who’s been using the site. Only you can see this</span></button>
     </div>
     <div id="tool-pa">
     <h3 class="tool-h">Points Against</h3>
@@ -106,6 +107,13 @@
     <div id="txBody"></div>
     <p class="fine" id="txNote"></p>
     </div>
+    <div id="tool-cm" hidden>
+    <h3 class="tool-h">Commissioner</h3>
+    <p class="pa-intro">Who’s been on the site while signed in with Yahoo, newest first. Only the commissioner’s account can open this. The server checks it, not the page.</p>
+    <div id="cmState" class="state" role="status" aria-live="polite"></div>
+    <div id="cmBody"></div>
+    <p class="fine" id="cmNote"></p>
+    </div>
     <div id="tool-ir" hidden>
     <h3 class="tool-h">Injury Report</h3>
     <p class="pa-intro">Every injured player on a Gooncocks roster, straight from Yahoo. <b>Out</b> won’t play this week, <b>game-time decisions</b> (doubtful or questionable) might, and <b>coming back</b> is anyone whose status got better in the last two weeks.</p>
@@ -119,7 +127,7 @@
   </section>
 </main>
 
-<footer class="foot"><p>Your league. Your edge.</p><p class="fine">Stats: nflverse, scored with our league’s Yahoo settings.</p></footer>
+<footer class="foot"><p>Your league. Your edge.</p><p class="fine">Stats: nflverse, scored with our league’s Yahoo settings.</p><p class="fine">Signed in with Yahoo, your visits to Tools and the Trade Lab are counted for the commissioner.</p></footer>
 
 <div class="modal" id="detail" hidden>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="detailTitle">

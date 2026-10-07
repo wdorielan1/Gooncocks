@@ -69,7 +69,7 @@ class FakeYahoo:
     def league_teams(self, league_key):
         if self.down:
             raise RuntimeError("Yahoo returned HTTP 503")
-        return [{"team_key": WILL, "name": "Hubita", "manager": "wilzer", "guids": ["guid-will"]},
+        return [{"team_key": WILL, "name": "Hubita", "manager": "wilzer", "guids": ["guid-will"], "commish_guids": ["guid-will"]},
                 {"team_key": SAM, "name": "Saquon's", "manager": "Samuel", "guids": ["guid-sam", "guid-cosam"]}]
 
     def roster(self, team_key):
@@ -846,6 +846,61 @@ check("Brevo errors keep the code but drop the number", msg == "Brevo HTTP 400, 
 check("Brevo is used first once its key and sender are set",
       type(trade_lab.sms_from_env({**both, "BREVO_API_KEY": "bk", "BREVO_SMS_SENDER": "Gooncocks"})).__name__ == "BrevoSmsSender"
       and trade_lab.BrevoSmsSender.from_env({"BREVO_API_KEY": "bk"}) is None)
+
+# ---------------------------------------------------------------- visits and the commissioner page
+capp, cclock = new_app()
+wc, wcsrf, _ = sign_in(capp, "code-will")
+sc, scsrf, _ = sign_in(capp, "code-sam")
+oc, ocsrf, _ = sign_in(capp, "code-outsider")
+check("/me says who's commissioner, by Yahoo's own flag on the account",
+      body(capp.handle(event("GET", "/me", cookies=wc)))["commish"] is True
+      and body(capp.handle(event("GET", "/me", cookies=sc)))["commish"] is False
+      and body(capp.handle(event("GET", "/me", cookies=oc))).get("commish") is False)
+
+
+def visit(cookies, csrf, page="tools", tool=None, headers=None):
+    h = {"x-csrf-token": csrf or ""}
+    h.update(headers or {})
+    return capp.handle(event("POST", "/visit", cookies=cookies, body={"page": page, "tool": tool}, headers=h))
+
+
+r1, r2 = visit(sc, scsrf, tool="ww"), visit(sc, scsrf, tool="tx")
+cclock.t += trade_lab.VISIT_GAP + 60
+r3 = visit(sc, scsrf, "trade-lab")
+check("a signed-in manager's visits are counted: a new visit after 30 minutes away, every tool tallied",
+      [body(r)["counted"] for r in (r1, r2, r3)] == [True, True, True])
+recs = capp.store.query(f"VISIT#{LEAGUE}")
+check("one record per manager per day, holding counts only (no session, token or CSRF)",
+      len(recs) == 1 and recs[0]["data"]["visits"] == 2 and recs[0]["data"]["tools"] == {"tools:ww": 1, "tools:tx": 1, "trade-lab": 1}
+      and recs[0]["sk"].startswith(SAM + "#") and "csrf" not in json.dumps(recs[0]) and recs[0].get("expires"), recs)
+check("visits: signed out or not in the league isn't counted",
+      body(capp.handle(event("POST", "/visit", body={"page": "tools"})))["counted"] is False
+      and body(visit(oc, ocsrf))["counted"] is False and len(capp.store.query(f"VISIT#{LEAGUE}")) == 1)
+check("visits: a forged request (no CSRF token, other site) is refused",
+      visit(sc, "")["statusCode"] == 403 and visit(sc, scsrf, headers={"origin": "https://evil.example"})["statusCode"] == 403)
+check("visits: unknown page refused", visit(sc, scsrf, page="admin")["statusCode"] == 400)
+visit(wc, wcsrf, tool="cm")
+r = capp.handle(event("GET", "/commissioner", cookies=wc))
+cm = body(r)
+sam = next((m for m in cm.get("managers", []) if m["team_key"] == SAM), {})
+will = next((m for m in cm.get("managers", []) if m["team_key"] == WILL), {})
+check("commissioner page: each manager's last visit, visits this week, last 14 days and top tools",
+      r["statusCode"] == 200 and len(cm["days"]) == 14 and sam.get("visits_week") == 2 and sam.get("days_week") == 1
+      and sam.get("daily", [])[-1] == 2 and sam.get("last_seen") == cclock.t and set(sam.get("top", [])) == {"tools:ww", "tools:tx", "trade-lab"}
+      and will.get("you") is True and will.get("top") == ["tools:cm"] and cm["since"] is not None, cm)
+check("commissioner page: anyone else is refused, by the server",
+      capp.handle(event("GET", "/commissioner", cookies=sc))["statusCode"] == 403
+      and capp.handle(event("GET", "/commissioner", cookies=oc))["statusCode"] == 403
+      and capp.handle(event("GET", "/commissioner"))["statusCode"] == 401)
+check("commissioner can also be set by team key (TRADE_LAB_COMMISSIONER_TEAM)",
+      TradeLab(capp.store, capp.yahoo, dict(ENV, TRADE_LAB_COMMISSIONER_TEAM=SAM), cclock).handle(
+          event("GET", "/commissioner", cookies=sc))["statusCode"] == 200)
+dapp, dclock = new_app()
+dwc, _x, _ = sign_in(dapp, "code-will")
+dapp.store.delete(f"META#{LEAGUE}", "league")
+dapp.yahoo.down = True
+check("commissioner check: Yahoo down with nothing cached means no, not a crash",
+      body(dapp.handle(event("GET", "/me", cookies=dwc)))["commish"] is False)
 
 print()
 if failures:

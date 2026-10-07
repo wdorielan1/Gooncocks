@@ -33,6 +33,12 @@
     return this.call('GET', '/me').then(function (m) { self.csrf = m.csrf || null; return m; });
   };
   LiveApi.prototype.listings = function () { return this.call('GET', '/listings'); };
+  // Counts a signed-in manager's visit (the server ignores anyone signed out). Never fails loudly.
+  LiveApi.prototype.visit = function (page, tool) {
+    if (!this.csrf) return Promise.resolve(null);
+    return this.call('POST', '/visit', { page: page, tool: tool || null }).catch(function () { return null; });
+  };
+  LiveApi.prototype.commissioner = function () { return this.call('GET', '/commissioner'); };
   LiveApi.prototype.rosters = function () { return this.call('GET', '/rosters'); };
   LiveApi.prototype.myRoster = function () { return this.call('GET', '/roster'); };
   LiveApi.prototype.saveNeeds = function (wants, note) { return this.call('PUT', '/needs', { wants: wants, note: note }); };
@@ -74,8 +80,12 @@
   }
   function later(v) { return new Promise(function (res) { setTimeout(function () { res(JSON.parse(JSON.stringify(v))); }, 250); }); }
   PreviewApi.prototype.me = function () {
-    return later(this.signedIn ? { signed_in: true, team_key: this.s.me, manager: this.s.managerOf[this.s.me], can_edit: true, csrf: 'preview' }
+    return later(this.signedIn ? { signed_in: true, team_key: this.s.me, manager: this.s.managerOf[this.s.me], can_edit: true, commish: true, csrf: 'preview' }
       : { signed_in: false });
+  };
+  PreviewApi.prototype.visit = function (page, tool) { (this.visits = this.visits || []).push([page, tool || null]); return later(null); };
+  PreviewApi.prototype.commissioner = function () {
+    return this.signedIn ? later(this.s.commissioner) : Promise.reject(Object.assign(new Error('Sign in with Yahoo to see the commissioner page.'), { status: 401 }));
   };
   PreviewApi.prototype.listings = function () {
     var s = this.s;

@@ -15,6 +15,8 @@ are first-party on stats.gooncocks.com.
   GET  /api/trade-lab/listings           the public trading block
   GET  /api/trade-lab/rosters            every team's current roster (public)
   GET  /api/trade-lab/roster             the signed-in manager's roster
+  POST /api/trade-lab/visit              a signed-in manager opened Tools or the Trade Lab
+  GET  /api/trade-lab/commissioner       who's been using the site (the commissioner only)
   GET  /api/trade-lab/digest?key=...     new listings as one ready-to-send text,
                                          for the commissioner's iPhone Shortcut
   PUT  /api/trade-lab/listings           add or update your listings
@@ -41,6 +43,9 @@ Environment:
   SITE_ORIGIN              e.g. https://stats.gooncocks.com
   TRADE_LAB_PAGE           where sign-in returns to (default /trade-lab.html)
   TRADE_LAB_DIGEST_KEY     turns on /digest; the Shortcut sends it as ?key=
+  TRADE_LAB_COMMISSIONER_TEAM
+                           optional: a team key whose manager also counts as
+                           commissioner (Yahoo's own commissioner flag always does)
   TRADE_LAB_DISCORD_WEBHOOK
                            Discord alerts: a channel webhook URL (secret)
   TRADE_LAB_ALERT_NUMBERS  text alerts: "Name=number, ..." (names as the site shows them)
@@ -61,6 +66,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 
 import discord_client
 import yahoo_client
@@ -86,6 +92,10 @@ BACK_DAYS = 14              # how long a return from Out/IR stays in "Coming bac
 TRANSACTIONS_TTL = 15 * 60  # how long the league's transaction list is reused
 TRANSACTIONS_MAX = 300      # newest moves kept for the Transaction Report
 WRITE_ROSTER_TTL = 3 * 60   # a roster must be this fresh to approve a listing
+VISIT_KEEP_DAYS = 120       # how long each manager's daily visit counts are kept
+VISIT_GAP = 30 * 60         # back after this long away counts as a new visit
+VISIT_PAGES = ("tools", "trade-lab")
+VISIT_TOOL = re.compile(r"^[a-z-]{1,16}$")
 NOTE_MAX = 200
 MAX_ITEMS = 25
 STATUSES = ("available", "listening")
@@ -853,7 +863,103 @@ class TradeLab:
         if not sess:
             return _json(200, {"signed_in": False})
         return _json(200, {"signed_in": True, "team_key": sess.get("team_key"), "manager": sess.get("manager"),
-                           "can_edit": bool(sess.get("team_key")), "csrf": sess["csrf"]})
+                           "can_edit": bool(sess.get("team_key")), "commish": self.is_commish(sess), "csrf": sess["csrf"]})
+
+    # ---------------- visits (signed-in managers only) and the commissioner page
+    def is_commish(self, sess):
+        """Whether this sign-in is the league's commissioner: the Yahoo
+        account Yahoo itself flags as commissioner (by account ID, never a
+        name), or the team set in TRADE_LAB_COMMISSIONER_TEAM."""
+        if not sess or not sess.get("team_key"):
+            return False
+        if self.env.get("TRADE_LAB_COMMISSIONER_TEAM") and sess["team_key"] == self.env["TRADE_LAB_COMMISSIONER_TEAM"]:
+            return True
+        if not sess.get("guid") or sess["guid"] == _hash(""):
+            return False
+        try:
+            teams = self.league_info()["teams"]
+        except YahooUnavailable:
+            return False
+        return any(t["team_key"] == sess["team_key"] and any(_hash(g) == sess["guid"] for g in t.get("commish_guids") or [])
+                   for t in teams)
+
+    def _day(self, ts):
+        """The Eastern-time date of a timestamp, e.g. "2026-10-04"."""
+        return _eastern(ts).strftime("%Y-%m-%d")
+
+    def visit(self, event, cookies):
+        """Counts a signed-in manager opening Tools or the Trade Lab (and
+        which tool). Only managers in the league are counted; nothing is
+        recorded for anyone signed out. A visit is a fresh arrival after
+        VISIT_GAP away; every tool opened is tallied too."""
+        sess = self.session(cookies)
+        if not sess or not sess.get("team_key"):
+            return _json(200, {"counted": False})
+        headers = event.get("headers") or {}
+        if headers.get("origin") != self.origin or not hmac.compare_digest(headers.get("x-csrf-token") or "", sess.get("csrf") or ""):
+            raise HttpError(403, "bad_csrf", "Reload the page and try again.")
+        b = _body(event)
+        page = b.get("page") if b.get("page") in VISIT_PAGES else None
+        tool = b.get("tool") if isinstance(b.get("tool"), str) and VISIT_TOOL.match(b["tool"]) else None
+        if not page:
+            raise HttpError(400, "bad_request", "Unknown page.")
+        now, pk = self.now(), f"VISIT#{self.league}"
+        sk = f"{sess['team_key']}#{self._day(now)}"
+        for _attempt in range(3):
+            item = self.store.get(pk, sk)
+            d = dict(item["data"]) if item else {"team_key": sess["team_key"], "day": self._day(now), "visits": 0,
+                                                "pages": {}, "tools": {}, "first": now, "last": 0}
+            if now - d["last"] > VISIT_GAP:
+                d["visits"] += 1
+                d["pages"] = dict(d["pages"], **{page: d["pages"].get(page, 0) + 1})
+            label = f"{page}:{tool}" if tool else page
+            d["tools"] = dict(d["tools"], **{label: d["tools"].get(label, 0) + 1})
+            d["last"] = now
+            try:
+                self.store.put(pk, sk, d, (item["version"] + 1) if item else 1, expect=item["version"] if item else 0,
+                               expires=now + VISIT_KEEP_DAYS * 86400)
+                return _json(200, {"counted": True})
+            except Conflict:
+                continue  # another tab counted at the same moment; read it again
+        return _json(200, {"counted": False})
+
+    def commissioner(self, event, cookies):
+        """Each manager's signed-in use of the site: last seen, visits and
+        active days this week, the last 14 days, and their most-used tools.
+        Only the commissioner's own sign-in can read it."""
+        sess = self.session(cookies)
+        if not sess:
+            raise HttpError(401, "signed_out", "Sign in with Yahoo to see the commissioner page.")
+        if not self.is_commish(sess):
+            raise HttpError(403, "commissioner_only", "Only the league's commissioner can see this.")
+        now = self.now()
+        days = [self._day(now - i * 86400) for i in range(13, -1, -1)]
+        week, month = set(days[-7:]), {self._day(now - i * 86400) for i in range(30)}
+        rows = {}
+        for item in self.store.query(f"VISIT#{self.league}"):
+            d = item["data"]
+            rows.setdefault(d["team_key"], []).append(d)
+        names, out = self.team_names(), []
+        for team_key in sorted(set(names) | set(rows)):
+            recs = rows.get(team_key, [])
+            by_day = {r["day"]: r for r in recs}
+            tools = {}
+            for r in recs:
+                if r["day"] in month:
+                    for k, n in r["tools"].items():
+                        tools[k] = tools.get(k, 0) + n
+            out.append({
+                "team_key": team_key, "manager": names.get(team_key) or "A manager", "you": team_key == sess["team_key"],
+                "last_seen": max((r["last"] for r in recs), default=None),
+                "visits_week": sum(r["visits"] for r in recs if r["day"] in week),
+                "days_week": sum(1 for r in recs if r["day"] in week and r["visits"]),
+                "visits_month": sum(r["visits"] for r in recs if r["day"] in month),
+                "daily": [by_day[day]["visits"] if day in by_day else 0 for day in days],
+                "top": [k for k, _n in sorted(tools.items(), key=lambda kv: -kv[1])[:3]],
+            })
+        out.sort(key=lambda m: (-(m["last_seen"] or 0), m["manager"]))
+        since = min((r["first"] for recs in rows.values() for r in recs), default=None)
+        return _json(200, {"managers": out, "days": days, "since": since, "checked_at": now})
 
     def _public(self, item, names):
         d = item["data"]
@@ -1216,6 +1322,10 @@ class TradeLab:
                 return self.transactions(event, cookies)
             if method == "GET" and route == "/digest":
                 return self.digest(event)
+            if method == "POST" and route == "/visit":
+                return self.visit(event, cookies)
+            if method == "GET" and route == "/commissioner":
+                return self.commissioner(event, cookies)
             if method == "PUT" and route == "/needs":
                 return self.set_needs(event, cookies)
             if method == "PUT" and route == "/listings":
@@ -1229,6 +1339,15 @@ class TradeLab:
         except Exception:
             traceback.print_exc()
             return _json(500, {"error": "server_error", "message": "Something went wrong. Nothing was changed."})
+
+
+def _eastern(ts):
+    """A timestamp as Eastern time (daylight saving included), the league's clock."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.fromtimestamp(ts, ZoneInfo("America/New_York"))
+    except Exception:
+        return datetime.fromtimestamp(ts, timezone(timedelta(hours=-5)))
 
 
 def _cookies(event):

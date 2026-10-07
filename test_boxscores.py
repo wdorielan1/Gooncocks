@@ -232,6 +232,22 @@ check("scoring rules: every scored stat with its name, points and bonuses",
           {"stat_id": 11, "name": "Receptions", "display": "Rec", "position_type": "O", "points": 0.5, "bonuses": []}],
       yahoo_client.parse_scoring(settings))
 
+# ---------- league teams: managers' Yahoo account IDs, and which one is commissioner
+_teams_json = {"fantasy_content": {"league": [{"league_key": "470.l.1"}, {"teams": {"count": 2,
+    "0": {"team": [[{"team_key": "470.l.1.t.1"}, {"name": "Hubita"}, {"managers": [
+        {"manager": {"manager_id": "1", "nickname": "wilzer", "guid": "GW", "is_commissioner": "1"}},
+        {"manager": {"manager_id": "11", "nickname": "co", "guid": "GC", "is_comanager": "1"}}]}]]},
+    "1": {"team": [[{"team_key": "470.l.1.t.2"}, {"name": "Sams"}, {"managers": [
+        {"manager": {"manager_id": "2", "nickname": "Samuel", "guid": "GS"}}]}]]}}}]}}
+_real_request = yahoo_client._request
+yahoo_client._request = lambda url, headers=None, **kw: _teams_json
+try:
+    _lt = yahoo_client.get_league_teams("tok", "470.l.1")
+finally:
+    yahoo_client._request = _real_request
+check("league teams: every manager's account ID, and only Yahoo's commissioner flagged as such",
+      [(t["team_key"], t["guids"], t["commish_guids"]) for t in _lt] == [("470.l.1.t.1", ["GW", "GC"], ["GW"]), ("470.l.1.t.2", ["GS"], [])], _lt)
+
 # ---------- nflverse stats scored in league scoring, and points against
 import nfl_points
 R = [{"stat_id": sid, "position_type": pt, "points": pts, "name": n, "bonuses": [{"target": t, "points": b} for t, b in bon]}

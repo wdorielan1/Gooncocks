@@ -71,9 +71,11 @@
     }
     return S.pa !== undefined;
   }
-  var TOOLS = { pa: 'tool-pa', ww: 'tool-ww', ld: 'tool-ld', tx: 'tool-tx', ir: 'tool-ir' };
+  var TOOLS = { pa: 'tool-pa', ww: 'tool-ww', ld: 'tool-ld', tx: 'tool-tx', ir: 'tool-ir', cm: 'tool-cm' };
   function renderToolNav() {
+    if (S.tool === 'cm' && !(S.me && S.me.commish) && S.me !== undefined) S.tool = 'pa';
     var tool = S.tool || 'pa';
+    document.querySelector('#toolNav .tool-cm').hidden = !(S.me && S.me.commish);
     Array.prototype.forEach.call(document.querySelectorAll('#toolNav .tool-b'), function (b) {
       var on = b.getAttribute('data-tool') === tool;
       b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -86,6 +88,7 @@
     if (S.tool === 'ir') return renderIR();
     if (S.tool === 'tx') return renderTX();
     if (S.tool === 'ld') return renderLD();
+    if (S.tool === 'cm') return renderCM();
     var st = $('paState');
     if (!ensurePa()) {
       st.className = 'state'; st.textContent = 'Loading…';
@@ -238,9 +241,17 @@
     error: ['Yahoo sign-in didn’t finish. Try again in a minute.', 'warn'],
     'not-in-league': ['That Yahoo account doesn’t manage a team in our league, so there are no players to show.', 'warn']
   };
+  // A signed-in manager's visit, and each tool they open, counted once per page load.
+  function ping(tool) {
+    S.pinged = S.pinged || {};
+    if (!S.me || !S.me.can_edit || S.pinged[tool]) return;
+    S.pinged[tool] = true;
+    api.visit('tools', tool);
+  }
   function loadMe() {
     api.me().then(function (m) {
       S.me = m; S.mine = null; S.mineErr = null;
+      ping(S.tool || 'pa');
       renderTools();
       if (m.signed_in && m.can_edit) {
         return api.myRoster().then(function (r) { S.mine = r.players || []; }, function (e) { S.mineErr = e.message; });
@@ -647,6 +658,50 @@
     });
   }
 
+  // ---------- commissioner (the commissioner's sign-in only; the server enforces it) ----------
+  var CM_TOOL = { 'tools:pa': 'Points Against', 'tools:ww': 'Waiver Wire', 'tools:ld': 'Leaders', 'tools:tx': 'Transactions',
+    'tools:ir': 'Injuries', 'tools:cm': 'Commissioner', 'trade-lab': 'Trade Lab', tools: 'Tools' };
+  function renderCM() {
+    var st = $('cmState'), body = clear($('cmBody'));
+    $('cmNote').textContent = '';
+    if (S.me === undefined) { st.className = 'state'; st.textContent = 'Loading…'; return; }
+    if (!S.me || !S.me.commish) { st.className = 'state'; st.textContent = 'Only the commissioner can see this page.'; return; }
+    if (S.cm === undefined) {
+      if (!S.cmLoad) S.cmLoad = api.commissioner().then(function (d) { S.cm = d; }, function (e) { S.cm = null; S.cmErr = e.message; })
+        .then(function () { S.cmLoad = null; renderTools(); });
+      st.className = 'state'; st.textContent = 'Loading…';
+      return;
+    }
+    if (!S.cm) { st.className = 'state'; st.textContent = S.cmErr || 'The visit log can’t be read right now.'; return; }
+    st.textContent = '';
+    var ms = S.cm.managers || [], days = S.cm.days || [], wk = ms.filter(function (m) { return m.visits_week; }).length;
+    var never = ms.filter(function (m) { return !m.last_seen; });
+    body.appendChild(h('p', { class: 'cm-sum' }, [h('b', { text: wk + ' of ' + ms.length }), ' managers have been on Tools or the Trade Lab this week.']));
+    var dayLab = function (d) { var p = d.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); };
+    var top = Math.max.apply(null, [1].concat(ms.map(function (m) { return Math.max.apply(null, m.daily); })));
+    body.appendChild(h('div', { class: 'cm-wrap' }, [h('table', { class: 'cm-t' }, [
+      h('caption', { class: 'sr-only', text: 'Signed-in visits by manager' }),
+      h('thead', {}, [h('tr', {}, [h('th', { scope: 'col', text: 'Manager' }), h('th', { scope: 'col', text: 'Last seen' }),
+        h('th', { scope: 'col', class: 'num', text: 'This week' }), h('th', { scope: 'col', class: 'cm-days', text: 'Last 14 days' }),
+        h('th', { scope: 'col', class: 'cm-top', text: 'Uses most' })])]),
+      h('tbody', {}, ms.map(function (m) {
+        var seen = m.last_seen ? new Date(m.last_seen * 1000) : null;
+        return h('tr', { class: (m.last_seen ? '' : 'cm-never') + (m.you ? ' mine' : '') }, [
+          h('th', { scope: 'row', text: (m.you ? '★ ' : '') + m.manager }),
+          h('td', { title: seen ? seen.toLocaleString() : '' }, seen ? [h('b', { text: L.ago(m.last_seen, now()) }),
+            h('small', { text: seen.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) })] : ['Not yet']),
+          h('td', { class: 'num' }, [h('b', { text: String(m.visits_week) }), h('small', { text: plural(m.days_week, 'day') })]),
+          h('td', { class: 'cm-days' }, [h('span', { class: 'cm-strip', role: 'img', 'aria-label': m.daily.map(function (n, i) { return dayLab(days[i]) + ': ' + n; }).join(', ') },
+            m.daily.map(function (n, i) { return h('i', { class: n ? 'on' : '', style: n ? 'opacity:' + (0.35 + 0.65 * n / top).toFixed(2) : null, title: dayLab(days[i]) + ': ' + plural(n, 'visit') }); }))]),
+          h('td', { class: 'cm-top', text: m.top.length ? m.top.map(function (k) { return CM_TOOL[k] || k; }).join(', ') : '—' })]);
+      }))])]));
+    if (days.length) body.appendChild(h('p', { class: 'cm-axis' }, [h('span', { text: dayLab(days[0]) }), h('span', { text: 'Today' })]));
+    $('cmNote').textContent = 'Counts only time signed in with Yahoo on Tools or the Trade Lab. A visit is coming back after 30+ minutes away. ' +
+      'The weekly recap and home page don’t need a sign-in, so they aren’t counted here. ' +
+      (S.cm.since ? 'Counting started ' + new Date(S.cm.since * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '. ' : 'Nothing counted yet. ') +
+      (never.length ? 'Not seen yet: ' + never.map(function (m) { return m.manager; }).join(', ') + '.' : '');
+  }
+
   // ---------- transaction report ----------
   // The league's adds, drops and trades from the Trade Lab API (read from
   // Yahoo). For players picked up or traded for, "since" is how he's scored
@@ -955,8 +1010,8 @@
   loadMe();
   Array.prototype.forEach.call(document.querySelectorAll('#toolNav .tool-b'), function (b) {
     b.addEventListener('click', function () {
-      S.tool = b.getAttribute('data-tool'); renderTools();
-      try { history.replaceState(null, '', { ww: '#waivers', ir: '#injuries', tx: '#transactions', ld: '#leaders' }[S.tool] || location.pathname); } catch (e) { /* ignore */ }
+      S.tool = b.getAttribute('data-tool'); ping(S.tool); renderTools();
+      try { history.replaceState(null, '', { ww: '#waivers', ir: '#injuries', tx: '#transactions', ld: '#leaders', cm: '#commissioner' }[S.tool] || location.pathname); } catch (e) { /* ignore */ }
     });
   });
   var m = /^#(qb|rb|wr|te|k|def)$/i.exec(location.hash);
@@ -965,5 +1020,6 @@
   if (/^#injuries$/i.test(location.hash)) S.tool = 'ir';
   if (/^#transactions$/i.test(location.hash)) S.tool = 'tx';
   if (/^#leaders$/i.test(location.hash)) S.tool = 'ld';
+  if (/^#commissioner$/i.test(location.hash)) S.tool = 'cm';
   renderTools();
 })();
