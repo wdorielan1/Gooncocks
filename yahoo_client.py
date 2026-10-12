@@ -379,7 +379,9 @@ def get_league_players(access_token, league_key, status="A", position=None, star
 def get_week_leaders(access_token, league_key, position, week, count=25):
     """The league's top fantasy scorers at one position for a week so far,
     in league scoring, owned or not: [{'player_key', 'name', 'position',
-    'nfl_team', 'points'}], most points first."""
+    'nfl_team', 'points', 'stats'}], most points first. stats is Yahoo's
+    box score for the week so far, {stat id: value}, for the stats Yahoo
+    reports in this league."""
     url = (f"{FANTASY_BASE}/league/{league_key}/players;position={position};sort=PTS;sort_type=week;sort_week={week};"
            f"count={count}/stats;type=week;week={week}?format=json")
     data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
@@ -391,8 +393,21 @@ def get_week_leaders(access_token, league_key, position, week, count=25):
             continue
         out.append({"player_key": p["player_key"], "name": (p.get("name") or {}).get("full") or "",
                     "position": p.get("display_position") or position, "nfl_team": (p.get("editorial_team_abbr") or "").upper(),
-                    "points": float(total)})
+                    "points": float(total), "stats": _stat_values(p.get("player_stats"))})
     return sorted(out, key=lambda r: -r["points"])
+
+
+def _stat_values(player_stats):
+    """{stat id: number} from a player's "player_stats" block; values Yahoo
+    leaves blank or as "-" are skipped."""
+    out = {}
+    for s in _find_values(player_stats or {}, "stat"):
+        if isinstance(s, dict) and s.get("stat_id") is not None:
+            try:
+                out[int(s["stat_id"])] = float(s.get("value"))
+            except (TypeError, ValueError):
+                pass
+    return out
 
 
 def get_league_season(access_token, league_key):

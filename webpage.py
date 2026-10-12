@@ -850,7 +850,7 @@ def _leaders_html(week, leaders, season=None):
         return ""
 
     def row(i, pos, r):
-        name, team, pts, manager = r
+        name, team, pts, manager = r[:4]
         label = f"{NFL_NAMES.get(team, team)} D/ST" if pos == "DEF" else name
         own = (f'<small>{escape(team)} &middot; {escape(manager)}</small>' if manager
                else f'<small>{escape(team)} &middot; <span class="fa">FA</span></small>')

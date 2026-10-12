@@ -14,6 +14,12 @@
  * opens it when clicked. manager: who has him in our league, "" / null for
  * a free agent, left out if the page doesn't know. season defaults to this
  * one. Everything is put on the page as text, never HTML.
+ *
+ * The week in progress comes from Yahoo's live numbers (leaders/live.json,
+ * with box score stats for the week's leaders, and boxscores/live.json,
+ * points for every rostered player) as a LIVE row, until the final stats
+ * post on Tuesday.
+ *   PlayerCard.liveSource(function () { return promise of [leaders, live box scores] });  // optional
  */
 (function () {
   'use strict';
@@ -63,6 +69,9 @@
     '.pc-bar{position:absolute;left:0;top:6px;bottom:6px;background:rgba(246,195,67,.2);border-radius:0 2px 2px 0}',
     '.pc-log tr.pc-best td.pc-pts b{color:#f6c343}',
     '.pc-log tr.pc-off td,.pc-log tr.pc-off th{color:#6c7a95}',
+    '.pc-log tr.pc-live th,.pc-log tr.pc-live td{background:#0f2a24}',
+    '.pc-log tr.pc-live .pc-sticky{background:#0f2a24;box-shadow:inset 3px 0 0 #5fd08f}',
+    '.pc-livetag{display:inline-block;margin-left:4px;padding:1px 5px;border-radius:2px;background:#5fd08f;color:#08111f;font-size:10px;font-weight:800;letter-spacing:.6px;vertical-align:1px}',
     '.pc-log .pc-note{text-align:left;font-style:italic}',
     '.pc-log tfoot th,.pc-log tfoot td,.pc-log tfoot .pc-sticky{border-bottom:0;background:#0e1b33;font-weight:700;color:#fff}',
     '.pc-log tfoot .pc-opp{color:#9aa6bd;font-weight:600}',
@@ -80,6 +89,9 @@
     document.head.appendChild(st);
   }
   var cache = {}, pending = {}, data, box = null, lastFocus = null, current = null;  // cache: season -> game log | null
+  function getJson(url) { return fetch(url, { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; }); }
+  var liveLoad = function () { return Promise.all([getJson('/leaders/live.json'), getJson('/boxscores/live.json')]); };
+  var live, livePending = null;  // [leaders, live box scores] once loaded, null if neither could be read
 
   function h(tag, attrs, kids) {
     var el = document.createElement(tag);
@@ -115,6 +127,34 @@
     return pending[season];
   }
   function seasonOf(p) { return Number(p.season) || thisSeason(); }
+  function ensureLive() {
+    if (live !== undefined) return Promise.resolve(live);
+    if (!livePending) {
+      livePending = Promise.resolve().then(liveLoad).then(function (x) { live = x && (x[0] || x[1]) ? x : null; }, function () { live = null; })
+        .then(function () { livePending = null; return live; });
+    }
+    return livePending;
+  }
+  // The player's week in progress from Yahoo: {week, updated, pts, cols (or null), played}, or null.
+  function liveFor(p, ps, t) {
+    if (!live) return null;
+    var k = nameKey(p.name), ld = live[0], bx = live[1], yr = seasonOf(p);
+    if (ld && ld.positions && Number(ld.season) === yr) {
+      var r = (ld.positions[ps] || []).filter(function (x) { return ps === 'DEF' ? team(x[1]) === t : nameKey(x[0]) === k && (!t || team(x[1]) === t); })[0];
+      if (r) return { week: ld.week, updated: ld.updated, pts: r[2], cols: r[4] || null, played: true };
+    }
+    if (bx && bx.teams && Number(bx.season) === yr) {
+      var found = null;
+      Object.keys(bx.teams).forEach(function (key) {
+        (bx.teams[key] || []).forEach(function (x) {
+          if (found || pos(x[2]) !== ps) return;
+          if (ps === 'DEF' ? team(x[3]) === t : nameKey(x[1]) === k) found = x;
+        });
+      });
+      if (found) return { week: bx.week, updated: bx.updated, pts: found[4], cols: null, played: !!found[5] };
+    }
+    return null;
+  }
   // The player's row in the game log: [key, name, pos, team, {wk: [pts, opp, ...]}],
   // matched by name and position (team breaks ties), the way the Lambda does it.
   function find(p) {
@@ -170,8 +210,10 @@
     var body = document.getElementById('pcBody'), yr = seasonOf(p);
     data = cache[yr];
     while (body.firstChild) body.removeChild(body.firstChild);
-    if (data === undefined) { body.appendChild(head(p, null)); body.appendChild(h('p', { class: 'pc-state', text: 'Loading his games…' })); return; }
+    if (data === undefined || live === undefined) { body.appendChild(head(p, null)); body.appendChild(h('p', { class: 'pc-state', text: 'Loading his games…' })); return; }
     var row = data && find(p);
+    var lv = data ? liveFor(p, row ? row[2] : pos(p.position), team(row ? row[3] : p.nfl_team)) : null;
+    if (!row && lv) row = [nameKey(p.name), p.name, pos(p.position), team(p.nfl_team), {}];  // first week's stats not posted yet
     body.appendChild(head(p, row));
     if (!data) {
       body.appendChild(h('p', { class: 'pc-state', text: yr < thisSeason() ? 'No game logs saved for the ' + yr + ' season.' : 'Game logs can’t be loaded right now. Try again in a minute.' }));
@@ -179,7 +221,8 @@
     }
     if (!row) { body.appendChild(h('p', { class: 'pc-state', text: 'No game log yet: he hasn’t played an NFL snap this season, or his stats haven’t posted.' })); return; }
     var ps = row[2], weeks = row[4], cols = (data.cols || {})[ps] || [], t = row[3];
-    var last = Math.max.apply(null, (data.weeks || []).concat(Object.keys(weeks).map(Number)));
+    var last = Math.max.apply(null, (data.weeks || []).concat(Object.keys(weeks).map(Number), [0]));
+    if (lv && (lv.week <= last || weeks[lv.week])) lv = null;  // that week's final stats are in
     var sched = (data.schedule || {})[t] || {}, home = (data.home || {})[t] || [];
     var played = Object.keys(weeks).map(Number).sort(function (a, b) { return a - b; });
     var pts = played.map(function (w) { return weeks[w][0]; });
@@ -200,7 +243,7 @@
     var ltr = [h('th', { scope: 'col', class: 'pc-sticky pc-wk', text: 'Wk' }), h('th', { scope: 'col', class: 'pc-opp', text: 'Opp' }),
       h('th', { scope: 'col', class: 'pc-pts', text: 'Pts' })]
       .concat(cols.map(function (c, i) { return h('th', { scope: 'col', class: i && cols[i - 1][0] !== c[0] ? 'pc-gs' : null, text: c[1] }); }));
-    var top = Math.max.apply(null, pts.concat([1]));
+    var top = Math.max.apply(null, pts.concat([1], lv && lv.played ? [lv.pts] : []));
     var rows = [], totals = cols.map(function () { return 0; });
     var maxIdx = cols.map(function (c) { return c[1] === 'Long'; });
     for (var w = 1; w <= last; w++) {
@@ -218,14 +261,28 @@
         h('td', { class: 'pc-pts' }, [h('span', { class: 'pc-bar', style: 'width:' + Math.max(0, Math.round(g[0] / top * 100)) + '%' }), h('b', { text: fmt(g[0]) })])]
         .concat(vals.map(function (v, i) { return h('td', { class: (i && cols[i - 1][0] !== cols[i][0] ? 'pc-gs' : '') + (v ? '' : ' pc-0'), text: num(v) }); }))));
     }
+    if (lv) {
+      var lo = sched[lv.week], lwhere = lo ? (home.indexOf(lv.week) >= 0 ? 'vs ' : '@ ') + team(lo) : 'BYE';
+      var lead = [h('th', { scope: 'row', class: 'pc-sticky pc-wk', text: String(lv.week) }),
+        h('td', { class: 'pc-opp' }, [lwhere + ' ', h('span', { class: 'pc-livetag', text: 'LIVE' })])];
+      rows.push(h('tr', { class: 'pc-live' }, lv.played ? lead.concat([
+        h('td', { class: 'pc-pts' }, [h('span', { class: 'pc-bar', style: 'width:' + Math.max(0, Math.round(lv.pts / top * 100)) + '%' }), h('b', { text: fmt(lv.pts) })])])
+        .concat(cols.map(function (c, i) {
+          var v = lv.cols ? lv.cols[i] : null;
+          return h('td', { class: (i && cols[i - 1][0] !== c[0] ? 'pc-gs' : '') + (v ? '' : ' pc-0'), text: v === null || v === undefined ? '–' : num(v) });
+        })) : lead.concat([h('td', { colspan: String(cols.length + 1), class: 'pc-note', text: 'Hasn’t played yet this week' })])));
+    }
     var foot = h('tr', { class: 'pc-tot' }, [h('th', { scope: 'row', class: 'pc-sticky pc-wk', text: 'Tot' }), h('td', { class: 'pc-opp', text: played.length + (played.length === 1 ? ' game' : ' games') }),
       h('td', { class: 'pc-pts' }, [h('b', { text: fmt(sum) })])]
       .concat(totals.map(function (v, i) { return h('td', { class: i && cols[i - 1][0] !== cols[i][0] ? 'pc-gs' : null, text: num(v) }); })));
     body.appendChild(h('div', { class: 'pc-wrap', tabindex: '0', role: 'region', 'aria-label': 'Game log' }, [
       h('table', { class: 'pc-log' }, [h('caption', { class: 'pc-sr', text: (ps === 'DEF' ? row[1] : p.name) + ' game log, ' + (data.season || '') }),
         h('thead', {}, [h('tr', {}, gtr), h('tr', {}, ltr)]), h('tbody', {}, rows), h('tfoot', {}, [foot])])]));
+    var asOf = lv && lv.updated ? new Date(lv.updated * 1000).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
     body.appendChild(h('p', { class: 'pc-fine', text: 'Pts are fantasy points in our league’s scoring. Stats: nflverse' +
-      (data.weeks && data.weeks.length ? ', through week ' + data.weeks[data.weeks.length - 1] : '') + '. This week’s games show up Tuesday.' }));
+      (data.weeks && data.weeks.length ? ', through week ' + data.weeks[data.weeks.length - 1] : '') + '. ' +
+      (lv ? 'Week ' + lv.week + ' is live from Yahoo' + (asOf ? ' as of ' + asOf : '') + (lv.played && !lv.cols ? ' (points only)' : '') +
+            '. It isn’t in the totals yet; the final stats replace it Tuesday.' : 'This week’s games show up Tuesday.') }));
   }
   function tile(v, label) { return h('div', { class: 'pc-tile' }, [h('b', { text: v }), h('span', { text: label })]); }
 
@@ -238,7 +295,9 @@
     document.documentElement.classList.add('pc-lock');
     box.querySelector('.pc-x').focus();
     box.querySelector('.pc-card').scrollTop = 0;
-    if (cache[seasonOf(p)] === undefined) ensure(seasonOf(p)).then(function () { if (current === p) render(p); });
+    if (cache[seasonOf(p)] === undefined || live === undefined) {
+      Promise.all([ensure(seasonOf(p)), ensureLive()]).then(function () { if (current === p) render(p); });
+    }
   }
   function link(p, text, cls) {
     style();
@@ -249,6 +308,7 @@
 
   window.PlayerCard = {
     source: function (fn) { load = fn; cache = {}; },
+    liveSource: function (fn) { liveLoad = fn; live = undefined; },
     open: open, link: link, close: close
   };
   // Names marked up with data-pn anywhere on the page open the pop-up.

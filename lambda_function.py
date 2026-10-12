@@ -644,7 +644,9 @@ def _action_trade_lab_live(event, context=None):
                     owners[p.get("player_key")] = _manager_name(t) or t.get("name")
         leaders = {"season": int(season), "week": int(week), "updated": int(time.time()), "positions": {}}
         for pos in nfl_points.POSITIONS:
-            leaders["positions"][pos] = [[r["name"], nfl_points.team_code(r["nfl_team"]), round(r["points"], 2), owners.get(r["player_key"])]
+            # [name, NFL team, points, manager or None, live box score columns (as the game log's)]
+            leaders["positions"][pos] = [[r["name"], nfl_points.team_code(r["nfl_team"]), round(r["points"], 2), owners.get(r["player_key"]),
+                                          nfl_points.yahoo_log_values(r.get("stats") or {}, pos)]
                                          for r in get_week_leaders(token, league_key, pos, week)[:LEADERS_SHOWN]]
         _put(s3, bucket, LEADERS_LIVE_KEY, json.dumps(leaders, separators=(",", ":")), "application/json")
         print(f"Fantasy Leaders: week {week} saved.")

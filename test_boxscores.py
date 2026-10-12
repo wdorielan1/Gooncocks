@@ -232,6 +232,19 @@ check("scoring rules: every scored stat with its name, points and bonuses",
           {"stat_id": 11, "name": "Receptions", "display": "Rec", "position_type": "O", "points": 0.5, "bonuses": []}],
       yahoo_client.parse_scoring(settings))
 
+# ---------- live leaders: Yahoo's box score for the week so far, in the game log's columns
+import nfl_points
+_ps = {"coverage_type": "week", "week": "6", "stats": [{"stat": {"stat_id": "1", "value": "35"}}, {"stat": {"stat_id": "2", "value": "24"}},
+       {"stat": {"stat_id": "4", "value": "287"}}, {"stat": {"stat_id": "5", "value": "2"}}, {"stat": {"stat_id": "6", "value": "-"}},
+       {"stat": {"stat_id": "9", "value": "31"}}]}
+_sv = yahoo_client._stat_values(_ps)
+check("live stats: Yahoo's stat values by id, blanks skipped", _sv == {1: 35.0, 2: 24.0, 4: 287.0, 5: 2.0, 9: 31.0}, _sv)
+check("live stats: a QB's columns (Cmp, Att, Yds, TD, Int, Car, Yds, TD); missing ones are None",
+      nfl_points.yahoo_log_values(_sv, "QB") == [24, 35, 287, 2, None, None, 31, None], nfl_points.yahoo_log_values(_sv, "QB"))
+check("live stats: kicker field goals made/attempted add up the distances; no long",
+      nfl_points.yahoo_log_values({20: 1, 23: 1, 26: 1, 29: 3}, "K") == [2, 3, None, 3, 3]
+      and all(len(nfl_points.YAHOO_LOG[p]) == len(nfl_points.GAME_LOG[p]) for p in nfl_points.GAME_LOG))
+
 # ---------- league teams: managers' Yahoo account IDs, and which one is commissioner
 _teams_json = {"fantasy_content": {"league": [{"league_key": "470.l.1"}, {"teams": {"count": 2,
     "0": {"team": [[{"team_key": "470.l.1.t.1"}, {"name": "Hubita"}, {"managers": [

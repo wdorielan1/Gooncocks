@@ -207,6 +207,26 @@ GAME_LOG = {
             ("Defense", "TD", ("_def_tds",)), ("Defense", "Safety", ("def_safeties",)), ("Defense", "Pts Allow", ("_points_allowed",))],
 }
 GAME_LOG["TE"] = GAME_LOG["WR"]
+# The same columns from Yahoo's live box score (its stat ids), for the week
+# in progress; None where Yahoo has nothing to match (a kicker's long).
+YAHOO_LOG = {
+    "QB": [(2,), (1,), (4,), (5,), (6,), (8,), (9,), (10,)],
+    "RB": [(8,), (9,), (10,), (78,), (11,), (12,), (13,)],
+    "WR": [(78,), (11,), (12,), (13,), (8,), (9,), (10,)],
+    "K": [(19, 20, 21, 22, 23), (19, 20, 21, 22, 23, 24, 25, 26, 27, 28), None, (29,), (29, 30)],
+    "DEF": [(32,), (33,), (34,), (35,), (36,), (31,)],
+}
+YAHOO_LOG["TE"] = YAHOO_LOG["WR"]
+
+
+def yahoo_log_values(stats, position):
+    """A player's live game log columns (as GAME_LOG) from Yahoo's {stat id:
+    value}; a column is None when Yahoo reported none of its stats."""
+    out = []
+    for ids in YAHOO_LOG.get(position, []):
+        have = [stats[i] for i in ids or () if i in stats]
+        out.append(_n(sum(have)) if have else None)
+    return out
 # How much a player was used in a game, to tell who a team's starters are.
 USAGE = {"QB": ("attempts",), "RB": ("carries", "targets"), "WR": ("targets",), "TE": ("targets",), "K": ("fg_att", "pat_att")}
 STARTERS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "K": 1}

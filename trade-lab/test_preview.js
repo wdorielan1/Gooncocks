@@ -634,8 +634,13 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.deepStrictEqual(await cp.$$eval('#playerCard thead tr:nth-child(2) th', t => t.map(x => x.textContent)),
       ['Wk', 'Opp', 'Pts', 'Cmp', 'Att', 'Yds', 'TD', 'Int', 'Car', 'Yds', 'TD']);
     const body = await cp.$$eval('#playerCard tbody tr', t => t.map(x => [...x.children].map(c => c.textContent)));
-    assert.ok(body.length >= 3 && body.every((r, i) => r[0] === String(i + 1) && /^(@ |vs )[A-Z]{2,3}$|^BYE$/.test(r[1])), JSON.stringify(body));
-    const played = body.filter(r => r.length === 11), tot = await cp.$$eval('#playerCard tfoot td', t => t.map(x => x.textContent));
+    assert.ok(body.length >= 4 && body.every((r, i) => r[0] === String(i + 1) && /^(@ |vs )[A-Z]{2,3}( LIVE)?$|^BYE$/.test(r[1])), JSON.stringify(body));
+    // this week, live from Yahoo: same points as the leaders list, with Yahoo's box score, not in the totals
+    const lv = body[body.length - 1];
+    assert.ok(/ LIVE$/.test(lv[1]) && lv[0] === '4' && lv[2] === (await cp.textContent('.ld-row .ld-pts')), JSON.stringify(lv));
+    assert.ok(lv.slice(3).every(v => /^\d+$/.test(v)), JSON.stringify(lv));
+    assert.match(await cp.textContent('#playerCard .pc-fine'), /Week 4 is live from Yahoo as of .*isn’t in the totals yet/);
+    const played = body.filter(r => r.length === 11 && !/LIVE/.test(r[1])), tot = await cp.$$eval('#playerCard tfoot td', t => t.map(x => x.textContent));
     assert.strictEqual(parseFloat(tot[1]), Math.round(played.reduce((a, r) => a + parseFloat(r[2]), 0) * 10) / 10);
     assert.strictEqual(+tot[4], played.reduce((a, r) => a + +r[5], 0));  // passing yards add up
     assert.match(await cp.textContent('#playerCard .pc-tiles'), /Pts \/ game.*Last 4.*Total.*Best · Wk \d/);
@@ -652,6 +657,20 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     await cp.waitForSelector('#playerCard .pc-log');
     assert.match(await cp.textContent('#playerCard .pc-sub'), /Ravens \(BAL\) · On Chris’s team/);
     assert.match(await cp.textContent('#playerCard tbody'), /Did not play/);
+    // rostered players not among the leaders: points only from the live box scores, or not played yet
+    await cp.evaluate(() => {
+      var yr = new Date().getMonth() < 2 ? new Date().getFullYear() - 1 : new Date().getFullYear();
+      PlayerCard.liveSource(() => Promise.resolve([null, { season: yr, week: 4, updated: 1, teams: { t: [
+        ['WR', 'Amon-Ra St. Brown', 'WR', 'DET', 12.5, 1], ['QB', 'Jared Goff', 'QB', 'DET', 0, 0]] } }]));
+      PlayerCard.open({ name: 'Amon-Ra St. Brown', position: 'WR', nfl_team: 'DET', manager: 'Will' });
+    });
+    await cp.waitForSelector('#playerCard tr.pc-live');
+    const pl = await cp.$$eval('#playerCard tr.pc-live > *', t => t.map(x => x.textContent));
+    assert.ok(/^(@ |vs )[A-Z]{2,3} LIVE$/.test(pl[1]) && pl[2] === '12.5' && pl.slice(3).join('') === '–'.repeat(7), JSON.stringify(pl));
+    assert.match(await cp.textContent('#playerCard .pc-fine'), /\(points only\)/);
+    await cp.evaluate(() => PlayerCard.open({ name: 'Jared Goff', position: 'QB', nfl_team: 'DET', manager: 'Will' }));
+    await cp.waitForSelector('#playerCard tr.pc-live');
+    assert.match(await cp.textContent('#playerCard tr.pc-live'), /Hasn’t played yet this week/);
     await cp.evaluate(() => PlayerCard.open({ name: 'Brand New Rookie', position: 'WR', nfl_team: 'CHI', manager: null }));
     assert.match(await cp.textContent('#playerCard .pc-state'), /No game log yet/);
     await cp.keyboard.press('Escape');

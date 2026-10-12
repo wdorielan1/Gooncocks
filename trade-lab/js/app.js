@@ -712,6 +712,7 @@
   // A player's name that opens his game log (js/playercard.js).
   function pl(p, text) { return window.PlayerCard ? PlayerCard.link(p, text) : document.createTextNode(text === undefined ? p.name : text); }
   if (window.PlayerCard) PlayerCard.source(function (s) { return api.gameLog(s); });
+  if (window.PlayerCard) PlayerCard.liveSource(function () { return Promise.all([api.leaders(), api.liveWeek()]); });
   var GROUP_NAME = { QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', FLEX: 'Flex', K: 'K', DEF: 'DEF' };
   function loadLeague() {
     if (S.leagueLoad) return S.leagueLoad;

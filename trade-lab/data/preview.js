@@ -294,7 +294,12 @@
   names.forEach(function (n) { R[n].forEach(function (r) { ownerOf[r[1]] = n; }); });
   var lpos = { QB: [], RB: [], WR: [], TE: [], K: [], DEF: [] };
   names.map(function (n) { return R[n]; }).concat([FA]).forEach(function (list) {
-    list.forEach(function (r) { if (r[4] && lpos[r[2]]) lpos[r[2]].push([r[1], r[3], points(r[1], cur, 3), ownerOf[r[1]] || null]); });
+    list.forEach(function (r) {
+      if (!r[4] || !lpos[r[2]]) return;
+      var lp = points(r[1], cur, 3), lc = line(r[2], lp, r[0] + 4);
+      if (r[2] === 'K') lc[2] = null;  // Yahoo's live box score has no long kick
+      lpos[r[2]].push([r[1], r[3], lp, ownerOf[r[1]] || null, lc]);
+    });
   });
   Object.keys(lpos).forEach(function (k) { lpos[k].sort(function (a, b) { return b[2] - a[2]; }); });
   window.TRADE_LAB_SAMPLE.leaders = { season: cur, week: 4, updated: now - 1800, positions: lpos };
