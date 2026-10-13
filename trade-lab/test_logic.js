@@ -207,4 +207,65 @@ check('letter grades mirror each other around C, and small point gaps never grad
   assert.strictEqual(g(-1.2, 9.7), 'D+/average');
 });
 
+// ---------- trade finder ----------
+(function () {
+  let n = 0;
+  const P = (name, position, v, extra) => Object.assign({ player_key: 'k.' + (++n), name, position, positions: [position], slot: '', v }, extra || {});
+  const rate = p => ({ value: p.v === undefined ? null : p.v });
+  const slots = ['QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'W/R/T'];
+  const will = { team_key: 't.1', manager: 'Will', players: [P('Will QB1', 'QB', 22), P('Will QB2', 'QB', 20), P('Will QB3', 'QB', 18),
+    P('Will RB1', 'RB', 10), P('Will RB2', 'RB', 8), P('Will WR1', 'WR', 15), P('Will WR2', 'WR', 14), P('Will WR3', 'WR', 13), P('Will TE', 'TE', 9), P('Will WR4', 'WR', 11), P('Will RB3', 'RB', 6)] };
+  const sam = { team_key: 't.2', manager: 'Sam', players: [P('Sam QB', 'QB', 12), P('Sam RB1', 'RB', 21), P('Sam RB2', 'RB', 18), P('Sam RB3', 'RB', 16),
+    P('Sam RB4', 'RB', 15), P('Sam Hurt RB', 'RB', 25, { injury: { code: 'O' } }), P('Sam WR1', 'WR', 14), P('Sam WR2', 'WR', 13), P('Sam WR3', 'WR', 12), P('Sam TE', 'TE', 8), P('Sam WR4', 'WR', 9), P('Sam QB2', 'QB', 9)] };
+  const chet = { team_key: 't.3', manager: 'Chet', players: [P('Chet QB', 'QB', 10), P('Chet RB1', 'RB', 17), P('Chet RB2', 'RB', 16), P('Chet RB3', 'RB', 14),
+    P('Chet WR1', 'WR', 15), P('Chet WR2', 'WR', 14), P('Chet WR3', 'WR', 11), P('Chet TE', 'TE', 7), P('Chet WR4', 'WR', 9), P('Chet QB2', 'QB', 8)] };
+  const teams = [will, sam, chet];
+  const key = name => teams.flatMap(t => t.players).find(p => p.name === name).player_key;
+  const base = { teams, slots, rate, teamKey: 't.1' };
+
+  check('trade finder: specific small deals that make my starting lineup better, never all three QBs', () => {
+    const r = L.tradeFinder(base);
+    assert.ok(r.deals.length >= 2, JSON.stringify(r.deals.length));
+    r.deals.forEach(d => {
+      assert.ok(d.myGain >= 1 && d.give.length <= 2 && d.get.length <= 2 && d.give.length + d.get.length <= 3, JSON.stringify(d));
+      assert.ok(d.give.every(p => p.name.startsWith('Will')) && d.get.every(p => !p.name.startsWith('Will')));
+    });
+    const top = r.deals[0];
+    assert.ok(top.give.every(p => p.position === 'QB') && top.get.every(p => p.position === 'RB'), JSON.stringify([top.give, top.get].map(x => x.map(p => p.name))));
+    assert.ok(top.mine.into.some(x => x.player.position === 'RB') && top.theirs.into.some(x => x.player.position === 'QB'));
+    assert.ok(!r.deals.some(d => d.get.some(p => p.name === 'Sam Hurt RB')), 'players ruled out are never asked for');
+  });
+  check('trade finder: a position the other manager posted they want goes first', () => {
+    const r = L.tradeFinder(Object.assign({}, base, { needs: [{ team_key: 't.3', wants: ['QB'] }] }));
+    assert.strictEqual(r.deals[0].manager, 'Chet');
+    assert.ok(r.deals[0].wanted && r.deals[0].why.some(w => w.kind === 'wants' && /Chet is looking for a QB/.test(w.text)), JSON.stringify(r.deals[0].why));
+  });
+  check('trade finder: early draft picks are harder to get; the block and a losing record make a yes likelier', () => {
+    const plain = L.tradeFinder(Object.assign({}, base, { limit: 50 })).deals.find(d => d.get.some(p => p.name === 'Sam RB1'));
+    const drafted = L.tradeFinder(Object.assign({}, base, { limit: 50, draft: { [key('Sam RB1')]: 1 } })).deals.find(d => d.get.some(p => p.name === 'Sam RB1'));
+    if (plain && drafted) assert.ok(drafted.yes < plain.yes && drafted.why.some(w => /1st-round pick/.test(w.text)));
+    const blocked = L.tradeFinder(Object.assign({}, base, { limit: 50, listings: [{ player_key: key('Sam RB3'), team_key: 't.2' }] })).deals.find(d => d.get.some(p => p.name === 'Sam RB3'));
+    assert.ok(blocked && blocked.why.some(w => w.kind === 'block' && /Sam RB3 is on Sam’s block/.test(w.text)), JSON.stringify(blocked && blocked.why));
+    const losing = L.tradeFinder(Object.assign({}, base, { records: { 't.2': { w: 1, l: 4 } }, limit: 50 })).deals.find(d => d.manager === 'Sam' && d.give.length > d.get.length);
+    if (losing) assert.ok(losing.why.some(w => w.kind === 'record' && /At 1–4, two starters help Sam/.test(w.text)), JSON.stringify(losing.why));
+  });
+  check('trade finder: at most two deals per team, labeled easy yes / worth a pitch / long shot', () => {
+    const r = L.tradeFinder(Object.assign({}, base, { limit: 20 }));
+    const per = {};
+    const offered = {};
+    r.deals.forEach(d => {
+      per[d.manager] = (per[d.manager] || 0) + 1; assert.ok(['easy', 'pitch', 'long'].includes(d.odds));
+      if (d.odds === 'easy') assert.ok(d.theirGain >= 0, 'easy yes means their lineup gets better too');
+      d.give.forEach(p => { offered[p.name] = (offered[p.name] || 0) + 1; });
+    });
+    assert.ok(Object.values(per).every(c => c <= 2), JSON.stringify(per));
+    assert.ok(Object.values(offered).every(c => c <= 2), 'the same player offered in at most two deals: ' + JSON.stringify(offered));
+  });
+  check('team records from the season box scores, by starters’ points', () => {
+    const box = { games: { '2026-w1-will-sam': { a: [['QB', 'x', 'QB', 'KC', 20], ['BN', 'y', 'RB', 'KC', 50]], b: [['QB', 'z', 'QB', 'KC', 15]] },
+                           '2026-w2-chet-will': { a: [['QB', 'x', 'QB', 'KC', 30]], b: [['QB', 'z', 'QB', 'KC', 25]] } } };
+    assert.deepStrictEqual(L.recordsFromBox(box, teams), { 't.1': { w: 1, l: 1 }, 't.2': { w: 0, l: 1 }, 't.3': { w: 1, l: 0 } });
+  });
+})();
+
 console.log(`\n${passed} checks passed`);

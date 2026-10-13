@@ -1,5 +1,5 @@
 /*
- * Trade Lab page: Trading Block, your block editor, Matchmaker, and the
+ * Trade Lab page: Trading Block, your block editor, Trade Finder, and the
  * Trade Calculator. All data comes through window.TradeApi; everything a
  * manager typed is put on the page as text (textContent), never as HTML.
  * Hiding a button here is only a convenience - the server re-checks who
@@ -707,7 +707,7 @@
     back.focus();
   }
 
-  // ---------- league data: rosters + scores, shared by Scouting, Matchmaker and the Calculator ----------
+  // ---------- league data: rosters + scores, shared by Scouting, the Trade Finder and the Calculator ----------
   function season() { var d = new Date(); return d.getMonth() < 2 ? d.getFullYear() - 1 : d.getFullYear(); }
   // A player's name that opens his game log (js/playercard.js).
   function pl(p, text) { return window.PlayerCard ? PlayerCard.link(p, text) : document.createTextNode(text === undefined ? p.name : text); }
@@ -829,7 +829,7 @@
       if (bench.length) box.appendChild(h('p', { class: 'fine' }, ['Best bench depth: ' + bench.map(function (x) { return x.player.name + ' (' + x.player.position + ', ' + fmt(x.rating.value) + ')'; }).join(', ') + '.']));
       if (t.report.out.length) box.appendChild(h('p', { class: 'fine', text: 'On injured reserve (not counted): ' + t.report.out.map(function (x) { return x.player.name; }).join(', ') + '.' }));
       box.appendChild(h('div', { class: 'scout-act' }, [
-        h('button', { type: 'button', class: 'btn gold small', text: 'Find trade partners', onclick: function () { $('mTeam').value = key; S.matchTeam = key; showTab('match'); } })
+        h('button', { type: 'button', class: 'btn gold small', text: 'Find trades', onclick: function () { $('mTeam').value = key; S.matchTeam = key; showTab('match'); } })
       ]));
 
       // league grid: every team at every position
@@ -851,75 +851,67 @@
     });
   }
 
-  // ---------- matchmaker ----------
-  var NOUN = { QB: 'QB', RB: 'RBs', WR: 'WRs', TE: 'TE' }, ARTICLE = { QB: 'a', RB: 'an', WR: 'a', TE: 'a' };
-  function bestPhrase(rank) { return rank === 1 ? 'the best' : 'the ' + ordinal(rank) + '-best'; }
-  // "You need an RB. Sam has plenty: the 2nd-best RBs in the league."
-  // needer/haver are names, or null for "you"; needT/haveT their scouting rows.
-  function needLine(g, i, needer, haver, haveT, needT, offers) {
-    var count = S.league.scout.count, rank = haveT.cells[g].rank, nr = needT.cells[g].rank;
-    var lead = (i === 0 ? (needer ? needer + ' needs ' : 'You need ') : (needer ? needer + ' could also use ' : 'You could also use ')) + ARTICLE[g] + ' ' + g + '.';
-    var spare = offers.some(function (o) { return o.group === g && o.role === 'bench'; });
-    var body;
-    if ((g === 'QB' || g === 'TE') && spare) body = (haver ? haver + ' has' : 'You have') + ' a spare one on the bench.';
-    else if (rank <= 3) body = (haver ? haver + ' has' : 'You have') + ' plenty: ' + bestPhrase(rank) + ' ' + NOUN[g] + ' in the league' +
-      (nr === count ? ', while ' + (needer ? needer + '’s' : 'yours') + (g === 'QB' || g === 'TE' ? ' is' : ' are') + ' the league’s weakest.' : '.');
-    else body = (haver ? haver + '’s' : 'Your') + ' ' + NOUN[g] + (g === 'QB' || g === 'TE' ? ' is' : ' are') + ' above average.';
-    return h('li', {}, [h('b', { text: lead }), ' ' + body]);
+  // ---------- trade finder ----------
+  // Specific offers from L.tradeFinder: what each side gives, what it does
+  // to both starting lineups, and how likely the other manager is to say yes.
+  var ODDS = { easy: ['Easy yes', 'easy'], pitch: ['Worth a pitch', 'pitch'], long: ['Long shot', 'long'] };
+  function names(list) { return list.map(function (x) { return x.player.name + ' (' + fmt(x.value) + ')'; }); }
+  function joinNames(a) { return a.length < 3 ? a.join(' and ') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
+  // "Bijan Robinson (18.2) moves into the lineup; Tony Pollard (9.1) goes to the bench."
+  function lineupLine(ch, traded) {
+    var gone = {};
+    traded.forEach(function (p) { gone[p.player_key] = 1; });
+    var into = ch.into, benched = ch.outOf.filter(function (x) { return !gone[x.player.player_key]; });
+    var parts = [];
+    if (into.length) parts.push(joinNames(names(into)) + (into.length > 1 ? ' move' : ' moves') + ' into the lineup');
+    if (benched.length) parts.push(joinNames(names(benched)) + (benched.length > 1 ? ' go' : ' goes') + ' to the bench');
+    return parts.length ? parts.join('; ') + '.' : 'The starting lineup doesn’t change.';
+  }
+  function dealSide(label, players, team) {
+    return h('div', { class: 'deal-side' }, [h('small', { text: label })].concat(players.map(function (p) {
+      var r = S.league.rate(p), rd = (S.league.rosters.draft_rounds || {})[p.player_key];
+      var block = listingsAll().some(function (l) { return l.player_key === p.player_key; });
+      return h('span', { class: 'chip' + (block ? ' listed' : '') }, [posBadge(p.position), ' ', pl(Object.assign({ manager: team }, p)), ' ',
+        h('small', { text: fmt(r.value) + ' pts/wk' + (rd ? ' · Rd ' + rd + ' pick' : '') + (block ? ' · On the block' : '') })]);
+    })));
   }
   function renderMatch() {
     withLeague('matchState', function (lg) {
       var key = teamSelect($('mTeam'), S.matchTeam || $('mTeam').value), list = clear($('matches'));
       S.matchTeam = key;
-      var r = L.tradeFits(lg.scout, key, listingsAll()), me = r.team;
-      var who = you(key, me ? me.manager : '');
       var st = $('matchState');
-      if (!me) return;
-      if (!me.weaknesses.filter(function (g) { return ['QB', 'RB', 'WR', 'TE'].indexOf(g) >= 0; }).length && !me.strengths.length) {
-        st.textContent = (who === 'You' ? 'Your team is' : me.manager + '’s team is') + ' close to the league average everywhere, so there’s no clear trade fit right now.';
-      } else if (!r.fits.length) {
-        st.textContent = 'No team lines up yet: nobody is strong where ' + (who === 'You' ? 'you’re' : me.manager + ' is') + ' weak, or weak where ' + (who === 'You' ? 'you’re' : 'they’re') + ' strong.';
+      var ckey = key + '|' + lg.rosters.rosters_checked_at + '|' + JSON.stringify(listingsAll().map(function (l) { return l.player_key + l.status; })) + '|' + JSON.stringify(teamNeeds());
+      if (!S.finder || S.finder.key !== ckey) {
+        S.finder = { key: ckey, r: L.tradeFinder({ teams: lg.rosters.teams, slots: lg.slots, rate: lg.rate, teamKey: key, limit: 6,
+          records: L.recordsFromBox(lg.cur, lg.rosters.teams), draft: lg.rosters.draft_rounds || {},
+          listings: listingsAll(), needs: L.needs(listingsAll(), teams(), teamNeeds()) }) };
       }
-      r.fits.forEach(function (f) {
-        var them = lg.scout.teams.filter(function (t) { return t.team_key === f.team_key; })[0];
-        var isYou = who === 'You';
-        var bullets = f.gets.map(function (x, i) { return needLine(x.group, i, isYou ? null : who, f.manager, them, me, f.theyOffer); })
-          .concat(f.gives.map(function (x, i) { return needLine(x.group, i, f.manager, isYou ? null : who, me, them, f.youOffer); }));
-        function chips(listx, label) {
-          if (!listx.length) return null;
-          return h('div', { class: 'offer' }, [h('small', { text: label })].concat(listx.slice(0, 4).map(function (o) {
-            return h('span', { class: 'chip' + (o.listed ? ' listed' : '') }, [posBadge(o.player.position), ' ', pl(o.player), ' ',
-              h('small', { text: (o.rating.value === null ? 'no scores' : fmt(o.rating.value) + ' pts/wk') + ' · ' + (o.listed ? 'On the block' : o.role === 'bench' ? 'Bench' : 'Starter') })]);
-          })));
-        }
-        var giveKey = (f.youOffer[0] || {}).player, getKey = (f.theyOffer[0] || {}).player;
-        list.appendChild(h('li', { class: 'match' + (f.mutual ? ' mutual' : '') }, [
-          h('div', { class: 'match-head' }, [h('h3', { text: f.manager }),
-            h('span', { class: 'badge' + (f.mutual ? '' : ' one'), text: f.mutual ? 'Two-way fit' : 'One-way fit' })]),
-          h('ul', { class: 'why' }, bullets),
-          chips(f.theyOffer, f.manager + ' could offer'),
-          chips(f.youOffer, (isYou ? 'You' : who) + ' could offer'),
-          h('div', { class: 'links' }, [
-            h('button', { type: 'button', class: 'btn ghost small', text: 'Compare in calculator', onclick: function () {
-              openCalc(key, giveKey ? [giveKey.player_key] : [], f.team_key, getKey ? [getKey.player_key] : []);
-            } })
-          ])
+      var r = S.finder.r, me = r.team;
+      if (!me) return;
+      var who = you(key, me.manager), isYou = who === 'You', yours = isYou ? 'your' : me.manager + '’s';
+      if (!r.deals.length) st.textContent = 'No trade makes ' + yours + ' starting lineup better right now with players other teams would likely give up. Check back after the next week’s games.';
+      r.deals.forEach(function (d) {
+        var rec = d.record && (d.record.w + d.record.l) ? ' (' + d.record.w + '–' + d.record.l + ')' : '';
+        var odds = ODDS[d.odds];
+        var notes = d.why.map(function (w) { return h('li', { class: 'w-' + w.kind, text: w.text + '.' }); });
+        if (d.give.length < d.get.length) notes.push(h('li', { text: (isYou ? 'You’d' : who + ' would') + ' need to drop a bench player to make room.' }));
+        if (d.give.length > d.get.length) notes.push(h('li', { text: d.manager + ' would need to drop a bench player to make room.' }));
+        list.appendChild(h('li', { class: 'deal ' + odds[1] + (d.wanted ? ' wanted' : '') }, [
+          h('div', { class: 'match-head' }, [h('h3', { text: 'Trade with ' + d.manager + rec }), h('span', { class: 'odds ' + odds[1], text: odds[0] })]),
+          h('div', { class: 'deal-swap' }, [dealSide(isYou ? 'You give' : who + ' gives', d.give, isYou ? (S.me && S.me.manager) || who : who),
+            h('span', { class: 'deal-arrow', 'aria-hidden': 'true', text: '⇄' }), dealSide(isYou ? 'You get' : who + ' gets', d.get, d.manager)]),
+          h('ul', { class: 'deal-why' }, [
+            h('li', {}, [h('b', { class: d.myGain >= 0 ? 'up' : 'down', text: (isYou ? 'You' : who) + ': ' + signed(d.myGain) + ' pts/wk. ' }), lineupLine(d.mine, d.give)]),
+            h('li', {}, [h('b', { class: d.theirGain >= 0 ? 'up' : 'down', text: d.manager + ': ' + signed(d.theirGain) + ' pts/wk' + (d.theirGain < 0 ? ' now' : '') + '. ' }), lineupLine(d.theirs, d.get)])
+          ].concat(notes)),
+          h('div', { class: 'links' }, [h('button', { type: 'button', class: 'btn ghost small', text: 'Open in calculator', onclick: function () {
+            openCalc(key, d.give.map(function (p) { return p.player_key; }), d.team_key, d.get.map(function (p) { return p.player_key; }));
+          } })])
         ]));
       });
-      $('matchNote').textContent = 'Only players marked “On the block” have been listed; everyone else is a suggestion to ask about. ' + methodNote(lg);
-      // Matches from what managers typed on their listings.
-      var old = L.matchmaker(listingsAll(), key, teamNeeds()), lm = clear($('listMatches'));
-      $('listMatchWrap').hidden = !old.matches.length;
-      old.matches.forEach(function (m) {
-        var text = who === 'You' ? m.text : m.text.replace(/^You’re looking for/, who + ' is looking for').replace(/which you have listed/, 'which ' + who + ' has listed').replace(/you haven’t listed/, who + ' hasn’t listed');
-        lm.appendChild(h('li', { class: 'match' + (m.mutual ? ' mutual' : '') }, [
-          h('div', { class: 'match-head' }, [h('h3', { text: m.manager }), h('span', { class: 'badge' + (m.mutual ? '' : ' one'), text: m.mutual ? 'Mutual match' : 'One-way' })]),
-          h('p', { text: text }),
-          h('div', { class: 'links' }, m.get.concat(m.give).map(function (l) {
-            return h('button', { type: 'button', class: 'linkbtn', text: 'View ' + l.name, onclick: function (e) { openDetail(l.player_key, e.currentTarget); } });
-          }))
-        ]));
-      });
+      $('matchNote').textContent = 'Pts/wk is the change to each starting lineup (best lineup by rating). Easy yes: both lineups get better. Worth a pitch: ' +
+        'they lose a little now, but it fits what they posted, their block or their record. Long shot: it costs them, or takes an early draft pick. ' +
+        'Only players marked “On the block” have been listed; everyone else is an idea to ask about. ' + methodNote(lg);
     });
   }
 

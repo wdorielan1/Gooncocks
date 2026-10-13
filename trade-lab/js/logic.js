@@ -311,6 +311,145 @@
     return { team: me, fits: fits };
   }
 
+  // ---------- trade finder ----------
+  // Real, specific offers for one team: every 1-for-1, 2-for-1 and 1-for-2
+  // with each other team, judged by what it does to both starting lineups
+  // (best lineup by rating, the same as the Scouting Report). A deal must
+  // make our team better; the other side is judged by how likely they are
+  // to say yes:
+  //   - their lineup change (the base),
+  //   - a position they posted they're looking for: top priority,
+  //   - players they put on the block,
+  //   - giving up an early draft pick: harder to pry loose,
+  //   - their record: a losing team takes depth (two starters for one
+  //     star), a winning team takes a star for two (consolidation),
+  //   - a big drop in what they get back by rating.
+  var FINDER_POS = { QB: 1, RB: 1, WR: 1, TE: 1 };
+  var NOT_PLAYING = { O: 1, IR: 1, 'PUP-R': 1, 'NFI-R': 1, SUSP: 1, NA: 1 };
+  var FINDER_CANDIDATES = 9;  // best players per team considered
+  function tradeFinder(o) {
+    var byKey = {};
+    o.teams.forEach(function (t) { byKey[t.team_key] = t; });
+    var me = byKey[o.teamKey];
+    if (!me) return { team: null, deals: [] };
+    var listed = {}, wants = {}, drafted = o.draft || {}, records = o.records || {};
+    (o.listings || []).forEach(function (l) { listed[l.player_key] = l.team_key; });
+    (o.needs || []).forEach(function (n) { wants[n.team_key] = n.wants || []; });
+    function val(p) { var r = o.rate(p); return r && r.value !== null && r.value !== undefined ? r.value : null; }
+    function tradable(p) {
+      return FINDER_POS[p.position] && !OUT[p.slot] && val(p) !== null && !(p.injury && NOT_PLAYING[p.injury.code]);
+    }
+    function cands(t) {
+      return (t.players || []).filter(tradable).sort(function (a, b) { return val(b) - val(a); }).slice(0, FINDER_CANDIDATES);
+    }
+    function report(players) { return teamReport(players, o.slots, o.rate); }
+    function starters(rep) {
+      var s = {};
+      Object.keys(rep.groups).forEach(function (g) { rep.groups[g].starters.forEach(function (x) { s[x.player.player_key] = { player: x.player, value: x.rating.value, group: g }; }); });
+      return s;
+    }
+    function swap(players, out, inn) {
+      var gone = {};
+      out.forEach(function (p) { gone[p.player_key] = 1; });
+      return players.filter(function (p) { return !gone[p.player_key]; }).concat(inn);
+    }
+    // Who moves into and out of a lineup: [{player, value, group}].
+    function changes(before, after) {
+      var a = starters(before), b = starters(after);
+      return { into: Object.keys(b).filter(function (k) { return !a[k]; }).map(function (k) { return b[k]; }),
+               outOf: Object.keys(a).filter(function (k) { return !b[k]; }).map(function (k) { return a[k]; }) };
+    }
+    function groupsOf(n, list) {
+      var out = list.map(function (p) { return [p]; });
+      if (n > 1) for (var i = 0; i < list.length; i++) for (var j = i + 1; j < list.length; j++) out.push([list[i], list[j]]);
+      return out;
+    }
+    var mine = cands(me), base = report(me.players || []), deals = [];
+    o.teams.forEach(function (t) {
+      if (t.team_key === me.team_key) return;
+      var theirs = cands(t), tBase = report(t.players || []), rec = records[t.team_key] || null;
+      var games = rec ? rec.w + rec.l : 0, pct = games ? rec.w / games : 0.5;
+      var theyWant = wants[t.team_key] || [];
+      groupsOf(2, mine).forEach(function (give) {
+        groupsOf(2, theirs).forEach(function (get) {
+          if (give.length === 2 && get.length === 2) return;  // 1-for-1, 2-for-1 and 1-for-2 only
+          var meAfter = report(swap(me.players, give, get)), themAfter = report(swap(t.players, get, give));
+          var myGain = meAfter.total - base.total, theirGain = themAfter.total - tBase.total;
+          if (myGain < 1) return;  // not worth asking for
+          var giveVal = give.reduce(function (s, p) { return s + val(p); }, 0), getVal = get.reduce(function (s, p) { return s + val(p); }, 0);
+          var why = [], yes = theirGain;
+          // A position they asked for counts only if they don't give one up in the same deal.
+          var fills = give.filter(function (p) {
+            return theyWant.indexOf(p.position) >= 0 && !get.some(function (x) { return x.position === p.position; });
+          }).map(function (p) { return p.position; });
+          if (fills.length) { yes += 3; why.push({ kind: 'wants', text: t.manager + ' is looking for ' + article(fills[0]) + ' ' + fills[0] }); }
+          var onBlock = get.filter(function (p) { return listed[p.player_key] === t.team_key; });
+          if (onBlock.length) { yes += 1.5 * Math.min(2, onBlock.length); why.push({ kind: 'block', text: listJoin(onBlock.map(function (p) { return p.name; })) + (onBlock.length > 1 ? ' are' : ' is') + ' on ' + t.manager + '’s block' }); }
+          get.forEach(function (p) {
+            var rd = drafted[p.player_key];
+            if (rd === 1) { yes -= 2.5; why.push({ kind: 'draft', text: p.name + ' was a 1st-round pick' }); }
+            else if (rd === 2) { yes -= 1.2; why.push({ kind: 'draft', text: p.name + ' was a 2nd-round pick' }); }
+          });
+          if (games >= 2 && pct < 0.45 && give.length > get.length) { yes += 1.5; why.push({ kind: 'record', text: 'At ' + rec.w + '–' + rec.l + ', two starters help ' + t.manager + ' more than one star' }); }
+          if (games >= 2 && pct > 0.55 && give.length < get.length) { yes += 1; why.push({ kind: 'record', text: 'At ' + rec.w + '–' + rec.l + ', ' + t.manager + ' can trade depth for a star' }); }
+          if (getVal > 0 && giveVal < getVal * 0.8) yes -= (getVal * 0.8 - giveVal) * 0.4;  // asking for much more than we give
+          // Easy yes: their lineup gets better too, and nothing else stands in the way.
+          var odds = yes >= 0.5 && theirGain >= 0 ? 'easy' : yes >= -2.5 ? 'pitch' : yes >= -5 ? 'long' : null;
+          if (!odds) return;
+          deals.push({ team_key: t.team_key, manager: t.manager, record: rec, give: give, get: get,
+                       myGain: myGain, theirGain: theirGain, yes: yes, odds: odds, wanted: fills.length > 0, why: why,
+                       giveVal: giveVal, getVal: getVal, mine: changes(base, meAfter), theirs: changes(tBase, themAfter),
+                       // what it's worth to us, times how likely they are to take it
+                       score: myGain / (1 + Math.exp(-(yes + 1) / 1.5)) + (fills.length ? 3 : 0) });
+        });
+      });
+    });
+    // A deal with a throw-in player is dropped when the deal without him is
+    // just as good: the simplest version of each idea is the one to ask for.
+    var byId = {};
+    function id(d) {
+      return d.team_key + '|' + d.give.map(function (p) { return p.player_key; }).sort().join(',') + '>' + d.get.map(function (p) { return p.player_key; }).sort().join(',');
+    }
+    deals.forEach(function (d) { byId[id(d)] = d; });
+    deals = deals.filter(function (d) {
+      var smaller = [];
+      if (d.give.length === 2) d.give.forEach(function (p) { smaller.push({ team_key: d.team_key, give: d.give.filter(function (x) { return x !== p; }), get: d.get }); });
+      if (d.get.length === 2) d.get.forEach(function (p) { smaller.push({ team_key: d.team_key, give: d.give, get: d.get.filter(function (x) { return x !== p; }) }); });
+      return !smaller.some(function (x) { var y = byId[id(x)]; return y && y.score >= d.score - 0.5; });
+    });
+    // Best first: a position they asked for leads, then overall score.
+    deals.sort(function (a, b) { return (b.wanted - a.wanted) || (b.score - a.score); });
+    // Variety: at most two deals per team, never the same ask twice, and
+    // each of our players offered in at most two deals.
+    var perTeam = {}, seen = {}, offered = {}, out = [];
+    deals.forEach(function (d) {
+      var ask = d.team_key + '|' + d.get.map(function (p) { return p.player_key; }).sort().join(',');
+      if (out.length >= (o.limit || 6) || seen[ask] || (perTeam[d.team_key] || 0) >= 2) return;
+      if (d.give.some(function (p) { return (offered[p.player_key] || 0) >= 2; })) return;
+      seen[ask] = 1; perTeam[d.team_key] = (perTeam[d.team_key] || 0) + 1;
+      d.give.forEach(function (p) { offered[p.player_key] = (offered[p.player_key] || 0) + 1; });
+      out.push(d);
+    });
+    return { team: me, deals: out, considered: deals.length };
+  }
+  // Each team's record from the season's box scores (starters' points decide
+  // each game): {team key: {w, l}}. Game ids hold the two managers' ids.
+  function recordsFromBox(box, teams) {
+    var id = {}, out = {};
+    (teams || []).forEach(function (t) { id[String(t.manager || '').toLowerCase().replace(/[^a-z0-9]+/g, '')] = t.team_key; });
+    function pts(lineup) { return (lineup || []).reduce(function (s, p) { return s + (p[0] === 'BN' || OUT[p[0]] || typeof p[4] !== 'number' ? 0 : p[4]); }, 0); }
+    Object.keys((box && box.games) || {}).forEach(function (gid) {
+      var m = /^\d+-w\d+-([^-]+)-([^-]+)$/.exec(gid), g = box.games[gid];
+      if (!m || !id[m[1]] || !id[m[2]]) return;
+      var a = pts(g.a), b = pts(g.b);
+      [[m[1], a > b], [m[2], b > a]].forEach(function (x) {
+        var r = out[id[x[0]]] = out[id[x[0]]] || { w: 0, l: 0 };
+        if (a !== b) { if (x[1]) r.w += 1; else r.l += 1; }
+      });
+    });
+    return out;
+  }
+
   // ---------- fairness ----------
   // Compares what each side receives, by rating (points per week). Within
   // 10% is fair; up to 25% leans one way; beyond that it's lopsided.
@@ -340,7 +479,7 @@
   }
 
   root.TradeLogic = {
-    STATUS_LABEL: STATUS_LABEL, filterListings: filterListings, needs: needs, matchmaker: matchmaker,
+    STATUS_LABEL: STATUS_LABEL, filterListings: filterListings, needs: needs, matchmaker: matchmaker, tradeFinder: tradeFinder, recordsFromBox: recordsFromBox,
     playerWeeks: playerWeeks, playerStats: playerStats, weekLine: weekLine, sideTotals: sideTotals, ago: ago,
     playerRating: playerRating, slotsFromBox: slotsFromBox, teamReport: teamReport, scouting: scouting,
     tradeFits: tradeFits, fairness: fairness, grade: grade, GROUPS: GROUPS, PRIOR_WEEKS: PRIOR_WEEKS

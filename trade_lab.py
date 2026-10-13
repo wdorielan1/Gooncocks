@@ -91,6 +91,7 @@ GAME_TIME = ("Q", "D")      # injury codes that can still play this week
 BACK_DAYS = 14              # how long a return from Out/IR stays in "Coming back"
 TRANSACTIONS_TTL = 15 * 60  # how long the league's transaction list is reused
 TRANSACTIONS_MAX = 300      # newest moves kept for the Transaction Report
+DRAFT_TTL = 24 * 3600       # the draft doesn't change once it's done; re-read daily
 WRITE_ROSTER_TTL = 3 * 60   # a roster must be this fresh to approve a listing
 VISIT_KEEP_DAYS = 120       # how long each manager's daily visit counts are kept
 VISIT_GAP = 30 * 60         # back after this long away counts as a new visit
@@ -160,6 +161,9 @@ class YahooLeague:
 
     def transactions(self, league_key, start=0):
         return yahoo_client.get_league_transactions(self._league_token(), league_key, start=start)
+
+    def draft(self, league_key):
+        return yahoo_client.get_draft_results(self._league_token(), league_key)
 
     def league_players(self, league_key, status, position=None, start=0):
         return yahoo_client.get_league_players(self._league_token(), league_key, status=status, position=position, start=start)
@@ -987,6 +991,21 @@ class TradeLab:
                                      for t in info["teams"]],
                            "rosters_checked_at": refreshed, "rosters_stale": stale})
 
+    def draft_rounds(self, max_age=DRAFT_TTL):
+        """{player key: round he was drafted in} for this season, cached a
+        day. Empty if Yahoo can't say (nothing cached) - the Trade Finder
+        just treats everyone as undrafted then."""
+        cached = self.store.get(f"META#{self.league}", "draft")
+        if cached and self.now() - cached["data"]["fetched_at"] < max_age:
+            return cached["data"]["rounds"]
+        try:
+            rounds = {p["player_key"]: p["round"] for p in self.yahoo.draft(self.league)}
+        except Exception:
+            traceback.print_exc()
+            return cached["data"]["rounds"] if cached else {}
+        self.store.put(f"META#{self.league}", "draft", {"rounds": rounds, "fetched_at": self.now()}, 1)
+        return rounds
+
     def rosters(self, event, cookies):
         try:
             rosters, refreshed, stale = self.sync_league()
@@ -999,7 +1018,8 @@ class TradeLab:
             slots = []
         return _json(200, {"teams": [{"team_key": k, "manager": names.get(k, k), "players": r["players"]}
                                      for k, r in rosters.items()],
-                           "slots": slots, "rosters_checked_at": refreshed, "rosters_stale": stale})
+                           "slots": slots, "draft_rounds": self.draft_rounds(),
+                           "rosters_checked_at": refreshed, "rosters_stale": stale})
 
     def my_roster(self, event, cookies):
         sess = self.session(cookies)

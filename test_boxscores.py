@@ -245,6 +245,20 @@ check("live stats: kicker field goals made/attempted add up the distances; no lo
       nfl_points.yahoo_log_values({20: 1, 23: 1, 26: 1, 29: 3}, "K") == [2, 3, None, 3, 3]
       and all(len(nfl_points.YAHOO_LOG[p]) == len(nfl_points.GAME_LOG[p]) for p in nfl_points.GAME_LOG))
 
+# ---------- draft results: every pick's round, team and player
+_dr_json = {"fantasy_content": {"league": [{"league_key": "470.l.1"}, {"draft_results": {"count": 2,
+    "0": {"draft_result": {"pick": 2, "round": 1, "team_key": "470.l.1.t.2", "player_key": "470.p.9"}},
+    "1": {"draft_result": {"pick": 1, "round": 1, "team_key": "470.l.1.t.1", "player_key": "470.p.7"}}}}]}}
+_rq = yahoo_client._request
+yahoo_client._request = lambda url, headers=None, **kw: _dr_json
+try:
+    _dr = yahoo_client.get_draft_results("tok", "470.l.1")
+finally:
+    yahoo_client._request = _rq
+check("draft results: picks in order with round, team and player",
+      _dr == [{"pick": 1, "round": 1, "team_key": "470.l.1.t.1", "player_key": "470.p.7"},
+              {"pick": 2, "round": 1, "team_key": "470.l.1.t.2", "player_key": "470.p.9"}], _dr)
+
 # ---------- league teams: managers' Yahoo account IDs, and which one is commissioner
 _teams_json = {"fantasy_content": {"league": [{"league_key": "470.l.1"}, {"teams": {"count": 2,
     "0": {"team": [[{"team_key": "470.l.1.t.1"}, {"name": "Hubita"}, {"managers": [

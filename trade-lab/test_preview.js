@@ -215,38 +215,43 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.ok(['Grade', 'A is well above average', 'C is about average', 'F is well below', 'Pts/wk', 'Rank', 'trade bait'].every(w => key.includes(w)), key);
     assert.ok(await page.$$eval('.scout td.num .avg', els => els.length === 7 && els.every(e => /^avg \d+\.\d$/.test(e.textContent))));
   });
-  await check('matchmaker: partners from real rosters, two-way fits first, only listed players marked listed', async () => {
-    await page.click('#scoutReport .scout-act button');  // Find trade partners, for Sam
+  await check('trade finder: specific deals with what each side gives, both lineups and the odds of a yes', async () => {
+    await page.click('#scoutReport .scout-act button');  // Find trades, for Sam
     assert.ok(await page.isVisible('#panel-match'));
+    assert.strictEqual(await page.textContent('#tab-match'), 'Trade Finder');
     assert.strictEqual(await page.inputValue('#mTeam'), '470.l.960265.t.2');
     await page.selectOption('#mTeam', '470.l.960265.t.1');
-    const fits = await page.$$eval('#matches .match', els => els.map(e => ({ who: e.querySelector('h3').textContent, two: e.classList.contains('mutual'),
-      listed: [...e.querySelectorAll('.chip.listed')].map(c => c.textContent),
-      why: [...e.querySelectorAll('.why li')].map(li => li.textContent), offers: [...e.querySelectorAll('.offer')].map(o => o.textContent) })));
-    assert.ok(fits.length >= 2);
-    const firstOne = fits.findIndex(f => !f.two);
-    assert.ok(firstOne === -1 || fits.slice(firstOne).every(f => !f.two));
-    assert.strictEqual(fits[0].who, 'Sam');
-    const why = fits[0].why;
-    assert.match(why[0], /^You need an RB\. Sam has plenty: the (best|\d+(st|nd|rd|th)-best) RBs in the league/);
-    assert.ok(why.some(t => /^Sam needs a WR\. You have plenty: the (best|\d+(st|nd|rd|th)-best) WRs in the league, while Sam’s are the league’s weakest\.$/.test(t)), JSON.stringify(why));
-    assert.ok(why.some(t => /^Sam could also use a QB\. You have a spare one on the bench\.$/.test(t)), JSON.stringify(why));
-    assert.match(fits[0].offers[0], /^Sam could offer.*Breece Hall \d+\.\d pts\/wk · On the block/);
-    assert.match(fits[0].offers[1], /^You could offer.*Jared Goff \d+\.\d pts\/wk · (On the block|Bench)/);
-    const txt = await page.textContent('#matches');
-    assert.ok(!txt.includes(';') && !(await page.$('#matches .grade')), 'no semicolons or grade boxes');
+    await page.waitForSelector('#matches .deal');
+    const deals = await page.$$eval('#matches .deal', els => els.map(e => ({ head: e.querySelector('h3').textContent, odds: e.querySelector('.odds').textContent,
+      give: [...e.querySelectorAll('.deal-side')[0].querySelectorAll('.chip')].map(c => c.textContent),
+      get: [...e.querySelectorAll('.deal-side')[1].querySelectorAll('.chip')].map(c => c.textContent),
+      why: [...e.querySelectorAll('.deal-why li')].map(li => li.textContent) })));
+    assert.ok(deals.length >= 3 && deals.length <= 6, deals.length);
+    deals.forEach(d => {
+      assert.match(d.head, /^Trade with (Sam|Chet|Chris|Gabe|Patrick)( \(\d+–\d+\))?$/);
+      assert.ok(['Easy yes', 'Worth a pitch', 'Long shot'].includes(d.odds));
+      assert.ok(d.give.length >= 1 && d.get.length >= 1 && d.give.length + d.get.length <= 3, JSON.stringify(d));  // never three-for-three
+      assert.match(d.why[0], /^(You|Will): \+\d+\.\d pts\/wk\. .*(into the lineup|doesn’t change)/);
+      assert.match(d.why[1], /^(Sam|Chet|Chris|Gabe|Patrick): [+−]\d+\.\d pts\/wk/);
+    });
+    const per = {}; deals.forEach(d => { const m = d.head.split(' ')[2]; per[m] = (per[m] || 0) + 1; });
+    assert.ok(Object.values(per).every(c => c <= 2), JSON.stringify(per));
+    // a posted "looking for" leads, and early draft picks / the block are called out
+    assert.ok(deals[0].why.some(t => /is looking for an? (QB|RB|WR|TE)\.$/.test(t)), JSON.stringify(deals[0].why));
+
+    assert.ok(deals.some(d => d.get.some(c => /Rd 1 pick/.test(c))) ? deals.some(d => d.why.some(t => /1st-round pick/.test(t))) : true);
     const listedNames = await page.evaluate(() => TradeApi.s.listings.map(l => l.name));
-    fits.forEach(f => f.listed.forEach(c => assert.ok(listedNames.some(n => c.includes(n)), c)));
-    assert.ok(fits[0].listed.some(c => c.includes('Breece Hall') && c.includes('On the block')));
-    assert.match(await page.textContent('#matchNote'), /Only players marked “On the block” have been listed/);
+    deals.forEach(d => d.give.concat(d.get).filter(c => /On the block/.test(c)).forEach(c => assert.ok(listedNames.some(n => c.includes(n)), c)));
+    assert.match(await page.textContent('#matchNote'), /Easy yes: both lineups get better/);
+    assert.ok(!(await page.$('#listMatches')), 'the old typed-matches list is gone');
   });
-  await check('compare from the matchmaker opens the calculator with both sides picked', async () => {
-    await page.locator('#matches .match').first().getByRole('button', { name: 'Compare in calculator' }).click();
+  await check('open in calculator from a deal picks both sides', async () => {
+    const counts = await page.$eval('#matches .deal', e => [e.querySelectorAll('.deal-side')[0].querySelectorAll('.chip').length, e.querySelectorAll('.deal-side')[1].querySelectorAll('.chip').length]);
+    await page.locator('#matches .deal').first().getByRole('button', { name: 'Open in calculator' }).click();
     assert.ok(await page.isVisible('#panel-calc'));
     assert.strictEqual(await page.inputValue('#cTeamA'), '470.l.960265.t.1');
-    assert.strictEqual(await page.inputValue('#cTeamB'), '470.l.960265.t.2');
-    assert.strictEqual(await page.$$eval('#picksA input:checked', x => x.length), 1);
-    assert.strictEqual(await page.$$eval('#picksB input:checked', x => x.length), 1);
+    assert.strictEqual(await page.$$eval('#picksA input:checked', x => x.length), counts[0]);
+    assert.strictEqual(await page.$$eval('#picksB input:checked', x => x.length), counts[1]);
     await page.waitForSelector('#calcOut .verdict');
   });
   await check('trade calculator gives a verdict from ratings, with the numbers behind it', async () => {

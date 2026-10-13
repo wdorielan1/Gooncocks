@@ -410,6 +410,19 @@ def _stat_values(player_stats):
     return out
 
 
+def get_draft_results(access_token, league_key):
+    """The league's draft, pick by pick: [{'pick', 'round', 'team_key',
+    'player_key'}] in draft order. Empty before the draft."""
+    url = f"{FANTASY_BASE}/league/{league_key}/draftresults?format=json"
+    data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+    picks = []
+    for d in _find_values(data, "draft_result"):
+        if isinstance(d, dict) and d.get("player_key") and str(d.get("round") or "").isdigit():
+            picks.append({"pick": int(d.get("pick") or 0), "round": int(d["round"]),
+                          "team_key": d.get("team_key"), "player_key": d["player_key"]})
+    return sorted(picks, key=lambda p: p["pick"])
+
+
 def get_league_season(access_token, league_key):
     """One season's final standings: {'season', 'name', 'is_finished',
     'renew', 'teams': [{'team', 'manager', 'manager_guid', 'rank'}]}.

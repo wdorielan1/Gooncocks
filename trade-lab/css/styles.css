@@ -173,6 +173,18 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 /* matchmaker */
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .tag { border: 1px solid var(--blue-hi); color: var(--blue-hi); font-size: 12px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; padding: 6px 10px; border-radius: 2px; }
+.deal { padding: 16px 18px; background: var(--panel); border: 1px solid var(--line-2); border-left: 3px solid var(--line-2); border-radius: 3px; }
+.deal.easy { border-left-color: #5fd08f; } .deal.pitch { border-left-color: var(--gold); } .deal.long { border-left-color: #6c7a95; }
+.odds { padding: 3px 8px; border-radius: 3px; font-size: 12px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+.odds.easy { background: #1f5a3a; color: #c9f5da; } .odds.pitch { background: #5a4a14; color: #ffe7a3; } .odds.long { background: #26324a; color: #b8c2d6; }
+.deal-swap { display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 10px; margin-top: 12px; }
+.deal-side { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.deal-side > small { font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+.deal-arrow { align-self: center; font-size: 22px; color: var(--gold); }
+.deal-why { margin: 12px 0 0; padding-left: 20px; display: grid; gap: 5px; font-size: 14px; color: #dfe4ee; }
+.deal-why b.up { color: #5fd08f; } .deal-why b.down { color: #f08a80; }
+.deal-why .w-wants { color: #fff; font-weight: 600; }
+@media (max-width: 560px) { .deal-swap { grid-template-columns: 1fr; } .deal-arrow { transform: rotate(90deg); justify-self: start; } }
 .matches { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 12px; }
 .match { padding: 16px 18px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 3px; }
 .match.mutual { border-color: var(--gold); }

@@ -95,7 +95,7 @@
   PreviewApi.prototype.rosters = function () {
     var s = this.s;
     return later({ teams: s.teams.map(function (t) { return { team_key: t.team_key, manager: t.manager, players: s.rosters[t.team_key] || [] }; }),
-                   slots: s.slots || [], rosters_checked_at: s.now - 240 });
+                   slots: s.slots || [], draft_rounds: s.draft_rounds || {}, rosters_checked_at: s.now - 240 });
   };
   PreviewApi.prototype.myRoster = function () {
     var s = this.s;

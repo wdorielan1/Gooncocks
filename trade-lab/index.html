@@ -54,7 +54,7 @@
   <div class="tabs" role="tablist" aria-label="Trade Lab">
     <button type="button" role="tab" id="tab-block" aria-controls="panel-block" aria-selected="true">Trading Block</button>
     <button type="button" role="tab" id="tab-scout" aria-controls="panel-scout" aria-selected="false" tabindex="-1">Scouting</button>
-    <button type="button" role="tab" id="tab-match" aria-controls="panel-match" aria-selected="false" tabindex="-1">Matchmaker</button>
+    <button type="button" role="tab" id="tab-match" aria-controls="panel-match" aria-selected="false" tabindex="-1">Trade Finder</button>
     <button type="button" role="tab" id="tab-calc" aria-controls="panel-calc" aria-selected="false" tabindex="-1">Trade Calculator</button>
   </div>
 </div>
@@ -105,9 +105,9 @@
     <section class="partners" aria-labelledby="partnersTitle">
       <div>
         <h2 id="partnersTitle">Find Your Next Trade Partner</h2>
-        <p>See who has what you need, and who needs what you’ve listed.</p>
+        <p>Specific trades that make your lineup better, and who’s most likely to say yes.</p>
       </div>
-      <button type="button" class="btn gold" data-go="match">Open Matchmaker <span aria-hidden="true">→</span></button>
+      <button type="button" class="btn gold" data-go="match">Open Trade Finder <span aria-hidden="true">→</span></button>
     </section>
   </section>
 
@@ -124,7 +124,7 @@
         <div><dt>Pts/wk</dt><dd>What the starters at that position score per week, added together (for example, 3 starting WRs combined), with the league average underneath.</dd></div>
         <div><dt>Rank</dt><dd>Where the team stands in the league at that position. 1st is the best.</dd></div>
       </dl>
-      <p class="key-use"><b>Using it for trades:</b> low grades (D, F) are what to trade <em>for</em>. Find teams with A’s there in the Matchmaker. A’s are your trade bait, since you can spare a player there.</p>
+      <p class="key-use"><b>Using it for trades:</b> low grades (D, F) are what to trade <em>for</em>. The Trade Finder turns them into specific offers. A’s are your trade bait, since you can spare a player there.</p>
     </section>
     <div id="scoutState" class="state" role="status" aria-live="polite"></div>
     <div id="scoutReport"></div>
@@ -137,17 +137,12 @@
   <!-- ================= MATCHMAKER ================= -->
   <section class="panel-view" id="panel-match" role="tabpanel" aria-labelledby="tab-match" hidden>
     <div class="section-head">
-      <h2>Matchmaker</h2>
-      <label class="sel inline"><span>Partners for</span><select id="mTeam"></select></label>
+      <h2>Trade Finder</h2>
+      <label class="sel inline"><span>Deals for</span><select id="mTeam"></select></label>
     </div>
-    <p class="fine">Teams that are strong where this team is weak, and weak where it’s strong, from the Scouting Report. Two-way fits come first. Each player shows their average points per week and whether they start, sit on the bench, or are already on the block. It’s a starting point for a conversation; Trade Lab never proposes or makes trades.</p>
+    <p class="fine">Specific trades (one for one, or two for one) that make this team’s starting lineup better, ranked by how much they help and how likely the other manager is to say yes. Deals that give a manager a position they posted they’re looking for come first. It’s a starting point for a conversation; Trade Lab never proposes or makes trades.</p>
     <div id="matchState" class="state" role="status" aria-live="polite"></div>
     <ol class="matches" id="matches"></ol>
-    <div id="listMatchWrap" hidden>
-      <h3 class="sub-head">From the trading block</h3>
-      <p class="fine">Listings at a position this team said it wants.</p>
-      <ol class="matches" id="listMatches"></ol>
-    </div>
     <p class="fine" id="matchNote"></p>
   </section>
 
