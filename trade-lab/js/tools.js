@@ -151,10 +151,7 @@
     rows.forEach(function (r) { r.avg = order.map(function (i) { return r.avg[i]; }); });
     var keep = cols.map(function (c, i) { return showStats && rows.some(function (r) { return Math.abs(r.avg[i]) >= 0.05; }); });
     var mine = myMatchups(pos, rows, nextWk), mineAt = {};
-    (mine || []).forEach(function (m) {
-      var r = seasonRank(m.p);
-      if (m.opp) (mineAt[m.opp] = mineAt[m.opp] || []).push(m.p.name + (r ? ' (' + m.p.position + r.rank + ')' : ''));
-    });
+    (mine || []).forEach(function (m) { if (m.opp) (mineAt[m.opp] = mineAt[m.opp] || []).push(m.p.name); });
     var tbl = clear($('paTable')), n = rows.length;
     tbl.className = 'pa pa-full' + (showStats ? '' : ' pa-slim');
     tbl.appendChild(h('caption', { class: 'sr-only', text: 'Fantasy points allowed per game to ' + PA_WHO[pos] + ' by each NFL defense, easiest matchup first' }));
