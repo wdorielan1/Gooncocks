@@ -171,6 +171,7 @@
         nextWk ? h('td', { class: 'pa-next-opp' + (opp ? '' : ' bye'), text: opp || 'BYE' }) : null]
         .concat(r.avg.filter(function (v, i) { return keep[i]; }).map(function (v) { return h('td', { class: 'pa-stat', text: fmt(v) }); })));
     })));
+    ensureNflp();  // for each of your players' season ranking
     renderMine(pos, mine, rows.length, nextWk);
     paNote(last4);
   }
@@ -201,6 +202,32 @@
     api.signOut().then(function () { S.me = { signed_in: false }; S.mine = null; S.mineErr = null; renderTools(); },
       function (e) { S.mineErr = e.message; renderTools(); });
   }
+  // A player's season ranking at his position by total fantasy points in our
+  // scoring (nfl/players_<season>.json): {rank, of, total}, or null.
+  function seasonRank(p) {
+    if (!S.nflp) return null;
+    if (!S.nflRanks) {
+      var by = {}, add = function (pos, key, wk) {
+        var t = Object.keys(wk).reduce(function (s, k) { return s + wk[k]; }, 0);
+        (by[pos] = by[pos] || []).push([key, t]);
+      };
+      (S.nflp.players || []).forEach(function (r) { add(r[2], r[0] + '|' + r[3], r[4]); });
+      Object.keys(S.nflp.defenses || {}).forEach(function (t) { add('DEF', t, S.nflp.defenses[t]); });
+      S.nflRanks = {};
+      Object.keys(by).forEach(function (pos) {
+        by[pos].sort(function (a, b) { return b[1] - a[1]; }).forEach(function (x, i) { S.nflRanks[pos + '|' + x[0]] = { rank: i + 1, of: by[pos].length, total: x[1] }; });
+      });
+    }
+    var team = nflCode(p.nfl_team);
+    if (p.position === 'DEF') return S.nflRanks['DEF|' + team] || null;
+    var k = nameKey(p.name);
+    return S.nflRanks[p.position + '|' + k + '|' + team] ||
+      S.nflRanks[Object.keys(S.nflRanks).filter(function (x) { return x.indexOf(p.position + '|' + k + '|') === 0; })[0]] || null;
+  }
+  function rankChip(p) {
+    var r = seasonRank(p);
+    return r ? h('span', { class: 'pa-srank', text: p.position + r.rank, title: ordinal(r.rank) + ' among ' + p.position + 's this season: ' + fmt(r.total) + ' pts in our scoring' }) : null;
+  }
   function renderMine(pos, mine, n, nextWk) {
     var box = clear($('paMe'));
     if (S.signinMsg) box.appendChild(h('p', { class: 'banner-msg' + (S.signinMsg[1] ? ' ' + S.signinMsg[1] : ''), text: S.signinMsg[0] }));
@@ -225,12 +252,12 @@
       var slot = m.p.slot === 'BN' ? 'Bench' : m.p.slot === 'IR' ? 'IR' : '';
       if (m.i === null) {
         return h('li', { class: 'bye' }, [h('span', { class: 'pa-mine-rank', text: '—' }),
-          h('div', {}, [h('b', { text: m.p.name }), h('span', { class: 'pa-mine-sub', text: m.team + (m.opp ? ' vs ' + m.opp : ' · BYE week') + (slot ? ' · ' + slot : '') })]),
+          h('div', {}, [h('span', { class: 'pa-mine-nm' }, [h('b', { text: m.p.name }), rankChip(m.p)]), h('span', { class: 'pa-mine-sub', text: m.team + (m.opp ? ' vs ' + m.opp : ' · BYE week') + (slot ? ' · ' + slot : '') })]),
           h('span', { class: 'pa-mine-tag', text: m.opp ? '' : 'Bye' })]);
       }
       var tier = Math.min(4, Math.floor(m.i / n * 5));
       return h('li', {}, [h('span', { class: 'pa-mine-rank pa-t' + (4 - tier), text: '#' + (m.i + 1), 'aria-label': 'Opponent ranked ' + ordinal(m.i + 1) + ' of ' + n }),
-        h('div', {}, [h('b', { text: m.p.name }), h('span', { class: 'pa-mine-sub', text: m.team + ' vs ' + m.opp + (slot ? ' · ' + slot : '') })]),
+        h('div', {}, [h('span', { class: 'pa-mine-nm' }, [h('b', { text: m.p.name }), rankChip(m.p)]), h('span', { class: 'pa-mine-sub', text: m.team + ' vs ' + m.opp + (slot ? ' · ' + slot : '') })]),
         h('span', { class: 'pa-mine-tag t' + tier, text: MATCH[tier] })]);
     })));
     box.appendChild(card);
@@ -430,7 +457,7 @@
   }
   function ensureNflp() {
     if (S.nflp === undefined && !S.nflpLoad) {
-      S.nflpLoad = api.nflPlayers(season()).then(function (d) { S.nflp = d; S.nflIdx = null; }, function () { S.nflp = null; })
+      S.nflpLoad = api.nflPlayers(season()).then(function (d) { S.nflp = d; S.nflIdx = null; S.nflRanks = null; }, function () { S.nflp = null; })
         .then(function () { S.nflpLoad = null; renderTools(); });
     }
     return S.nflp !== undefined;

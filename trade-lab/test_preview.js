@@ -405,8 +405,15 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
       const row = await tp.$eval('#paTable tbody tr:nth-child(' + rank + ')', t => [t.querySelector('th b').textContent, t.querySelector('.pa-mine-chip').textContent]);
       assert.ok(row[0] === opp && row[1].includes(name), JSON.stringify([rank, name, sub, row]));
     }
+    // each of your players' season ranking at his position, in our scoring
+    await tp.waitForSelector('.pa-mine-list .pa-srank');
+    const ranks = await tp.$$eval('.pa-mine-list li', ls => ls.map(l => [l.querySelector('b').textContent, (l.querySelector('.pa-srank') || {}).textContent, (l.querySelector('.pa-srank') || { title: '' }).title]));
+    assert.ok(ranks.every(r => /^RB\d+$/.test(r[1]) && /^\d+(st|nd|rd|th) among RBs this season: \d+\.\d pts in our scoring$/.test(r[2])), JSON.stringify(ranks));
+    const nflp = await tp.evaluate(() => TradeApi.s.nflPlayers.players.filter(p => p[2] === 'RB').map(p => [p[1], Object.values(p[4]).reduce((a, b) => a + b, 0)]).sort((a, b) => b[1] - a[1]).map(p => p[0]));
+    ranks.forEach(r => assert.strictEqual(r[1], 'RB' + (nflp.indexOf(r[0]) + 1), JSON.stringify([r, nflp])));
     await tp.click('#paPos button:has-text("QB")');
     assert.match(await tp.textContent('.pa-mine h4'), /^Your QBs/);
+    assert.match(await tp.textContent('.pa-mine-list .pa-srank'), /^QB\d+$/);
     assert.ok(await noOverflow(tp));
     await tp.click('.pa-mine .linkbtn:has-text("Sign out")');
     await tp.waitForSelector('.pa-me-in');
