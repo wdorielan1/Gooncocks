@@ -168,7 +168,7 @@
         h('td', { class: 'pa-pts pa-t' + (4 - tier) }, [h('button', { type: 'button', class: 'pa-cell', text: fmt(r.pts),
           'aria-label': (NFL[r.code] || r.code) + ' allow ' + fmt(r.pts) + ' pts/game to ' + PA_WHO[pos] + ', ' + ordinal(i + 1) + ' most. Show who scored it.',
           onclick: function (e) { openPaDetail(r.code, pos, e.currentTarget); } })]),
-        nextWk ? h('td', { class: 'pa-next-opp' + (opp ? '' : ' bye'), text: opp || 'BYE' }) : null]
+        nextWk ? h('td', { class: 'pa-next-opp' + (opp ? '' : ' bye') }, [opp || 'BYE', pos === 'DEF' && opp ? defRank(opp) : null]) : null]
         .concat(r.avg.filter(function (v, i) { return keep[i]; }).map(function (v) { return h('td', { class: 'pa-stat', text: fmt(v) }); })));
     })));
     ensureNflp();  // for each of your players' season ranking
@@ -227,6 +227,11 @@
   function rankChip(p) {
     var r = seasonRank(p);
     return r ? h('span', { class: 'pa-srank', text: p.position + r.rank, title: ordinal(r.rank) + ' among ' + p.position + 's this season: ' + fmt(r.total) + ' pts in our scoring' }) : null;
+  }
+  // On the DEF view the "vs" team is the defense you'd start: its season ranking among defenses.
+  function defRank(team) {
+    var r = seasonRank({ position: 'DEF', nfl_team: team });
+    return r ? h('span', { class: 'pa-defrank', text: 'DEF' + r.rank, title: ordinal(r.rank) + ' among defenses this season: ' + fmt(r.total) + ' pts in our scoring' }) : null;
   }
   function renderMine(pos, mine, n, nextWk) {
     var box = clear($('paMe'));

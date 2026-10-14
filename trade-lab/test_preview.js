@@ -414,6 +414,13 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     await tp.click('#paPos button:has-text("QB")');
     assert.match(await tp.textContent('.pa-mine h4'), /^Your QBs/);
     assert.match(await tp.textContent('.pa-mine-list .pa-srank'), /^QB\d+$/);
+    // DEF view: the defense you'd start against each offense, with its season ranking among defenses
+    assert.strictEqual(await tp.$$eval('#paTable .pa-defrank', e => e.length), 0, 'only on the DEF view');
+    await tp.click('#paPos button:has-text("DEF")');
+    await tp.waitForSelector('#paTable .pa-defrank');
+    const defs = await tp.$$eval('#paTable td.pa-next-opp', c => c.filter(x => x.querySelector('.pa-defrank')).map(x => [x.firstChild.textContent, x.querySelector('.pa-defrank').textContent]));
+    const order = await tp.evaluate(() => { const d = TradeApi.s.nflPlayers.defenses; return Object.keys(d).map(t => [t, Object.values(d[t]).reduce((a, b) => a + b, 0)]).sort((a, b) => b[1] - a[1]).map(x => x[0]); });
+    assert.ok(defs.length >= 1 && defs.every(([t, r]) => r === 'DEF' + (order.indexOf(t) + 1)), JSON.stringify([defs, order]));
     assert.ok(await noOverflow(tp));
     await tp.click('.pa-mine .linkbtn:has-text("Sign out")');
     await tp.waitForSelector('.pa-me-in');

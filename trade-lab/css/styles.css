@@ -378,6 +378,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .pa-mine-rank { text-align: center; padding: 6px 0; border-radius: 3px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
 .pa-mine-list li.bye .pa-mine-rank { color: var(--muted); border: 1px solid var(--line-2); }
 .pa-mine-list b { display: block; }
+.pa-defrank { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--gold); letter-spacing: .3px; }
 .pa-mine-nm { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; } .pa-mine-nm b { display: inline; }
 .pa-srank { display: inline-block; margin-left: 8px; padding: 1px 6px; border: 1px solid var(--line-2); border-radius: 3px; font-size: 12px; font-weight: 700; color: var(--gold); vertical-align: 1px; font-variant-numeric: tabular-nums; }
 .pa-mine-sub { display: block; font-size: 13px; color: var(--muted); }
