@@ -411,6 +411,9 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.ok(ranks.every(r => /^RB\d+$/.test(r[1]) && /^\d+(st|nd|rd|th) among RBs this season: \d+\.\d pts in our scoring$/.test(r[2])), JSON.stringify(ranks));
     const nflp = await tp.evaluate(() => TradeApi.s.nflPlayers.players.filter(p => p[2] === 'RB').map(p => [p[1], Object.values(p[4]).reduce((a, b) => a + b, 0)]).sort((a, b) => b[1] - a[1]).map(p => p[0]));
     ranks.forEach(r => assert.strictEqual(r[1], 'RB' + (nflp.indexOf(r[0]) + 1), JSON.stringify([r, nflp])));
+    // the same ranking on the table, next to each player's name by the defense he faces
+    const chips = await tp.$$eval('#paTable .pa-mine-chip', c => c.map(x => x.textContent));
+    ranks.forEach(r => assert.ok(chips.some(c => c.includes(r[0] + ' (' + r[1] + ')')), JSON.stringify([r, chips])));
     await tp.click('#paPos button:has-text("QB")');
     assert.match(await tp.textContent('.pa-mine h4'), /^Your QBs/);
     assert.match(await tp.textContent('.pa-mine-list .pa-srank'), /^QB\d+$/);
