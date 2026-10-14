@@ -126,7 +126,12 @@ class FakeYahoo:
             raise RuntimeError("Yahoo returned HTTP 503")
         return [{"pick": 1, "round": 1, "team_key": WILL, "player_key": "470.p.1"},
                 {"pick": 2, "round": 1, "team_key": SAM, "player_key": "470.p.3"},
-                {"pick": 3, "round": 2, "team_key": SAM, "player_key": "470.p.4"}]
+                {"pick": 3, "round": 2, "team_key": SAM, "player_key": "470.p.4"},
+                {"pick": 4, "round": 2, "team_key": WILL, "player_key": "470.p.99"}]
+
+    def players_info(self, league_key, keys):
+        self.info_asked = getattr(self, "info_asked", []) + [list(keys)]
+        return {"470.p.99": {"name": "Dropped Guy", "position": "WR"}}
 
 
 class Clock:
@@ -916,7 +921,11 @@ check("commissioner check: Yahoo down with nothing cached means no, not a crash"
 rapp, rclock = new_app()
 r = body(rapp.handle(event("GET", "/rosters")))
 check("rosters come with each drafted player's round (public, read-only)",
-      r.get("draft_rounds") == {"470.p.1": 1, "470.p.3": 1, "470.p.4": 2}, r.get("draft_rounds"))
+      r.get("draft_rounds") == {"470.p.1": 1, "470.p.3": 1, "470.p.4": 2, "470.p.99": 2}, r.get("draft_rounds"))
+check("each pick's number and positional draft rank (the 2nd WR taken...), dropped players looked up on Yahoo",
+      r.get("draft") == {"470.p.1": {"round": 1, "pick": 1, "pos": "WR", "pos_rank": 1}, "470.p.3": {"round": 1, "pick": 2, "pos": "RB", "pos_rank": 1},
+                         "470.p.4": {"round": 2, "pick": 3, "pos": "WR", "pos_rank": 2}, "470.p.99": {"round": 2, "pick": 4, "pos": "WR", "pos_rank": 3}}
+      and rapp.yahoo.info_asked[-1] == ["470.p.99"], [r.get("draft"), rapp.yahoo.info_asked])
 rapp.handle(event("GET", "/rosters"))
 check("the draft is read from Yahoo once a day, not on every load", rapp.yahoo.draft_calls == 1, rapp.yahoo.draft_calls)
 rclock.t += trade_lab.DRAFT_TTL + 1
@@ -925,7 +934,8 @@ r = rapp.handle(event("GET", "/rosters"))
 check("Yahoo down: the last draft read is kept", body(r).get("draft_rounds", {}).get("470.p.1") == 1 if r["statusCode"] == 200 else True)
 d2, _c = new_app()
 d2.yahoo.draft = lambda key: (_ for _ in ()).throw(RuntimeError("Yahoo returned HTTP 503"))
-check("no draft available: rosters still load, with no rounds", body(d2.handle(event("GET", "/rosters"))).get("draft_rounds") == {})
+check("no draft available: rosters still load, with no rounds", body(d2.handle(event("GET", "/rosters"))).get("draft_rounds") == {}
+      and body(d2.handle(event("GET", "/rosters"))).get("draft") == {})
 
 print()
 if failures:

@@ -259,6 +259,16 @@ check("draft results: picks in order with round, team and player",
       _dr == [{"pick": 1, "round": 1, "team_key": "470.l.1.t.1", "player_key": "470.p.7"},
               {"pick": 2, "round": 1, "team_key": "470.l.1.t.2", "player_key": "470.p.9"}], _dr)
 
+_pi_json = {"fantasy_content": {"league": [{"league_key": "470.l.1"}, {"players": {"count": 1,
+    "0": {"player": [[{"player_key": "470.p.7"}, {"name": {"full": "Some Guy"}}, {"display_position": "WR,TE"}]]}}}]}}
+_rq2 = yahoo_client._request
+yahoo_client._request = lambda url, headers=None, **kw: _pi_json
+try:
+    _pi = yahoo_client.get_players_info("tok", "470.l.1", ["470.p.7"])
+finally:
+    yahoo_client._request = _rq2
+check("players info: name and main position for any player keys", _pi == {"470.p.7": {"name": "Some Guy", "position": "WR"}}, _pi)
+
 # ---------- league teams: managers' Yahoo account IDs, and which one is commissioner
 _teams_json = {"fantasy_content": {"league": [{"league_key": "470.l.1"}, {"teams": {"count": 2,
     "0": {"team": [[{"team_key": "470.l.1.t.1"}, {"name": "Hubita"}, {"managers": [

@@ -231,7 +231,7 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
       assert.match(d.head, /^Trade with (Sam|Chet|Chris|Gabe|Patrick)( \(\d+–\d+\))?$/);
       assert.ok(['Easy yes', 'Worth a pitch', 'Long shot'].includes(d.odds));
       assert.ok(d.give.length >= 1 && d.get.length >= 1 && d.give.length + d.get.length <= 3, JSON.stringify(d));  // never three-for-three
-      assert.match(d.why[0], /^(You|Will): \+\d+\.\d pts\/wk\. .*(into the lineup|doesn’t change)/);
+      assert.match(d.why[0], /^(You|Will): \+\d+\.\d pts\/wk over weeks \d+–\d+\. .*(into the lineup|doesn’t change)/);
       assert.match(d.why[1], /^(Sam|Chet|Chris|Gabe|Patrick): [+−]\d+\.\d pts\/wk/);
     });
     const per = {}; deals.forEach(d => { const m = d.head.split(' ')[2]; per[m] = (per[m] || 0) + 1; });
@@ -244,6 +244,10 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     deals.forEach(d => d.give.concat(d.get).filter(c => /On the block/.test(c)).forEach(c => assert.ok(listedNames.some(n => c.includes(n)), c)));
     assert.match(await page.textContent('#matchNote'), /Easy yes: both lineups get better/);
     assert.ok(!(await page.$('#listMatches')), 'the old typed-matches list is gone');
+    // each player: points, where that ranks now, and where he was drafted
+    const chipsTxt = deals.flatMap(d => d.give.concat(d.get));
+    assert.ok(chipsTxt.every(c => /\d+\.\d pts\/wk · (QB|RB|WR|TE)\d+ now · (drafted (QB|RB|WR|TE)\d+ \(Rd \d\)|undrafted)/.test(c)), JSON.stringify(chipsTxt));
+    assert.match(await page.textContent('#matchNote'), /blends what he’s scoring with what his draft slot says/);
   });
   await check('open in calculator from a deal picks both sides', async () => {
     const counts = await page.$eval('#matches .deal', e => [e.querySelectorAll('.deal-side')[0].querySelectorAll('.chip').length, e.querySelectorAll('.deal-side')[1].querySelectorAll('.chip').length]);
@@ -257,6 +261,7 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
   await check('trade calculator gives a verdict from ratings, with the numbers behind it', async () => {
     for (const side of ['A', 'B']) for (const box of await page.$$('#picks' + side + ' input:checked')) await box.uncheck();
     assert.match(await page.textContent('#calcOut'), /Pick at least one player on each side/);
+    await page.selectOption('#cTeamB', '470.l.960265.t.2');  // Sam
     await page.locator('#picksA label', { hasText: 'Jared Goff' }).locator('input').check();
     await page.locator('#picksB label', { hasText: 'Breece Hall' }).locator('input').check();
     assert.strictEqual(await page.textContent('#givesA'), 'Will gives');

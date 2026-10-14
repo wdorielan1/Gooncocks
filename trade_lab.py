@@ -165,6 +165,9 @@ class YahooLeague:
     def draft(self, league_key):
         return yahoo_client.get_draft_results(self._league_token(), league_key)
 
+    def players_info(self, league_key, player_keys):
+        return yahoo_client.get_players_info(self._league_token(), league_key, player_keys)
+
     def league_players(self, league_key, status, position=None, start=0):
         return yahoo_client.get_league_players(self._league_token(), league_key, status=status, position=position, start=start)
 
@@ -991,20 +994,40 @@ class TradeLab:
                                      for t in info["teams"]],
                            "rosters_checked_at": refreshed, "rosters_stale": stale})
 
-    def draft_rounds(self, max_age=DRAFT_TTL):
-        """{player key: round he was drafted in} for this season, cached a
-        day. Empty if Yahoo can't say (nothing cached) - the Trade Finder
-        just treats everyone as undrafted then."""
+    def draft_info(self, max_age=DRAFT_TTL):
+        """This season's draft for the Trade Finder, cached a day: {"rounds":
+        {player key: round}, "picks": {player key: {"round", "pick", "pos",
+        "pos_rank"}}} - pos_rank 3 at RB means the 3rd RB taken. Positions
+        come from the rosters, and from Yahoo for players since dropped.
+        Empty if Yahoo can't say (nothing cached): the finder then treats
+        everyone as undrafted."""
         cached = self.store.get(f"META#{self.league}", "draft")
-        if cached and self.now() - cached["data"]["fetched_at"] < max_age:
-            return cached["data"]["rounds"]
+        if cached and self.now() - cached["data"]["fetched_at"] < max_age and "picks" in cached["data"]:
+            return cached["data"]
         try:
-            rounds = {p["player_key"]: p["round"] for p in self.yahoo.draft(self.league)}
+            picks = self.yahoo.draft(self.league)
+            pos = {}
+            for item in self.store.query(self._rk()):
+                for p in item["data"].get("players") or []:
+                    if primary_position(p) != "?":
+                        pos[p.get("player_key")] = primary_position(p)
+            missing = [p["player_key"] for p in picks if not pos.get(p["player_key"])]
+            if missing:
+                try:
+                    pos.update({k: v["position"] for k, v in self.yahoo.players_info(self.league, missing).items()})
+                except Exception:
+                    traceback.print_exc()  # those picks just get no position
+            seen, out = {}, {}
+            for p in sorted(picks, key=lambda x: x["pick"]):
+                ps = pos.get(p["player_key"]) or ""
+                seen[ps] = seen.get(ps, 0) + 1
+                out[p["player_key"]] = {"round": p["round"], "pick": p["pick"], "pos": ps, "pos_rank": seen[ps] if ps else None}
         except Exception:
             traceback.print_exc()
-            return cached["data"]["rounds"] if cached else {}
-        self.store.put(f"META#{self.league}", "draft", {"rounds": rounds, "fetched_at": self.now()}, 1)
-        return rounds
+            return cached["data"] if cached else {"rounds": {}, "picks": {}}
+        data = {"rounds": {k: v["round"] for k, v in out.items()}, "picks": out, "fetched_at": self.now()}
+        self.store.put(f"META#{self.league}", "draft", data, (cached["version"] + 1) if cached else 1)
+        return data
 
     def rosters(self, event, cookies):
         try:
@@ -1016,9 +1039,10 @@ class TradeLab:
             slots = self.league_info().get("slots") or []
         except YahooUnavailable:
             slots = []
+        draft = self.draft_info()
         return _json(200, {"teams": [{"team_key": k, "manager": names.get(k, k), "players": r["players"]}
                                      for k, r in rosters.items()],
-                           "slots": slots, "draft_rounds": self.draft_rounds(),
+                           "slots": slots, "draft_rounds": draft["rounds"], "draft": draft["picks"],
                            "rosters_checked_at": refreshed, "rosters_stale": stale})
 
     def my_roster(self, event, cookies):

@@ -855,7 +855,8 @@
   // Specific offers from L.tradeFinder: what each side gives, what it does
   // to both starting lineups, and how likely the other manager is to say yes.
   var ODDS = { easy: ['Easy yes', 'easy'], pitch: ['Worth a pitch', 'pitch'], long: ['Long shot', 'long'] };
-  function names(list) { return list.map(function (x) { return x.player.name + ' (' + fmt(x.value) + ')'; }); }
+  var DEAL_TAG = { sell: 'Sell the name', buy: 'Buy low' };
+  function names(list) { return list.map(function (x) { return x.player.name; }); }
   function joinNames(a) { return a.length < 3 ? a.join(' and ') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
   // "Bijan Robinson (18.2) moves into the lineup; Tony Pollard (9.1) goes to the bench."
   function lineupLine(ch, traded) {
@@ -865,14 +866,21 @@
     var parts = [];
     if (into.length) parts.push(joinNames(names(into)) + (into.length > 1 ? ' move' : ' moves') + ' into the lineup');
     if (benched.length) parts.push(joinNames(names(benched)) + (benched.length > 1 ? ' go' : ' goes') + ' to the bench');
-    return parts.length ? parts.join('; ') + '.' : 'The starting lineup doesn’t change.';
+    (ch.empty || []).forEach(function (g) { parts.push('leaves an empty ' + (GROUP_NAME[g] || g) + ' spot'); });
+    if (!parts.length) return 'The starting lineup doesn’t change.';
+    var t = parts.join('; ') + '.';
+    return t.charAt(0).toUpperCase() + t.slice(1);
   }
-  function dealSide(label, players, team) {
+  // Each player: points per week, where that ranks now, and where he was drafted.
+  function dealSide(label, players, team, info) {
     return h('div', { class: 'deal-side' }, [h('small', { text: label })].concat(players.map(function (p) {
-      var r = S.league.rate(p), rd = (S.league.rosters.draft_rounds || {})[p.player_key];
+      var x = info[p.player_key] || {};
       var block = listingsAll().some(function (l) { return l.player_key === p.player_key; });
+      var bits = [fmt(x.prod) + ' pts/wk', x.rank ? p.position + x.rank + ' now' : null,
+        x.draftRank ? 'drafted ' + x.draftRank + ' (Rd ' + x.round + ')' : (Object.keys(S.league.rosters.draft || {}).length ? 'undrafted' : null),
+        block ? 'On the block' : null].filter(Boolean);
       return h('span', { class: 'chip' + (block ? ' listed' : '') }, [posBadge(p.position), ' ', pl(Object.assign({ manager: team }, p)), ' ',
-        h('small', { text: fmt(r.value) + ' pts/wk' + (rd ? ' · Rd ' + rd + ' pick' : '') + (block ? ' · On the block' : '') })]);
+        h('small', { text: bits.join(' · ') })]);
     })));
   }
   function renderMatch() {
@@ -882,26 +890,30 @@
       var st = $('matchState');
       var ckey = key + '|' + lg.rosters.rosters_checked_at + '|' + JSON.stringify(listingsAll().map(function (l) { return l.player_key + l.status; })) + '|' + JSON.stringify(teamNeeds());
       if (!S.finder || S.finder.key !== ckey) {
+        var played = Math.max.apply(null, ((lg.pa && lg.pa.weeks) || []).concat(lg.weeksPlayed, [0]));
         S.finder = { key: ckey, r: L.tradeFinder({ teams: lg.rosters.teams, slots: lg.slots, rate: lg.rate, teamKey: key, limit: 6,
-          records: L.recordsFromBox(lg.cur, lg.rosters.teams), draft: lg.rosters.draft_rounds || {},
+          records: L.recordsFromBox(lg.cur, lg.rosters.teams), draftInfo: lg.rosters.draft || {}, pa: lg.pa, week: played,
           listings: listingsAll(), needs: L.needs(listingsAll(), teams(), teamNeeds()) }) };
       }
       var r = S.finder.r, me = r.team;
       if (!me) return;
       var who = you(key, me.manager), isYou = who === 'You', yours = isYou ? 'your' : me.manager + '’s';
       if (!r.deals.length) st.textContent = 'No trade makes ' + yours + ' starting lineup better right now with players other teams would likely give up. Check back after the next week’s games.';
+      var span = r.weeks.length > 1 ? 'weeks ' + r.weeks[0] + '–' + r.weeks[r.weeks.length - 1] : 'week ' + r.weeks[0];
       r.deals.forEach(function (d) {
         var rec = d.record && (d.record.w + d.record.l) ? ' (' + d.record.w + '–' + d.record.l + ')' : '';
         var odds = ODDS[d.odds];
         var notes = d.why.map(function (w) { return h('li', { class: 'w-' + w.kind, text: w.text + '.' }); });
         if (d.give.length < d.get.length) notes.push(h('li', { text: (isYou ? 'You’d' : who + ' would') + ' need to drop a bench player to make room.' }));
         if (d.give.length > d.get.length) notes.push(h('li', { text: d.manager + ' would need to drop a bench player to make room.' }));
+        if (d.byeNote) notes.push(h('li', { class: 'w-bye', text: 'Bye watch: in Week ' + d.byeNote.week + ', ' + joinNames(d.byeNote.players.map(function (p) { return p.name; })) + ' would all be on bye.' }));
         list.appendChild(h('li', { class: 'deal ' + odds[1] + (d.wanted ? ' wanted' : '') }, [
-          h('div', { class: 'match-head' }, [h('h3', { text: 'Trade with ' + d.manager + rec }), h('span', { class: 'odds ' + odds[1], text: odds[0] })]),
-          h('div', { class: 'deal-swap' }, [dealSide(isYou ? 'You give' : who + ' gives', d.give, isYou ? (S.me && S.me.manager) || who : who),
-            h('span', { class: 'deal-arrow', 'aria-hidden': 'true', text: '⇄' }), dealSide(isYou ? 'You get' : who + ' gets', d.get, d.manager)]),
+          h('div', { class: 'match-head' }, [h('h3', { text: 'Trade with ' + d.manager + rec }), h('span', { class: 'odds ' + odds[1], text: odds[0] })]
+            .concat(d.tags.map(function (t) { return h('span', { class: 'deal-tag ' + t, text: DEAL_TAG[t] }); }))),
+          h('div', { class: 'deal-swap' }, [dealSide(isYou ? 'You give' : who + ' gives', d.give, isYou ? (S.me && S.me.manager) || who : who, r.info),
+            h('span', { class: 'deal-arrow', 'aria-hidden': 'true', text: '⇄' }), dealSide(isYou ? 'You get' : who + ' gets', d.get, d.manager, r.info)]),
           h('ul', { class: 'deal-why' }, [
-            h('li', {}, [h('b', { class: d.myGain >= 0 ? 'up' : 'down', text: (isYou ? 'You' : who) + ': ' + signed(d.myGain) + ' pts/wk. ' }), lineupLine(d.mine, d.give)]),
+            h('li', {}, [h('b', { class: d.myGain >= 0 ? 'up' : 'down', text: (isYou ? 'You' : who) + ': ' + signed(d.myGain) + ' pts/wk over ' + span + '. ' }), lineupLine(d.mine, d.give)]),
             h('li', {}, [h('b', { class: d.theirGain >= 0 ? 'up' : 'down', text: d.manager + ': ' + signed(d.theirGain) + ' pts/wk' + (d.theirGain < 0 ? ' now' : '') + '. ' }), lineupLine(d.theirs, d.get)])
           ].concat(notes)),
           h('div', { class: 'links' }, [h('button', { type: 'button', class: 'btn ghost small', text: 'Open in calculator', onclick: function () {
@@ -909,8 +921,10 @@
           } })])
         ]));
       });
-      $('matchNote').textContent = 'Pts/wk is the change to each starting lineup (best lineup by rating). Easy yes: both lineups get better. Worth a pitch: ' +
-        'they lose a little now, but it fits what they posted, their block or their record. Long shot: it costs them, or takes an early draft pick. ' +
+      $('matchNote').textContent = 'Pts/wk is the change to each starting lineup over the next ' + r.weeks.length + ' weeks, using each player’s matchups and byes. ' +
+        'A player’s value blends what he’s scoring with what his draft slot says he should score (a hot pickup tends to cool; a slumping early pick tends to bounce back). ' +
+        'Easy yes: both lineups get better. Worth a pitch: they lose a little, but the names, what they posted, their block or their record make it appealing. Long shot: it costs them. ' +
+        'Sell the name: you give a big name who isn’t producing for someone who is. Buy low: a slumping early pick, while his price is down. ' +
         'Only players marked “On the block” have been listed; everyone else is an idea to ask about. ' + methodNote(lg);
     });
   }

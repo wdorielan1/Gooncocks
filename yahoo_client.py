@@ -333,6 +333,22 @@ def get_league_scoring(access_token, league_key):
     return parse_scoring(_request(url, headers={"Authorization": f"Bearer {access_token}"}))
 
 
+def get_players_info(access_token, league_key, player_keys):
+    """{player_key: {'name', 'position'}} for any players, 25 per request -
+    e.g. drafted players who've since been dropped."""
+    out = {}
+    for i in range(0, len(player_keys), 25):
+        batch = ",".join(player_keys[i:i + 25])
+        url = f"{FANTASY_BASE}/league/{league_key}/players;player_keys={batch}?format=json"
+        data = _request(url, headers={"Authorization": f"Bearer {access_token}"})
+        for entry in _yahoo_collection(_sub_resource(data["fantasy_content"]["league"], "players")):
+            p = _player_record(entry.get("player") if isinstance(entry, dict) else None)
+            if p.get("player_key"):
+                out[p["player_key"]] = {"name": (p.get("name") or {}).get("full") or "",
+                                        "position": (p.get("display_position") or "").split(",")[0].strip()}
+    return out
+
+
 def get_player_points(access_token, league_key, player_keys, week):
     """{player_key: fantasy points that week}, fetched 25 at a time (Yahoo's
     per-request cap on player collections)."""

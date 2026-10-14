@@ -100,11 +100,21 @@
   var needs = [{ team_key: T.Gabe, manager: 'Gabe', wants: ['RB'], note: 'Need a RB2 - will pay for one.', updated_at: now - 5000 },
                { team_key: T.Patrick, manager: 'Patrick', wants: ['WR', 'TE'], note: '', updated_at: now - 9000 }];
   // Made-up draft: the best player on each team went in round 1, the next in round 2.
-  var draft_rounds = {};
+  var draft_rounds = {}, draft = {}, posSeen = {}, pickNo = 0;
   names.forEach(function (n) {
     R[n].slice().sort(function (a, b) { return b[4] - a[4]; }).slice(0, 2).forEach(function (r, i) { draft_rounds['470.p.' + r[0]] = i + 1; });
   });
-  window.TRADE_LAB_SAMPLE = { draft_rounds: draft_rounds, league_key: L, now: now, me: T.Will, teams: teams, managerOf: managerOf, rosters: rosters, listings: listings, needs: needs,
+  // pick order: round 1 then round 2, each in roster order; positional ranks follow it
+  [1, 2].forEach(function (rd) {
+    names.forEach(function (n) {
+      R[n].forEach(function (r) {
+        if (draft_rounds['470.p.' + r[0]] !== rd) return;
+        posSeen[r[2]] = (posSeen[r[2]] || 0) + 1;
+        draft['470.p.' + r[0]] = { round: rd, pick: ++pickNo, pos: r[2], pos_rank: posSeen[r[2]] };
+      });
+    });
+  });
+  window.TRADE_LAB_SAMPLE = { draft_rounds: draft_rounds, draft: draft, league_key: L, now: now, me: T.Will, teams: teams, managerOf: managerOf, rosters: rosters, listings: listings, needs: needs,
                               positions: ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'], slots: SLOTS,
                               boxscores: {} };
   // This season has 3 weeks played; last season all 17 (seasons follow the page's own clock).

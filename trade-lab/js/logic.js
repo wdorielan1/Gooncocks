@@ -313,36 +313,119 @@
 
   // ---------- trade finder ----------
   // Real, specific offers for one team: every 1-for-1, 2-for-1 and 1-for-2
-  // with each other team, judged by what it does to both starting lineups
-  // (best lineup by rating, the same as the Scouting Report). A deal must
-  // make our team better; the other side is judged by how likely they are
-  // to say yes:
-  //   - their lineup change (the base),
-  //   - a position they posted they're looking for: top priority,
-  //   - players they put on the block,
-  //   - giving up an early draft pick: harder to pry loose,
-  //   - their record: a losing team takes depth (two starters for one
-  //     star), a winning team takes a star for two (consolidation),
-  //   - a big drop in what they get back by rating.
+  // with each other team.
+  //
+  // Every player gets two values:
+  //   production - what he scores per week in our league (his rating),
+  //   name       - what his draft slot says he should score: the 3rd RB
+  //                taken is worth what the 3rd-best RB is scoring now;
+  //                undrafted players, the first spot after the last one
+  //                taken at the position.
+  // Our side uses his likely value going forward: production pulled toward
+  // the name by NAME_GAMES games' worth (a hot pickup cools, a slumping
+  // star tends to recover), times each of the next 4 weeks' matchups
+  // (Points Against; 0 on a bye; questionable/doubtful discounted next
+  // week). A deal must lift our starting lineup over those weeks.
+  // Their side is how the deal looks to them: their lineup change, plus
+  // what they get by reputation (the name counts more early in the season),
+  // plus a position they posted they want (top priority), players on their
+  // block, and their record (a losing team takes depth, a winning team a
+  // star).
   var FINDER_POS = { QB: 1, RB: 1, WR: 1, TE: 1 };
   var NOT_PLAYING = { O: 1, IR: 1, 'PUP-R': 1, 'NFI-R': 1, SUSP: 1, NA: 1 };
-  var FINDER_CANDIDATES = 9;  // best players per team considered
+  var NEXT_WEEK = { Q: 0.85, D: 0.6 };
+  var FINDER_CANDIDATES = 8;  // best players per team considered
+  var NAME_GAMES = 3;         // how many games the draft slot is worth as a prior
+  var HORIZON = 4;            // weeks ahead a deal is judged over
+  var TEAM_FIX = { JAC: 'JAX', WSH: 'WAS', LA: 'LAR', LVR: 'LV', OAK: 'LV', SD: 'LAC', STL: 'LAR' };
+  function nflTeam(t) { t = String(t || '').toUpperCase(); return TEAM_FIX[t] || t; }
   function tradeFinder(o) {
     var byKey = {};
     o.teams.forEach(function (t) { byKey[t.team_key] = t; });
     var me = byKey[o.teamKey];
     if (!me) return { team: null, deals: [] };
-    var listed = {}, wants = {}, drafted = o.draft || {}, records = o.records || {};
+    var listed = {}, wants = {}, picks = o.draftInfo || {}, records = o.records || {}, pa = o.pa || null;
     (o.listings || []).forEach(function (l) { listed[l.player_key] = l.team_key; });
     (o.needs || []).forEach(function (n) { wants[n.team_key] = n.wants || []; });
-    function val(p) { var r = o.rate(p); return r && r.value !== null && r.value !== undefined ? r.value : null; }
+    var played = o.week || 0;
+    function prod(p) { var r = o.rate(p); return r && r.value !== null && r.value !== undefined ? r.value : null; }
+    function games(p) { var r = o.rate(p); return (r && r.games) || 0; }
+    // production ranks at each position, among every rostered player
+    var all = [], byPos = {}, prodRank = {}, drafted = {};
+    o.teams.forEach(function (t) { (t.players || []).forEach(function (p) { all.push(p); }); });
+    all.forEach(function (p) { if (prod(p) !== null) (byPos[p.position] = byPos[p.position] || []).push(p); });
+    Object.keys(byPos).forEach(function (pos) {
+      byPos[pos].sort(function (a, b) { return prod(b) - prod(a); });
+      byPos[pos].forEach(function (p, i) { prodRank[p.player_key] = i + 1; });
+    });
+    Object.keys(picks).forEach(function (k) { var d = picks[k]; if (d.pos) drafted[d.pos] = Math.max(drafted[d.pos] || 0, d.pos_rank || 0); });
+    var haveDraft = Object.keys(picks).length > 0;
+    function valueAt(pos, rank) { var l = byPos[pos] || []; return l.length ? prod(l[Math.min(rank, l.length) - 1]) : null; }
+    function name(p) {
+      if (!haveDraft) return prod(p);
+      var d = picks[p.player_key];
+      var v = d && d.pos_rank ? valueAt(d.pos || p.position, d.pos_rank) : valueAt(p.position, (drafted[p.position] || 0) + 1);
+      return v === null ? prod(p) : v;
+    }
+    function est(p) {
+      var v = prod(p), n = name(p);
+      if (v === null) return n;
+      if (n === null) return v;
+      var g = games(p);
+      return (g * v + NAME_GAMES * n) / (g + NAME_GAMES);
+    }
+    // the next HORIZON weeks and each player's matchup factor in them
+    var start = played + 1, weeks = [];
+    for (var w = start; w < start + HORIZON && w <= 18; w++) weeks.push(w);
+    if (!weeks.length) weeks = [start];
+    var paAvg = {};
+    function factor(p, wk, first) {
+      var f = 1;
+      if (pa && pa.schedule) {
+        var sched = pa.schedule[nflTeam(p.nfl_team)];
+        if (sched) {
+          var opp = sched[wk];
+          if (!opp) return 0;  // bye
+          if (pa.teams) {
+            var pos = p.position, a = paAvg[pos];
+            if (!a) {
+              a = paAvg[pos] = { ppg: {}, mean: 0 };
+              var codes = Object.keys(pa.teams);
+              codes.forEach(function (c) {
+                var t = pa.teams[c], ws = Object.keys(t.weeks || {});
+                a.ppg[c] = ws.length ? ws.reduce(function (x, k) { return x + ((t.weeks[k] || {})[pos] || 0); }, 0) / ws.length : 0;
+                a.mean += a.ppg[c] / codes.length;
+              });
+            }
+            if (a.ppg[opp] !== undefined && a.mean) f = Math.max(0.7, Math.min(1.3, a.ppg[opp] / a.mean));
+          }
+        }
+      }
+      if (first && p.injury && NEXT_WEEK[p.injury.code]) f *= NEXT_WEEK[p.injury.code];
+      return f;
+    }
+    var estCache = {}, wkCache = weeks.map(function () { return {}; });
+    function estOf(p) { return estCache[p.player_key] !== undefined ? estCache[p.player_key] : (estCache[p.player_key] = est(p)); }
+    var rates = weeks.map(function (wk, i) {
+      return function (p) {
+        var c = wkCache[i];
+        if (c[p.player_key] === undefined) {
+          var e = OUT[p.slot] || (p.injury && NOT_PLAYING[p.injury.code]) ? null : estOf(p);
+          c[p.player_key] = { value: e === null ? null : e * factor(p, wk, i === 0), games: games(p) };
+        }
+        return c[p.player_key];
+      };
+    });
+    function lineup(players) {
+      return rates.reduce(function (s, rate) { return s + teamReport(players, o.slots, rate).total; }, 0) / rates.length;
+    }
+    function nowReport(players) { return teamReport(players, o.slots, function (p) { return { value: OUT[p.slot] ? null : estOf(p), games: games(p) }; }); }
     function tradable(p) {
-      return FINDER_POS[p.position] && !OUT[p.slot] && val(p) !== null && !(p.injury && NOT_PLAYING[p.injury.code]);
+      return FINDER_POS[p.position] && !OUT[p.slot] && prod(p) !== null && !(p.injury && NOT_PLAYING[p.injury.code]);
     }
     function cands(t) {
-      return (t.players || []).filter(tradable).sort(function (a, b) { return val(b) - val(a); }).slice(0, FINDER_CANDIDATES);
+      return (t.players || []).filter(tradable).sort(function (a, b) { return estOf(b) - estOf(a); }).slice(0, FINDER_CANDIDATES);
     }
-    function report(players) { return teamReport(players, o.slots, o.rate); }
     function starters(rep) {
       var s = {};
       Object.keys(rep.groups).forEach(function (g) { rep.groups[g].starters.forEach(function (x) { s[x.player.player_key] = { player: x.player, value: x.rating.value, group: g }; }); });
@@ -353,52 +436,83 @@
       out.forEach(function (p) { gone[p.player_key] = 1; });
       return players.filter(function (p) { return !gone[p.player_key]; }).concat(inn);
     }
-    // Who moves into and out of a lineup: [{player, value, group}].
     function changes(before, after) {
       var a = starters(before), b = starters(after);
       return { into: Object.keys(b).filter(function (k) { return !a[k]; }).map(function (k) { return b[k]; }),
-               outOf: Object.keys(a).filter(function (k) { return !b[k]; }).map(function (k) { return a[k]; }) };
+               outOf: Object.keys(a).filter(function (k) { return !b[k]; }).map(function (k) { return a[k]; }),
+               empty: Object.keys(after.groups).filter(function (g) { return after.groups[g].starters.length < before.groups[g].starters.length; }) };
     }
-    function groupsOf(n, list) {
-      var out = list.map(function (p) { return [p]; });
-      if (n > 1) for (var i = 0; i < list.length; i++) for (var j = i + 1; j < list.length; j++) out.push([list[i], list[j]]);
+    // Starters on a bye in each coming week: {week: [players]}.
+    function byes(rep) {
+      var out = {}, s = starters(rep);
+      weeks.forEach(function (wk) {
+        var on = Object.keys(s).map(function (k) { return s[k].player; }).filter(function (p) { return factor(p, wk, false) === 0; });
+        if (on.length) out[wk] = on;
+      });
       return out;
     }
-    var mine = cands(me), base = report(me.players || []), deals = [];
+    function groupsOf(list) {
+      var out = list.map(function (p) { return [p]; });
+      for (var i = 0; i < list.length; i++) for (var j = i + 1; j < list.length; j++) out.push([list[i], list[j]]);
+      return out;
+    }
+    var nameWeight = Math.max(0.2, Math.min(0.6, 0.6 - 0.05 * played));  // how much reputation sways them, fading as the season goes
+    function looks(p) { var n = name(p), v = prod(p); return nameWeight * (n === null ? v : n) + (1 - nameWeight) * v; }
+    function early(p) { var d = picks[p.player_key]; return d && d.round <= 3; }
+    // the positional rank his draft slot implies (undrafted: just after the last one taken)
+    function slotRank(p) { var d = picks[p.player_key]; return d && d.pos_rank ? d.pos_rank : (drafted[p.position] || 0) + 1; }
+    function slumping(p) { var n = name(p); return early(p) && n !== null && prod(p) < n - 2.5 && (prodRank[p.player_key] || 0) - slotRank(p) >= 3; }
+    function hot(p) { var n = name(p); return haveDraft && n !== null && prod(p) >= n + 2 && slotRank(p) - (prodRank[p.player_key] || 99) >= 2; }
+    function who(p) {  // "drafted RB3, scoring like RB14"
+      var d = picks[p.player_key];
+      return (d && d.pos_rank ? 'drafted ' + (d.pos || p.position) + d.pos_rank : 'undrafted') + ', scoring like ' + p.position + (prodRank[p.player_key] || '?');
+    }
+    var mine = cands(me), base = lineup(me.players || []), baseNow = nowReport(me.players || []), baseByes = byes(baseNow), deals = [];
     o.teams.forEach(function (t) {
       if (t.team_key === me.team_key) return;
-      var theirs = cands(t), tBase = report(t.players || []), rec = records[t.team_key] || null;
-      var games = rec ? rec.w + rec.l : 0, pct = games ? rec.w / games : 0.5;
+      var theirs = cands(t), tBase = lineup(t.players || []), tNow = nowReport(t.players || []), rec = records[t.team_key] || null;
+      var gp = rec ? rec.w + rec.l : 0, pct = gp ? rec.w / gp : 0.5;
       var theyWant = wants[t.team_key] || [];
-      groupsOf(2, mine).forEach(function (give) {
-        groupsOf(2, theirs).forEach(function (get) {
+      groupsOf(mine).forEach(function (give) {
+        groupsOf(theirs).forEach(function (get) {
           if (give.length === 2 && get.length === 2) return;  // 1-for-1, 2-for-1 and 1-for-2 only
-          var meAfter = report(swap(me.players, give, get)), themAfter = report(swap(t.players, get, give));
-          var myGain = meAfter.total - base.total, theirGain = themAfter.total - tBase.total;
+          var meNew = swap(me.players, give, get), themNew = swap(t.players, get, give);
+          var myGain = lineup(meNew) - base;
           if (myGain < 1) return;  // not worth asking for
-          var giveVal = give.reduce(function (s, p) { return s + val(p); }, 0), getVal = get.reduce(function (s, p) { return s + val(p); }, 0);
-          var why = [], yes = theirGain;
-          // A position they asked for counts only if they don't give one up in the same deal.
+          var theirGain = lineup(themNew) - tBase;
+          var perceived = give.reduce(function (s, p) { return s + looks(p); }, 0) - get.reduce(function (s, p) { return s + looks(p); }, 0);
+          var why = [], tags = [], yes = 0.6 * theirGain + 0.5 * perceived;
           var fills = give.filter(function (p) {
             return theyWant.indexOf(p.position) >= 0 && !get.some(function (x) { return x.position === p.position; });
           }).map(function (p) { return p.position; });
           if (fills.length) { yes += 3; why.push({ kind: 'wants', text: t.manager + ' is looking for ' + article(fills[0]) + ' ' + fills[0] }); }
           var onBlock = get.filter(function (p) { return listed[p.player_key] === t.team_key; });
           if (onBlock.length) { yes += 1.5 * Math.min(2, onBlock.length); why.push({ kind: 'block', text: listJoin(onBlock.map(function (p) { return p.name; })) + (onBlock.length > 1 ? ' are' : ' is') + ' on ' + t.manager + '’s block' }); }
+          var bigGive = give.filter(slumping), hotGet = get.filter(hot), lowGet = get.filter(slumping);
+          if (bigGive.length && hotGet.length) {
+            tags.push('sell');
+            why.push({ kind: 'name', text: bigGive[0].name + ' (' + who(bigGive[0]) + ') has the bigger name; ' + hotGet[0].name + ' (' + who(hotGet[0]) + ') has the points' });
+          }
+          if (lowGet.length) {
+            tags.push('buy');
+            why.push({ kind: 'name', text: lowGet[0].name + ' (' + who(lowGet[0]) + ') is slumping, so his price is down; players taken that early usually bounce back' });
+          }
           get.forEach(function (p) {
-            var rd = drafted[p.player_key];
-            if (rd === 1) { yes -= 2.5; why.push({ kind: 'draft', text: p.name + ' was a 1st-round pick' }); }
-            else if (rd === 2) { yes -= 1.2; why.push({ kind: 'draft', text: p.name + ' was a 2nd-round pick' }); }
+            var d = picks[p.player_key];
+            if (d && d.round <= 2 && lowGet.indexOf(p) < 0) why.push({ kind: 'draft', text: p.name + ' was a ' + (d.round === 1 ? '1st' : '2nd') + '-round pick, so ' + t.manager + ' may need convincing' });
           });
-          if (games >= 2 && pct < 0.45 && give.length > get.length) { yes += 1.5; why.push({ kind: 'record', text: 'At ' + rec.w + '–' + rec.l + ', two starters help ' + t.manager + ' more than one star' }); }
-          if (games >= 2 && pct > 0.55 && give.length < get.length) { yes += 1; why.push({ kind: 'record', text: 'At ' + rec.w + '–' + rec.l + ', ' + t.manager + ' can trade depth for a star' }); }
-          if (getVal > 0 && giveVal < getVal * 0.8) yes -= (getVal * 0.8 - giveVal) * 0.4;  // asking for much more than we give
-          // Easy yes: their lineup gets better too, and nothing else stands in the way.
+          if (gp >= 2 && pct < 0.45 && give.length > get.length) { yes += 1.5; why.push({ kind: 'record', text: 'At ' + rec.w + '–' + rec.l + ', two starters help ' + t.manager + ' more than one star' }); }
+          if (gp >= 2 && pct > 0.55 && give.length < get.length) { yes += 1; why.push({ kind: 'record', text: 'At ' + rec.w + '–' + rec.l + ', ' + t.manager + ' can trade depth for a star' }); }
+          // Easy yes: their lineup gets better too, and it looks fair to them.
           var odds = yes >= 0.5 && theirGain >= 0 ? 'easy' : yes >= -2.5 ? 'pitch' : yes >= -5 ? 'long' : null;
           if (!odds) return;
-          deals.push({ team_key: t.team_key, manager: t.manager, record: rec, give: give, get: get,
-                       myGain: myGain, theirGain: theirGain, yes: yes, odds: odds, wanted: fills.length > 0, why: why,
-                       giveVal: giveVal, getVal: getVal, mine: changes(base, meAfter), theirs: changes(tBase, themAfter),
+          var meAfter = nowReport(meNew), byeNote = null, newByes = byes(meAfter);
+          Object.keys(newByes).forEach(function (wk) {
+            if (!byeNote && newByes[wk].length >= 2 && newByes[wk].length > (baseByes[wk] || []).length) byeNote = { week: +wk, players: newByes[wk] };
+          });
+          deals.push({ team_key: t.team_key, manager: t.manager, record: rec, give: give, get: get, tags: tags, byeNote: byeNote,
+                       myGain: myGain, theirGain: theirGain, perceived: perceived, yes: yes, odds: odds, wanted: fills.length > 0, why: why,
+                       mine: changes(baseNow, meAfter), theirs: changes(tNow, nowReport(themNew)),
                        // what it's worth to us, times how likely they are to take it
                        score: myGain / (1 + Math.exp(-(yes + 1) / 1.5)) + (fills.length ? 3 : 0) });
         });
@@ -420,17 +534,27 @@
     // Best first: a position they asked for leads, then overall score.
     deals.sort(function (a, b) { return (b.wanted - a.wanted) || (b.score - a.score); });
     // Variety: at most two deals per team, never the same ask twice, and
-    // each of our players offered in at most two deals.
+    // each of our players offered in at most two deals (o.every: all of them).
     var perTeam = {}, seen = {}, offered = {}, out = [];
     deals.forEach(function (d) {
       var ask = d.team_key + '|' + d.get.map(function (p) { return p.player_key; }).sort().join(',');
+      if (o.every) { out.push(d); return; }
       if (out.length >= (o.limit || 6) || seen[ask] || (perTeam[d.team_key] || 0) >= 2) return;
       if (d.give.some(function (p) { return (offered[p.player_key] || 0) >= 2; })) return;
       seen[ask] = 1; perTeam[d.team_key] = (perTeam[d.team_key] || 0) + 1;
       d.give.forEach(function (p) { offered[p.player_key] = (offered[p.player_key] || 0) + 1; });
       out.push(d);
     });
-    return { team: me, deals: out, considered: deals.length };
+    // How each player in the deals is seen: production, name, draft slot.
+    var info = {};
+    out.forEach(function (d) {
+      d.give.concat(d.get).forEach(function (p) {
+        var dr = picks[p.player_key];
+        info[p.player_key] = { prod: prod(p), est: estOf(p), name: name(p), rank: prodRank[p.player_key] || null,
+                               round: dr ? dr.round : null, draftRank: dr && dr.pos_rank ? (dr.pos || p.position) + dr.pos_rank : null };
+      });
+    });
+    return { team: me, deals: out, considered: deals.length, weeks: weeks, info: info };
   }
   // Each team's record from the season's box scores (starters' points decide
   // each game): {team key: {w, l}}. Game ids hold the two managers' ids.
