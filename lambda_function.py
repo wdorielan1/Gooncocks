@@ -600,6 +600,11 @@ def _action_nfl_points(event):
     _put(s3, bucket, f"nfl/gamelog_{season}.json",
          json.dumps(dict(nfl_points.game_log(pts), season=int(season), weeks=weeks, updated=int(time.time())),
                     separators=(",", ":")), "application/json")
+    try:  # the Tools page's workload report: this season vs last, never blocks the points
+        _save_workload(s3, bucket, season, rules, games, pts, weeks)
+    except Exception:
+        traceback.print_exc()
+        print("Skipped the workload report this run - see the error above.")
     box = _rivalry_store(s3, bucket).load(league_history.BOX_KEY.format(season), None) or {}
     result = nfl_points.check(pts, box)
     missing = nfl_points.unsupported(rules)
@@ -614,6 +619,26 @@ def _action_nfl_points(event):
     for m in result["biggest_misses"]:
         print(f"  week {m['week']} {m['name']} ({m['pos']}): Yahoo {m['yahoo']}, ours {m['ours']} ({m['diff']:+})")
     return {"season": int(season), "weeks": weeks, "unsupported": missing, "check": result}
+
+
+def _save_workload(s3, bucket, season, rules, games, pts, weeks):
+    """nfl/workload_<season>.json: every RB/WR/TE who scored 10+ a game last
+    season, last season vs this one (workload and points per touch, in league
+    scoring). Last season's totals are scored once and kept at
+    nfl/workload_base_<last season>.json."""
+    prev = str(int(season) - 1)
+    base_key = f"nfl/workload_base_{prev}.json"
+    base = _load_json(s3, bucket, base_key, None)
+    if not base:
+        last = nfl_points.season_points(prev, rules, nfl_points.fetch(nfl_points.PLAYER_URL.format(season=prev)),
+                                        nfl_points.fetch(nfl_points.TEAM_URL.format(season=prev)), games)
+        base = nfl_points.workload(last)
+        _put(s3, bucket, base_key, json.dumps(base, separators=(",", ":")), "application/json")
+    rows = nfl_points.workload_compare(base, nfl_points.workload(pts))
+    _put(s3, bucket, f"nfl/workload_{season}.json",
+         json.dumps({"season": int(season), "prev": int(prev), "weeks": weeks, "updated": int(time.time()), "players": rows},
+                    separators=(",", ":")), "application/json")
+    print(f"Workload report: {len(rows)} players compared with {prev}.")
 
 
 def _action_trade_lab_live(event, context=None):

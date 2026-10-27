@@ -72,7 +72,7 @@
     }
     return S.pa !== undefined;
   }
-  var TOOLS = { pa: 'tool-pa', ww: 'tool-ww', ld: 'tool-ld', tx: 'tool-tx', ir: 'tool-ir', cm: 'tool-cm' };
+  var TOOLS = { pa: 'tool-pa', ww: 'tool-ww', ld: 'tool-ld', tx: 'tool-tx', ir: 'tool-ir', wl: 'tool-wl', cm: 'tool-cm' };
   function renderToolNav() {
     if (S.tool === 'cm' && !(S.me && S.me.commish) && S.me !== undefined) S.tool = 'pa';
     var tool = S.tool || 'pa';
@@ -90,6 +90,7 @@
     if (S.tool === 'tx') return renderTX();
     if (S.tool === 'ld') return renderLD();
     if (S.tool === 'cm') return renderCM();
+    if (S.tool === 'wl') return renderWL();
     var st = $('paState');
     if (!ensurePa()) {
       st.className = 'state'; st.textContent = 'Loading…';
@@ -691,6 +692,206 @@
     });
   }
 
+  // ---------- why your lineup is broken (workload report) ----------
+  // nfl/workload_<season>.json from the Lambda's nfl_points run: everyone who
+  // scored 10+ a game last season, last season vs this one - opportunities
+  // (carries + targets) per game, points per game and points per
+  // opportunity, in our scoring. Owners come from the public rosters.
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var WL_CORNERS = [
+    { k: 'tl', t: 'Lost the ball, better with it', c: 'info', d: 'Fewer touches, but more per touch. Often a volume problem, not a talent one.', f: function (d) { return d.dx < 0 && d.dy >= 0; } },
+    { k: 'tr', t: 'More ball, better with it', c: 'good', d: 'More work and more per touch. The guys carrying your team.', f: function (d) { return d.dx >= 0 && d.dy >= 0; } },
+    { k: 'bl', t: 'Lost the ball, worse with it', c: 'bad', d: 'The disaster corner. Both numbers fell at once.', f: function (d) { return d.dx < 0 && d.dy < 0; } },
+    { k: 'br', t: 'More ball, doing less with it', c: 'warn', d: 'The volume is there; the points per touch aren’t. Nothing says bench them yet.', f: function (d) { return d.dx >= 0 && d.dy < 0; } }
+  ];
+  function sgn(v, d) { return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(d === undefined ? 1 : d); }
+  function svg(tag, attrs, parent) {
+    var el = document.createElementNS(SVGNS, tag);
+    Object.keys(attrs || {}).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+    if (parent) parent.appendChild(el);
+    return el;
+  }
+  function shortName(n) { var p = String(n).replace(/\s+(Jr\.|Sr\.|II|III|IV|V)$/, '').split(' '); return p.length > 1 ? p[0].charAt(0) + '.' + p.slice(1).join(' ') : n; }
+  function ensureWL() {
+    if (S.wl === undefined && !S.wlLoad) {
+      S.wlLoad = api.workload(season()).then(function (d) {
+        S.wl = d && d.players ? d : null;
+        if (S.wl) S.wl.players.forEach(function (p) { p.dx = p.o_cur - p.o_prev; p.dy = p.e_cur - p.e_prev; p.dp = p.p_cur - p.p_prev; });
+      }, function () { S.wl = null; }).then(function () { S.wlLoad = null; renderTools(); });
+    }
+    if (S.wlRo === undefined && !S.wlRoLoad) {
+      S.wlRoLoad = api.rosters().then(function (d) { S.wlRo = d; }, function () { S.wlRo = null; }).then(function () { S.wlRoLoad = null; S.wlOwn = null; renderTools(); });
+    }
+    return S.wl !== undefined;
+  }
+  // Who has him in our league: {manager, team_key}, or null for a free agent.
+  function wlOwner(p) {
+    if (!S.wlRo) return undefined;
+    if (!S.wlOwn) {
+      S.wlOwn = {};
+      (S.wlRo.teams || []).forEach(function (t) { (t.players || []).forEach(function (x) { S.wlOwn[nameKey(x.name) + '|' + x.position] = { manager: t.manager, team_key: t.team_key }; }); });
+    }
+    return S.wlOwn[nameKey(p.name) + '|' + p.pos] || null;
+  }
+  function wlStatus(d) { return d.dp >= 3 ? 'good' : d.dp <= -3 ? 'bad' : 'flat'; }
+  function wlVisible() {
+    var view = S.wlView || 'all', pos = S.wlPos || 'ALL', mine = S.me && S.me.team_key;
+    return S.wl.players.filter(function (d) {
+      if (pos !== 'ALL' && d.pos !== pos) return false;
+      if (view === 'big') return Math.abs(d.dp) >= 3;
+      if (view === 'mine') { var o = wlOwner(d); return !!(o && o.team_key === mine); }
+      return true;
+    });
+  }
+  function wlCard(d) {
+    var y0 = S.wl.prev, y1 = S.wl.season, o = wlOwner(d);
+    var team = d.t_prev === d.t_cur ? d.t_cur : d.t_prev + ' → ' + d.t_cur;
+    var row = function (label, a, b, dec) { return h('tr', {}, [h('td', { text: label }), h('td', { text: a.toFixed(dec) }), h('td', { text: b.toFixed(dec) })]); };
+    return [h('b', { class: 'wl-tip-n', text: d.name }),
+      h('span', { class: 'wl-tip-s', text: d.pos + ' · ' + team + ' · ' + d.gp_cur + ' games this season' + (o === undefined ? '' : ' · ' + (o ? o.manager : 'Free agent')) }),
+      h('table', {}, [h('thead', {}, [h('tr', {}, [h('th'), h('th', { text: String(y0) }), h('th', { text: String(y1) })])]), h('tbody', {}, [
+        row('Touches / game', d.o_prev, d.o_cur, 1), row('Pts / game', d.p_prev, d.p_cur, 1), row('Pts / touch', d.e_prev, d.e_cur, 2)])])];
+  }
+  function wlShowTip(d, anchor, pinned) {
+    var tip = clear($('wlTip')), field = $('wlField');
+    wlCard(d).forEach(function (n) { tip.appendChild(n); });
+    if (pinned) tip.appendChild(pl({ name: d.name, position: d.pos, nfl_team: d.t_cur }, 'Game log ›', 'wl-tip-link'));
+    tip.hidden = false;
+    var r = anchor.getBoundingClientRect(), f = field.getBoundingClientRect();
+    var left = r.left - f.left + 14, top = r.top - f.top - 10, tw = tip.offsetWidth, th = tip.offsetHeight;
+    if (left + tw > f.width - 8) left = r.left - f.left - tw - 14;
+    left = Math.max(8, Math.min(left, f.width - tw - 8)); top = Math.max(8, Math.min(top, f.height - th - 8));
+    tip.style.left = left + 'px'; tip.style.top = top + 'px';
+  }
+  function renderWL() {
+    var st = $('wlState');
+    if (!ensureWL()) { st.className = 'state'; st.textContent = 'Loading…'; $('wlField').hidden = true; return; }
+    if (!S.wl) {
+      st.className = 'state'; st.textContent = 'The workload report shows up after the next weekly stats run.';
+      $('wlField').hidden = true; clear($('wlCorners')); clear($('wlTable'));
+      return;
+    }
+    st.textContent = '';
+    $('wlField').hidden = false;
+    var y0 = S.wl.prev, y1 = S.wl.season, view = S.wlView || 'all', pos = S.wlPos || 'ALL';
+    var views = [['all', 'All players'], ['big', 'Pts/game moved 3+']].concat(S.me && S.me.can_edit ? [['mine', 'My players']] : []);
+    if (view === 'mine' && !(S.me && S.me.can_edit)) view = S.wlView = 'all';
+    var vb = clear($('wlView')), pb = clear($('wlPos'));
+    views.forEach(function (v) {
+      vb.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (v[0] === view ? ' on' : ''), 'aria-pressed': v[0] === view ? 'true' : 'false', text: v[1],
+        onclick: function () { S.wlView = v[0]; S.wlPin = null; renderTools(); } }));
+    });
+    ['ALL', 'RB', 'WR', 'TE'].forEach(function (p) {
+      pb.appendChild(h('button', { type: 'button', class: 'pa-pos-b' + (p === pos ? ' on' : ''), 'aria-pressed': p === pos ? 'true' : 'false', text: p === 'ALL' ? 'All' : p,
+        onclick: function () { S.wlPos = p; S.wlPin = null; renderTools(); } }));
+    });
+    var qIn = $('wlQ');
+    if (!qIn.wired) { qIn.wired = true; qIn.addEventListener('input', function () { S.wlQ = qIn.value.trim(); S.wlPin = null; renderTools(); }); }
+    var pts = wlVisible(), q = (S.wlQ || '').toLowerCase();
+    $('wlCount').textContent = plural(pts.length, 'player');
+    // ---- chart
+    var W = 1100, H = 620, m = { l: 66, r: 28, t: 44, b: 58 }, chart = $('wlChart');
+    while (chart.firstChild) chart.removeChild(chart.firstChild);
+    var all = S.wl.players;
+    var xmax = Math.ceil(Math.max.apply(null, [3].concat(all.map(function (d) { return Math.abs(d.dx); }))) + 0.5);
+    var ymax = Math.ceil((Math.max.apply(null, [0.5].concat(all.map(function (d) { return Math.abs(d.dy); }))) + 0.1) * 2) / 2;
+    var X = function (v) { return m.l + (v + xmax) / (2 * xmax) * (W - m.l - m.r); };
+    var Y = function (v) { return H - m.b - (v + ymax) / (2 * ymax) * (H - m.t - m.b); };
+    var g = svg('g', {}, chart), step = xmax > 8 ? 3 : 2;
+    for (var vx = -Math.floor(xmax / step) * step; vx <= xmax; vx += step) {
+      svg('line', { x1: X(vx), x2: X(vx), y1: m.t, y2: H - m.b, class: 'wl-grid' }, g);
+      svg('text', { x: X(vx), y: H - m.b + 18, 'text-anchor': 'middle', class: 'wl-axis' }, g).textContent = vx === 0 ? '0' : sgn(vx, 0);
+    }
+    for (var vy = -ymax; vy <= ymax + 1e-9; vy += 0.5) {
+      svg('line', { x1: m.l, x2: W - m.r, y1: Y(vy), y2: Y(vy), class: 'wl-grid' }, g);
+      svg('text', { x: m.l - 8, y: Y(vy) + 4, 'text-anchor': 'end', class: 'wl-axis' }, g).textContent = Math.abs(vy) < 1e-9 ? '0' : sgn(vy, 1);
+    }
+    svg('line', { x1: X(0), x2: X(0), y1: m.t, y2: H - m.b, class: 'wl-zero' }, g);
+    svg('line', { x1: m.l, x2: W - m.r, y1: Y(0), y2: Y(0), class: 'wl-zero' }, g);
+    svg('text', { x: (m.l + W - m.r) / 2, y: H - 14, 'text-anchor': 'middle', class: 'wl-axis' }, g).textContent = 'Change in carries + targets per game since ' + y0 + ' →';
+    svg('text', { x: 16, y: (m.t + H - m.b) / 2, 'text-anchor': 'middle', class: 'wl-axis', transform: 'rotate(-90 16 ' + (m.t + H - m.b) / 2 + ')' }, g).textContent = 'Change in points per carry or target →';
+    var cp = { tl: [m.l + 10, m.t - 14, 'start'], tr: [W - m.r - 10, m.t - 14, 'end'], bl: [m.l + 10, H - m.b - 10, 'start'], br: [W - m.r - 10, H - m.b - 10, 'end'] };
+    WL_CORNERS.forEach(function (c) { var p = cp[c.k]; svg('text', { x: p[0], y: p[1], 'text-anchor': p[2], class: 'wl-corner ' + c.c }, g).textContent = c.t; });
+    var hotP = function (d) { return (q && d.name.toLowerCase().indexOf(q) >= 0) || S.wlPin === d.name; };
+    var mine = S.me && S.me.team_key;
+    var dg = svg('g', {}, chart), lg = svg('g', {}, chart), byName = {};
+    pts.slice().sort(function (a, b) { return Math.abs(a.dp) - Math.abs(b.dp); }).forEach(function (d) {
+      var hot = hotP(d), dim = q && !hot, own = wlOwner(d), isMine = own && mine && own.team_key === mine;
+      var c = svg('circle', { cx: X(d.dx), cy: Y(d.dy), r: hot ? 8 : wlStatus(d) === 'flat' ? 4.5 : 6,
+        class: 'wl-dot ' + wlStatus(d) + (dim ? ' dim' : '') + (hot ? ' hot' : '') + (isMine ? ' mine' : ''), tabindex: '0', role: 'button', 'aria-label': d.name + ': ' + sgn(d.dp) + ' pts a game' }, dg);
+      byName[d.name] = c;
+      c.addEventListener('mouseenter', function () { if (!S.wlPin) wlShowTip(d, c, false); });
+      c.addEventListener('mouseleave', function () { if (!S.wlPin) $('wlTip').hidden = true; });
+      c.addEventListener('focus', function () { if (!S.wlPin) wlShowTip(d, c, false); });
+      c.addEventListener('click', function (e) { e.stopPropagation(); S.wlPin = S.wlPin === d.name ? null : d.name; renderTools(); });
+      c.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); S.wlPin = S.wlPin === d.name ? null : d.name; renderTools(); } });
+    });
+    // labels: the hot player, then the biggest movers, wherever they fit
+    var boxes = [], prio = function (d) { return (hotP(d) ? 1e6 : 0) + Math.abs(d.dp) * 3 + Math.abs(d.dx) * 2 + Math.abs(d.dy) * 8; };
+    pts.slice().sort(function (a, b) { return prio(b) - prio(a); }).forEach(function (d) {
+      if (q && !hotP(d)) return;
+      var x = X(d.dx), y = Y(d.dy), label = shortName(d.name), w = label.length * 5.9 + 4, hh = 12;
+      var tries = [[x + 8, y + 4, 'start'], [x - 8, y + 4, 'end'], [x - w / 2, y - 9, 'start'], [x - w / 2, y + 17, 'start']];
+      for (var i = 0; i < tries.length; i++) {
+        var tx = tries[i][0], ty = tries[i][1], a = tries[i][2], bx = a === 'end' ? tx - w : tx, by = ty - 10;
+        if (bx < m.l || bx + w > W - m.r || by < m.t || by + hh > H - m.b) continue;
+        if (boxes.some(function (b) { return bx < b[0] + b[2] && bx + w > b[0] && by < b[1] + b[3] && by + hh > b[1]; })) continue;
+        boxes.push([bx, by, w, hh]);
+        svg('text', { x: tx, y: ty, 'text-anchor': a, class: 'wl-lbl ' + wlStatus(d) + (hotP(d) ? ' hot' : '') }, lg).textContent = label;
+        break;
+      }
+    });
+    var pin = S.wlPin && pts.filter(function (d) { return d.name === S.wlPin; })[0];
+    if (pin && byName[pin.name]) wlShowTip(pin, byName[pin.name], true); else $('wlTip').hidden = true;
+    // ---- corner cards
+    var cards = clear($('wlCorners'));
+    WL_CORNERS.forEach(function (c) {
+      var list = pts.filter(c.f).sort(function (a, b) { return Math.hypot(b.dx / 4, b.dy) - Math.hypot(a.dx / 4, a.dy); }).slice(0, 5);
+      cards.appendChild(h('div', { class: 'wl-card ' + c.c }, [h('h4', { text: c.t }), h('p', { text: c.d }),
+        h('ol', {}, list.length ? list.map(function (d) {
+          return h('li', {}, [h('button', { type: 'button', class: 'wl-pick', text: d.name, onclick: function (e) {
+            e.stopPropagation(); S.wlPin = d.name; renderTools(); $('wlField').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } }),
+            h('span', { class: 'wl-n', text: d.p_prev.toFixed(1) + ' → ' + d.p_cur.toFixed(1) + ' pts/g' })]);
+        }) : [h('li', { class: 'fine', text: 'No players in this view.' })])]));
+    });
+    // ---- table
+    var COLS = [['name', 'Player'], ['pos', 'Pos'], ['own', 'Owner'], ['o_prev', 'Touch/g ' + String(y0).slice(2)], ['o_cur', 'Touch/g ' + String(y1).slice(2)], ['dx', 'Δ Touch'],
+      ['e_prev', 'Pts/touch ' + String(y0).slice(2)], ['e_cur', 'Pts/touch ' + String(y1).slice(2)], ['dy', 'Δ Pts/touch'], ['p_prev', 'Pts/g ' + String(y0).slice(2)], ['p_cur', 'Pts/g ' + String(y1).slice(2)], ['dp', 'Δ Pts/g']];
+    var key = S.wlSort || 'dp', dir = S.wlDir || 1;
+    var ownName = function (d) { var o = wlOwner(d); return o ? o.manager : o === null ? 'FA' : ''; };
+    var rows = pts.slice().sort(function (a, b) {
+      var A = key === 'own' ? ownName(a) : a[key], B = key === 'own' ? ownName(b) : b[key];
+      return (typeof A === 'string' ? A.localeCompare(B) : A - B) * dir;
+    });
+    var tbl = clear($('wlTable'));
+    tbl.appendChild(h('caption', { class: 'sr-only', text: 'Every player, ' + y0 + ' vs ' + y1 }));
+    tbl.appendChild(h('thead', {}, [h('tr', {}, COLS.map(function (c) {
+      var on = c[0] === key;
+      return h('th', { scope: 'col', 'aria-sort': on ? (dir > 0 ? 'ascending' : 'descending') : null }, [h('button', { type: 'button', class: 'wl-sort' + (on ? ' on' : ''),
+        text: c[1] + (on ? (dir > 0 ? ' ▲' : ' ▼') : ''), onclick: function () {
+          if (key === c[0]) S.wlDir = -dir; else { S.wlSort = c[0]; S.wlDir = c[0] === 'name' || c[0] === 'pos' || c[0] === 'own' ? 1 : -1; }
+          renderTools(); } })]);
+    }))]));
+    tbl.appendChild(h('tbody', {}, rows.map(function (d) {
+      var o = wlOwner(d), isMine = o && mine && o.team_key === mine;
+      return h('tr', { class: isMine ? 'mine' : null }, COLS.map(function (c) {
+        var k = c[0], v = d[k];
+        if (k === 'name') return h('td', { class: 'wl-name' }, [pl({ name: d.name, position: d.pos, nfl_team: d.t_cur, manager: o === undefined ? undefined : o ? o.manager : null }),
+          d.t_prev !== d.t_cur ? h('small', { text: ' ' + d.t_prev + '→' + d.t_cur }) : null]);
+        if (k === 'pos') return h('td', { text: v });
+        if (k === 'own') return h('td', { class: o === null ? 'wl-fa' : null, text: (isMine ? '★ ' : '') + ownName(d) });
+        if (k.charAt(0) === 'd') return h('td', { class: v > 0 ? 'up' : v < 0 ? 'dn' : null, text: sgn(v, k === 'dy' ? 2 : 1) });
+        return h('td', { text: v.toFixed(k.charAt(0) === 'e' ? 2 : 1) });
+      }));
+    })));
+    var wks = S.wl.weeks || [];
+    $('wlNote').textContent = 'Source: nflverse weekly stats, scored with our league’s settings' + (wks.length ? ', ' + y1 + ' through week ' + wks[wks.length - 1] : '') +
+      '. A touch is a carry or a target. Qualifiers scored 10+ points a game in ' + y0 + ' over at least 6 games and have played 4+ games in ' + y1 + '. Team shown is each season’s latest. Tap a name for his game log.';
+  }
+  document.addEventListener('click', function (e) {
+    if (S.wlPin && !(e.target.closest && e.target.closest('#wlTip'))) { S.wlPin = null; if (S.tool === 'wl') renderTools(); }
+  });
+
   // ---------- commissioner (the commissioner's sign-in only; the server enforces it) ----------
   var CM_TOOL = { 'tools:pa': 'Points Against', 'tools:ww': 'Waiver Wire', 'tools:ld': 'Leaders', 'tools:tx': 'Transactions',
     'tools:ir': 'Injuries', 'tools:cm': 'Commissioner', 'trade-lab': 'Trade Lab', tools: 'Tools' };
@@ -1044,7 +1245,7 @@
   Array.prototype.forEach.call(document.querySelectorAll('#toolNav .tool-b'), function (b) {
     b.addEventListener('click', function () {
       S.tool = b.getAttribute('data-tool'); ping(S.tool); renderTools();
-      try { history.replaceState(null, '', { ww: '#waivers', ir: '#injuries', tx: '#transactions', ld: '#leaders', cm: '#commissioner' }[S.tool] || location.pathname); } catch (e) { /* ignore */ }
+      try { history.replaceState(null, '', { ww: '#waivers', ir: '#injuries', tx: '#transactions', ld: '#leaders', wl: '#workload', cm: '#commissioner' }[S.tool] || location.pathname); } catch (e) { /* ignore */ }
     });
   });
   var m = /^#(qb|rb|wr|te|k|def)$/i.exec(location.hash);
@@ -1054,5 +1255,6 @@
   if (/^#transactions$/i.test(location.hash)) S.tool = 'tx';
   if (/^#leaders$/i.test(location.hash)) S.tool = 'ld';
   if (/^#commissioner$/i.test(location.hash)) S.tool = 'cm';
+  if (/^#workload$/i.test(location.hash)) S.tool = 'wl';
   renderTools();
 })();

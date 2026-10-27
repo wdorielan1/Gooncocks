@@ -60,6 +60,9 @@
   LiveApi.prototype.leaders = function () {
     return fetch('/leaders/live.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
   };
+  LiveApi.prototype.workload = function (season) {
+    return fetch('/nfl/workload_' + season + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
+  };
   LiveApi.prototype.gameLog = function (season) {
     return fetch('/nfl/gamelog_' + season + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }, function () { return null; });
   };
@@ -148,6 +151,7 @@
   };
   PreviewApi.prototype.leaders = function () { return later(this.s.leaders || null); };
   PreviewApi.prototype.gameLog = function () { return later(this.s.gameLog || null); };
+  PreviewApi.prototype.workload = function () { return later(this.s.workload || null); };
   PreviewApi.prototype.leadersWeek = function (week) { return later((this.s.leadersWeeks || {})[week] || null); };
   PreviewApi.prototype.injuries = function () {
     var i = this.s.injuries || { injured: [], back: [] };

@@ -643,6 +643,52 @@ const cardNames = page => page.$$eval('#cards .card .pname', els => els.map(e =>
     assert.deepStrictEqual(cp.errors, []);
     await cp.close();
   });
+  await check('workload report: last season vs this one, chart, corners, table, filters and the game log', async () => {
+    const wp = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+    wp.errors = [];
+    wp.on('pageerror', e => wp.errors.push(e.message));
+    await wp.route(/^https?:/, r => r.abort());
+    await wp.goto('file://' + toolsFile + '#workload', { waitUntil: 'domcontentloaded' });
+    await wp.waitForSelector('#wlChart circle');
+    const n = await wp.evaluate(() => TradeApi.s.workload.players.length);
+    assert.strictEqual(await wp.$$eval('#wlChart circle', c => c.length), n);
+    assert.strictEqual(await wp.textContent('#wlCount'), n + ' players');
+    assert.deepStrictEqual(await wp.$$eval('#wlCorners h4', h => h.map(x => x.textContent)),
+      ['Lost the ball, better with it', 'More ball, better with it', 'Lost the ball, worse with it', 'More ball, doing less with it']);
+    // corners hold the right players: e.g. the disaster corner lost touches and points per touch
+    const bad = await wp.$$eval('#wlCorners .wl-card.bad .wl-pick', b => b.map(x => x.textContent));
+    const ps = await wp.evaluate(() => TradeApi.s.workload.players);
+    bad.forEach(nm => { const d = ps.find(p => p.name === nm); assert.ok(d.o_cur < d.o_prev && d.e_cur < d.e_prev, nm); });
+    // table sorted by the change in points per game, worst first; headers sort
+    const dp = await wp.$$eval('#wlTable tbody tr td:last-child', t => t.map(x => parseFloat(x.textContent.replace('−', '-'))));
+    assert.ok(dp.every((v, i) => i === 0 || dp[i - 1] <= v), JSON.stringify(dp.slice(0, 5)));
+    await wp.click('#wlTable th button:has-text("Δ Pts/g")');
+    const dp2 = await wp.$$eval('#wlTable tbody tr td:last-child', t => t.map(x => parseFloat(x.textContent.replace('−', '-'))));
+    assert.ok(dp2.every((v, i) => i === 0 || dp2[i - 1] >= v));
+    // filters
+    await wp.click('#wlView button:has-text("moved 3+")');
+    assert.ok(await wp.$$eval('#wlTable tbody tr td:last-child', t => t.every(x => Math.abs(parseFloat(x.textContent.replace('−', '-'))) >= 3)));
+    await wp.click('#wlPos button:has-text("TE")');
+    assert.ok(await wp.$$eval('#wlTable tbody tr td:nth-child(2)', t => t.length > 0 && t.every(x => x.textContent === 'TE')));
+    await wp.click('#wlView button:has-text("All players")'); await wp.click('#wlPos button:has-text("All")');
+    await wp.fill('#wlQ', 'jennings');
+    assert.strictEqual(await wp.$$eval('#wlChart circle.hot', c => c.length), 1);
+    await wp.fill('#wlQ', '');
+    // tapping a corner pick pins his card, with a link to his game log
+    await wp.click('#wlCorners .wl-card.good .wl-pick >> nth=0');
+    await wp.waitForSelector('#wlTip:not([hidden])');
+    assert.match(await wp.textContent('#wlTip'), /Touches \/ game.*Pts \/ game.*Pts \/ touch.*Game log ›/);
+    assert.ok(!(await wp.$('#wlView button:has-text("My players")')), 'My players only when signed in');
+    await wp.click('#tool-wl h3');  // tapping elsewhere unpins it
+    assert.ok(await wp.isHidden('#wlTip'));
+    await wp.setViewportSize({ width: 360, height: 760 });
+    assert.ok(await noOverflow(wp));
+    await wp.click('#wlCorners .wl-card.bad .wl-pick >> nth=0');  // pinned on a phone, it stays on screen
+    await wp.waitForSelector('#wlTip:not([hidden])');
+    assert.ok(await noOverflow(wp));
+    assert.deepStrictEqual(wp.errors, []);
+    await wp.close();
+  });
   await check('player pop-up: game log with box-score stats, byes, totals, from any page', async () => {
     const cp = await browser.newPage({ viewport: { width: 1000, height: 900 } });
     cp.errors = [];

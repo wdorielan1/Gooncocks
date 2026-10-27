@@ -357,6 +357,21 @@ check("game log: RB rushing then receiving, kicker field goals, defense with poi
       and gl["defenses"]["BAL"][1][:2] == [11.0, "BUF"] and gl["defenses"]["BAL"][1][2] == 3 and gl["defenses"]["BAL"][1][-1] == 17, gl["defenses"])
 check("game log: schedule with home games, for byes and @ / vs",
       gl["schedule"]["BUF"] == {1: "BAL", 2: "BAL", 3: "SF"} and gl["home"]["BUF"] == [1, 3] and gl["home"]["BAL"] == [2], gl["home"])
+# workload report: carries + targets and points, last season vs this one
+_wl_prev = {"players": [
+    {"name": "Kenneth Walker III", "position": "RB", "team": "SEA", "weeks": {w: [12.0, "X", "", [], 0, [14, 60, 0, 3, 2, 10, 0]] for w in range(1, 8)}},
+    {"name": "Slow Guy", "position": "WR", "team": "NYJ", "weeks": {w: [6.0, "X", "", [], 0, [5, 3, 30, 0, 0, 0, 0]] for w in range(1, 8)}}], "defenses": {}}
+_wl_cur = {"players": [
+    {"name": "Kenneth Walker", "position": "RB", "team": "KC", "weeks": {w: [24.0, "X", "", [], 0, [20, 110, 1, 4, 3, 30, 0]] for w in range(1, 6)}},
+    {"name": "Slow Guy", "position": "WR", "team": "NYJ", "weeks": {w: [9.0, "X", "", [], 0, [6, 4, 50, 0, 0, 0, 0]] for w in range(1, 6)}}], "defenses": {}}
+_wa, _wb = nfl_points.workload(_wl_prev), nfl_points.workload(_wl_cur)
+check("workload: each player's carries + targets and points, season totals",
+      _wa["kenneth walker|RB"] == {"name": "Kenneth Walker III", "pos": "RB", "team": "SEA", "games": 7, "opp": 119, "pts": 84.0}, _wa)
+_wc = nfl_points.workload_compare(_wa, _wb)
+check("workload: last season's 10+ a game players, matched across teams and name suffixes, side by side",
+      _wc == [{"name": "Kenneth Walker", "pos": "RB", "t_prev": "SEA", "t_cur": "KC", "gp_prev": 7, "gp_cur": 5, "o_prev": 17.0, "o_cur": 24.0,
+               "p_prev": 12.0, "p_cur": 24.0, "e_prev": 0.706, "e_cur": 1.0}], _wc)
+
 check("names match across sources (suffixes and punctuation)", nfl_points.name_key("Kenneth Walker III") == nfl_points.name_key("Kenneth Walker")
       and nfl_points.name_key("D.J. Moore") == nfl_points.name_key("DJ Moore") and nfl_points.name_key("Ja'Marr Chase") == "jamarr chase")
 

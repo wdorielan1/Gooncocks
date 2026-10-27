@@ -57,6 +57,7 @@
       <button type="button" class="tool-b" aria-pressed="false" data-tool="ld"><b>Fantasy Leaders</b><span>This week’s top scorers at every position, live</span></button>
       <button type="button" class="tool-b" aria-pressed="false" data-tool="tx"><b>Transaction Report</b><span>Every pickup, drop and trade in one place</span></button>
       <button type="button" class="tool-b" aria-pressed="false" data-tool="ir"><b>Injury Report</b><span>Who’s out, who’s a game-time call, and who’s coming back</span></button>
+      <button type="button" class="tool-b" aria-pressed="false" data-tool="wl"><b>Why Your Lineup Is Broken</b><span>Who’s getting more of the ball, and doing more with it, than last season</span></button>
       <button type="button" class="tool-b tool-cm" aria-pressed="false" data-tool="cm" hidden><b>Commissioner</b><span>Who’s been using the site. Only you can see this</span></button>
     </div>
     <div id="tool-pa">
@@ -106,6 +107,26 @@
     <div id="txState" class="state" role="status" aria-live="polite"></div>
     <div id="txBody"></div>
     <p class="fine" id="txNote"></p>
+    </div>
+    <div id="tool-wl" hidden>
+    <h3 class="tool-h">Why Your Lineup Is Broken</h3>
+    <p class="pa-intro">Every RB, WR and TE who scored 10+ points a game last season in our scoring, compared only to himself. Left to right is workload: carries plus targets per game. Bottom to top is what he does with each one. The bottom-left corner is the total collapse.</p>
+    <div class="wl-controls">
+      <div class="pa-pos" role="group" aria-label="Players shown" id="wlView"></div>
+      <div class="pa-pos" role="group" aria-label="Position" id="wlPos"></div>
+      <label class="wl-q"><span class="sr-only">Find a player</span><input id="wlQ" type="search" placeholder="Find a player" autocomplete="off"></label>
+      <span class="wl-count" id="wlCount"></span>
+    </div>
+    <div id="wlState" class="state" role="status" aria-live="polite"></div>
+    <div class="wl-field" id="wlField" hidden>
+      <div class="wl-chart"><svg id="wlChart" viewBox="0 0 1100 620" role="img" aria-label="Each player's change in carries and targets per game against his change in points per carry or target"></svg></div>
+      <div class="wl-legend"><span><i class="wl-sw good"></i>Pts/game up 3+</span><span><i class="wl-sw bad"></i>Pts/game down 3+</span><span><i class="wl-sw flat"></i>Within 3 of last season</span><span>Tap a dot for details</span></div>
+      <div class="wl-tip" id="wlTip" hidden></div>
+    </div>
+    <div class="wl-corners" id="wlCorners"></div>
+    <h4 class="wl-h">Every player</h4>
+    <div class="wl-tablebox"><table class="wl-t" id="wlTable"></table></div>
+    <p class="fine" id="wlNote"></p>
     </div>
     <div id="tool-cm" hidden>
     <h3 class="tool-h">Commissioner</h3>

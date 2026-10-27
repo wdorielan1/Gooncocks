@@ -362,6 +362,48 @@ def game_log(points):
             "schedule": points["schedule"], "home": points.get("home") or {}}
 
 
+def workload(points):
+    """Each RB, WR and TE's season so far, for the workload report:
+    {name key|position: {"name", "pos", "team", "games", "opp", "pts"}} -
+    opp is carries plus targets, pts fantasy points in league scoring, both
+    season totals."""
+    out = {}
+    for p in points["players"]:
+        if p["position"] not in ("RB", "WR", "TE") or not p["weeks"]:
+            continue
+        labels = [label for _g, label, _c in GAME_LOG[p["position"]]]
+        car, tgt = labels.index("Car"), labels.index("Tgt")
+        opp = sum((w[5][car] or 0) + (w[5][tgt] or 0) for w in p["weeks"].values())
+        key = name_key(p["name"]) + "|" + p["position"]
+        prev = out.get(key)
+        row = {"name": p["name"], "pos": p["position"], "team": p["team"], "games": len(p["weeks"]),
+               "opp": opp, "pts": round(sum(w[0] for w in p["weeks"].values()), 2)}
+        if not prev or row["games"] > prev["games"]:  # two players with one name: keep the regular
+            out[key] = row
+    return out
+
+
+def workload_compare(prev, cur, min_ppg=10.0, min_prev_games=6, min_games=4):
+    """Players who scored min_ppg+ per game last season (over min_prev_games+
+    games) and have played min_games+ this season, each season side by side:
+    [{"name", "pos", "t_prev", "t_cur", "gp_prev", "gp_cur", "o_prev", "o_cur",
+    "p_prev", "p_cur", "e_prev", "e_cur"}] - o is opportunities (carries +
+    targets) per game, p points per game, e points per opportunity."""
+    rows = []
+    for key, a in prev.items():
+        b = cur.get(key)
+        if not b or a["games"] < min_prev_games or b["games"] < min_games or a["pts"] / a["games"] < min_ppg:
+            continue
+        if not a["opp"] or not b["opp"]:
+            continue
+        rows.append({"name": b["name"], "pos": b["pos"], "t_prev": a["team"], "t_cur": b["team"],
+                     "gp_prev": a["games"], "gp_cur": b["games"],
+                     "o_prev": round(a["opp"] / a["games"], 2), "o_cur": round(b["opp"] / b["games"], 2),
+                     "p_prev": round(a["pts"] / a["games"], 2), "p_cur": round(b["pts"] / b["games"], 2),
+                     "e_prev": round(a["pts"] / a["opp"], 3), "e_cur": round(b["pts"] / b["opp"], 3)})
+    return sorted(rows, key=lambda r: r["p_cur"] - r["p_prev"])
+
+
 def starters(points):
     """Each team's likely starters, from its most recent game: {team: {"QB":
     [name], "RB": [2 names], "WR": [3], "TE": [1], "K": [1]}}, by usage
